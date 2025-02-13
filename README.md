@@ -1,6 +1,5 @@
-**Structure**
+**Project Structure**
 
-definitions.
 - `server.go`: gRPC server implementation.
 - `testclient.go`: gRPC test client.
 - `main.go`: Entry point of the application.
