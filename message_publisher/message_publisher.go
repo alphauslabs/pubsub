@@ -18,7 +18,6 @@ type Message struct {
 
 const (
 	numMessages = 10000
-	concurrency = 50
 	useMock     = true // set to false if virgil and kishea's endpoint is established
 )
 
@@ -34,15 +33,15 @@ func publishMessage(wg *sync.WaitGroup, id int) {
 	msg := Message{"test-topic", "test-subscription", fmt.Sprintf("Payload for message %d", id)}
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("%s Message %d failed: %v", time.Now().Format("2006/01/02 15:04:05"), id, err)
+		log.Printf("%s Message %d failed: %v", time.Now().Format(time.RFC3339), id, err)
 		return
 	}
 	_, err = http.Post(endpointURL, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		log.Printf("%s Message %d failed: %v", time.Now().Format("2006/01/02 15:04:05"), id, err)
+		log.Printf("%s Message %d failed: %v", time.Now().Format(time.RFC3339), id, err)
 		return
 	}
-	log.Printf("%s Message %d published successfully", time.Now().Format("2006/01/02 15:04:05"), id)
+	log.Printf("%s Message %d published successfully", time.Now().Format(time.RFC3339), id)
 }
 
 func main() {
