@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package pubsub;
+
+option go_package = "github.com/alphauslabs/pubsub/protos;pubsub";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service TopicService {
+    // Create a new topic
+    rpc CreateTopic(CreateTopicRequest) returns (Topic) {}
+    
+    // Get a topic by ID
+    rpc GetTopic(GetTopicRequest) returns (Topic) {}
+    
+    // List all topics with optional pagination
+    rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
+    
+    // Update a topic
+    rpc UpdateTopic(UpdateTopicRequest) returns (Topic) {}
+    
+    // Delete a topic
+    rpc DeleteTopic(DeleteTopicRequest) returns (google.protobuf.Empty) {}
+}
+
+message Topic {
+    string id = 1;
+    string name = 2;
+    google.protobuf.Timestamp created_at = 3;
+    google.protobuf.Timestamp updated_at = 4;
+}
+
+message CreateTopicRequest {
+    string name = 1;
+}
+
+message GetTopicRequest {
+    string id = 1;
+}
+
+message ListTopicsRequest {
+    int32 page_size = 1;
+    string page_token = 2;
+}
+
+message ListTopicsResponse {
+    repeated Topic topics = 1;
+    string next_page_token = 2;
+    int32 total_count = 3;
+}
+
+message UpdateTopicRequest {
+    string id = 1;
+    string name = 2;
+}
+
+message DeleteTopicRequest {
+    string id = 1;
+}
