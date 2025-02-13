@@ -1,13 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"time"
 )
 
 var (
 	isLeader = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
+	leaderURL = flag.String("leader-url", "http://localhost:8080", "URL of the leader node")
 )
 
 func main() {
@@ -18,8 +23,8 @@ func main() {
 		// Start listening for messages from the publisher.
 		go startPublisherListener()
 
-		// Start leader-specific listener to accept forwarded messages from non-leader nodes.
-		go startLeaderMessageListener()
+		// Start leader-specific HTTP server to accept forwarded messages from non-leader nodes.
+		go startLeaderHTTPServer()
 
 		// Process aggregated messages and perform bulk write.
 		runBulkWriterAsLeader()
@@ -31,23 +36,33 @@ func main() {
 		// Instead of writing to Spanner, forward the messages to the leader.
 		runBulkWriterAsFollower()
 	}
-	
+
 	// Prevent main from exiting.
 	select {}
 }
 
 // startPublisherListener simulates listening for publisher messages.
 func startPublisherListener() {
-	// Pseudocode: Listen to publisher's gRPC endpoint.
+	// Pseudocode: Listen to publisher's HTTP endpoint.
 	log.Println("Listening for publisher messages...")
 	// Imagine this function continuously receives messages.
 }
 
-// startLeaderMessageListener simulates a gRPC server for receiving messages from followers.
-func startLeaderMessageListener() {
-	// Pseudocode: Start a gRPC server on a designated port for follower nodes.
-	log.Println("Leader is now listening for forwarded messages from followers...")
-	// Implement gRPC endpoint here.
+// startLeaderHTTPServer starts an HTTP server for receiving messages from followers.
+func startLeaderHTTPServer() {
+	http.HandleFunc("/receive", func(w http.ResponseWriter, r *http.Request) {
+		var message map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&message)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		log.Printf("Leader received message: %v\n", message)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	log.Println("Leader is now listening for forwarded messages from followers on :8080...")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 // runBulkWriterAsLeader handles bulk writing as a leader.
@@ -65,11 +80,32 @@ func runBulkWriterAsLeader() {
 
 // runBulkWriterAsFollower forwards messages to the leader.
 func runBulkWriterAsFollower() {
-	// Pseudocode: Forward received messages to leader's gRPC endpoint.
+	// Pseudocode: Forward received messages to leader's HTTP endpoint.
 	for {
 		// Simulate receiving a message.
-		log.Println("Non-leader received a message from publisher, forwarding to leader...")
-		// Forward logic: Dial leader's gRPC endpoint and send the message.
+		message := map[string]interface{}{
+			"content": "Sample message from non-leader node",
+		}
+		jsonData, err := json.Marshal(message)
+		if err != nil {
+			log.Printf("Error marshalling message: %v\n", err)
+			continue
+		}
+
+		resp, err := http.Post(*leaderURL+"/receive", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error forwarding message to leader: %v\n", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Error reading response from leader: %v\n", err)
+			continue
+		}
+
+		log.Printf("Non-leader NODE forwarded message to leader, response: %s\n", string(body))
 		time.Sleep(3 * time.Second)
 	}
 }
