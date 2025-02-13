@@ -5,4 +5,4 @@ curl -X POST "http://localhost:8080/insert" -d '{
   "payload": "test payload"
 }' -H "Content-Type: application/json"
 
-the main.go is for the vm and did not test it yet 
+the main.go is for the vm and have not tested it yet 
