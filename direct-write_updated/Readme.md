@@ -19,15 +19,17 @@
     -system package manager installs incompatible go version by default.
     Fix: installed compatible go version via wget.
 
-**Direct-Write Testing**
+**Performance Testing**
 
 TRIAL 1:
-  Total published messages: 10,000.
-  Messages per second: 315.50
-![image](https://github.com/user-attachments/assets/1ac3cc56-a519-48c6-a2a2-c8860f3ff152)
-
+  ![e65cbf65-893f-4ad3-8c60-b4fa6c65f0b8](https://github.com/user-attachments/assets/4f6aa1de-0792-430d-aa44-ab54e9cf1c12)
 
 TRIAL 2:
-  Messages per second: 290
+![04f2da51-7c7c-45be-b573-a5d2aecc88da](https://github.com/user-attachments/assets/7febc266-3c89-4de2-838b-97d7c92d0b76)
+
+TRIAL 3:
+![a9bf623b-45b2-4a37-b419-f230eace46f1](https://github.com/user-attachments/assets/fef0379d-b9af-4995-aec9-3607504f8276)
+
+
 
 
