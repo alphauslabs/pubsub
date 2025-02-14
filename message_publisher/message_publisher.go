@@ -16,7 +16,7 @@ type Message struct {
 }
 
 const (
-	numMessages = 10000
+	numMessages = 20
 )
 
 var endpoints = []string{
