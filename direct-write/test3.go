@@ -54,8 +54,9 @@ func writeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg.CreatedAt = time.Now()
-	msg.UpdatedAt = msg.CreatedAt
+	now := time.Now().UTC()
+	msg.CreatedAt = now
+	msg.UpdatedAt = now
 
 	if err := insertMessage(context.Background(), msg); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to write to Spanner: %v", err), http.StatusInternalServerError)
