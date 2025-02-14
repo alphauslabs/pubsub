@@ -20,9 +20,9 @@ const (
 )
 
 var endpoints = []string{
-	"http://localhost:8080",
-	"http://localhost:8081",
-	"http://localhost:8082",
+	"http://35.221.112.183:8080/write",
+	"http://35.243.83.115:8080/write",
+	"http://34.85.125.31:8080/write",
 }
 
 func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
