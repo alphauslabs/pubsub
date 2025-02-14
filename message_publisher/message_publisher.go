@@ -12,7 +12,7 @@ import (
 
 type Message struct {
     ID           string `json:"id"`
-    Subscription string `json:"subscription"`
+    Subsription string `json:"subsription"`
     Payload      string `json:"payload"`
 }
 
@@ -31,7 +31,7 @@ func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 	defer wg.Done()
 	msg := Message{
 		ID:           fmt.Sprintf("%d", id),
-		Subscription: fmt.Sprintf("sub-%d", id),
+		Subsription: fmt.Sprintf("sub-%d", id),
 		Payload:      fmt.Sprintf("MESSAGE TO NODE %d", id%len(endpoints)+1),
 	}
 
