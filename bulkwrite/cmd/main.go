@@ -17,12 +17,21 @@ import (
 )
 
 var (
-	isLeader   = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL  = flag.String("leader-url", "http://35.221.112.183:8080", "URL of the leader node")
-	messages   = make(chan map[string]interface{}, 20000) // Buffered channel for messages
-	mutex      sync.Mutex                                 // Mutex to protect concurrent access to messages
-	batchSize  = 2000                                     // Number of messages per batch
+	isLeader      = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
+	leaderURL     = flag.String("leader-url", "http://35.221.112.183:8080", "URL of the leader node")
+	batchSize     = flag.Int("batchsize", 5000, "Batch size for bulk writes")
+	messagesBuffer= flag.Int("messagesbuffer", 100000, "Buffer size for messages channel")
+	waitTime      = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
+	numWorkers    = flag.Int("workers", 10, "Number of concurrent workers") // New flag for number of workers
+	messages      = make(chan map[string]interface{}, *messagesBuffer) // Larger buffer
+	mutex         sync.Mutex
 )
+
+type BatchStats struct {
+	totalBatches int
+	totalMessages int
+	averageBatchSize float64
+}
 
 func createClients(ctx context.Context, db string) (*spanner.Client, error) {
 	client, err := spanner.NewClient(ctx, db)
@@ -40,23 +49,26 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]
 		var stmts []spanner.Statement
 		for _, message := range batch {
 			id := uuid.New().String()
+			currentTime := time.Now().Format(time.RFC3339) // Use explicit timestamp
 			stmt := spanner.Statement{
 				SQL: `INSERT INTO Messages (id, subsription, payload, createdAt, updatedAt)
-					  VALUES (@id, @subsription, @payload, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())`,
+					  VALUES (@id, @subsription, @payload, @createdAt, @updatedAt)`,
 				Params: map[string]interface{}{
 					"id":          id,
 					"subsription": message["subsription"], // Note the typo here
 					"payload":     message["payload"],
+					"createdAt":   currentTime,
+					"updatedAt":   currentTime,
 				},
 			}
 			stmts = append(stmts, stmt)
 		}
 
-		rowCount, err := txn.BatchUpdate(ctx, stmts)
+		_, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
 			return fmt.Errorf("failed to execute batch DML: %v", err)
 		}
-		fmt.Fprintf(w, "%d record(s) inserted.\n", rowCount)
+		fmt.Fprintf(w, "BATCH record() inserted.\n")
 		return nil
 	})
 	return err
@@ -65,36 +77,29 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]
 func main() {
 	flag.Parse()
 
+	// Reinitialize the messages channel with the configured buffer size
+	messages = make(chan map[string]interface{}, *messagesBuffer)
+
 	if *isLeader {
 		log.Println("Running as [LEADER].")
-		// Start listening for messages from the publisher.
 		go startPublisherListener()
-
-		// Start leader-specific HTTP server to accept forwarded messages from follower nodes.
 		go startLeaderHTTPServer()
-
-		// Process aggregated messages and perform bulk write.
-		go runBulkWriterAsLeader()
+		for i := 0; i < *numWorkers; i++ { // Use the flag value for number of workers
+			go runBulkWriterAsLeader()
+		}
 	} else {
 		log.Println("Running as [FOLLOWER].")
-		// Start listening for messages from the publisher.
 		go startPublisherListener()
-
-		// Instead of writing to Spanner, forward the messages to the leader.
 		go runBulkWriterAsFollower()
 	}
 
 	select {}
 }
 
-// startPublisherListener simulates listening for publisher messages.
 func startPublisherListener() {
-	// Pseudocode: Listen to publisher's HTTP endpoint.
 	log.Println("[LEADER] Listening for publisher messages...")
-	// Imagine this function continuously receives messages.
 }
 
-// startLeaderHTTPServer starts an HTTP server for receiving messages from followers.
 func startLeaderHTTPServer() {
 	http.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -109,13 +114,8 @@ func startLeaderHTTPServer() {
 			return
 		}
 
-		// Log the received message.
-		log.Printf("[LEADER] received message: %v\n", message)
-
-		// Add the message to the messages channel.
+		// log.Printf("[LEADER] received message: %v\n", message)
 		messages <- message
-
-		// Respond with success.
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("[LEADER] Message received successfully"))
 	})
@@ -124,15 +124,9 @@ func startLeaderHTTPServer() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-// runBulkWriterAsLeader handles bulk writing as a leader.
 func runBulkWriterAsLeader() {
-	// Replace with your actual database path
 	db := "projects/labs-169405/instances/alphaus-dev/databases/main"
-
-	// Create a context
 	ctx := context.Background()
-
-	// Create the Spanner client
 	client, err := createClients(ctx, db)
 	if err != nil {
 		log.Fatalf("Failed to create clients: %v", err)
@@ -140,40 +134,50 @@ func runBulkWriterAsLeader() {
 	defer client.Close()
 
 	var batch []map[string]interface{}
+	stats := BatchStats{}
+
 	for {
 		select {
 		case msg := <-messages:
 			batch = append(batch, msg)
-			if len(batch) >= batchSize {
+			if len(batch) >= *batchSize {
+				stats.totalBatches++
+				stats.totalMessages += len(batch)
 				go func(batch []map[string]interface{}) {
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
 						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("[LEADER] Successfully wrote batch of %d messages\n", len(batch))
+						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
 			}
-		case <-time.After(400 * time.Millisecond): 
+		case <-time.After(*waitTime):
 			if len(batch) > 0 {
+				stats.totalBatches++
+				stats.totalMessages += len(batch)
 				go func(batch []map[string]interface{}) {
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
 						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("[LEADER] Successfully wrote batch of %d messages\n", len(batch))
+						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
 			}
 		}
 	}
+
+	// Calculate and log the average batch size
+	if stats.totalBatches > 0 {
+		stats.averageBatchSize = float64(stats.totalMessages) / float64(stats.totalBatches)
+		log.Printf("Average batch size: %.2f\n", stats.averageBatchSize)
+	}
 }
 
-// runBulkWriterAsFollower forwards messages to the leader.
 func runBulkWriterAsFollower() {
-	// Start listening for messages from the consumer.
 	http.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -187,10 +191,8 @@ func runBulkWriterAsFollower() {
 			return
 		}
 
-		// Log the received message.
 		log.Printf("[FOLLOWER] Follower received message: %v\n", message)
 
-		// Forward the message to the leader.
 		jsonData, err := json.Marshal(message)
 		if err != nil {
 			log.Printf("[FOLLOWER] Error marshalling message: %v\n", err)
@@ -212,8 +214,7 @@ func runBulkWriterAsFollower() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("[FOLLOWER] Leader response: %s\n", string(body)) // Log the response body
-		// Respond to the consumer.
+		log.Printf("[FOLLOWER] Leader response: %s\n", string(body))
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("[FOLLOWER] Message forwarded to leader successfully"))
 	})
