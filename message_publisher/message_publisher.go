@@ -19,10 +19,10 @@ const (
 	numMessages = 10000
 )
 
-var endpoints = []string{
-        "http://35.221.112.183:8080/write",
-	"http://35.243.83.115:8080/write",
-	"http://34.85.125.31:8080/write",
+var endpoints = []string{ 
+"http://10.146.0.4:8085/write",
+"http://10.146.0.8:8086/write",
+"http://10.146.0.18:8087/write",
 }
 
 func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
