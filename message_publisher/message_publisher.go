@@ -16,13 +16,13 @@ type Message struct {
 }
 
 const (
-	numMessages = 10000
+	numMessages = 10
 )
 
 var endpoints = []string{ 
-"http://10.146.0.4:8085/write",
-"http://10.146.0.8:8086/write",
-"http://10.146.0.18:8087/write",
+"http://10.146.0.4:8080/write",
+"http://10.146.0.8:8080/write",
+"http://10.146.0.18:8080/write",
 }
 
 func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
