@@ -24,9 +24,10 @@
 TRIAL 1:
   Total published messages: 10,000.
   Messages per second: 315.50
+![image](https://github.com/user-attachments/assets/1ac3cc56-a519-48c6-a2a2-c8860f3ff152)
+
 
 TRIAL 2:
-  Total published messages: 20,000.
   Messages per second: 290
 
 
