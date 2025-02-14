@@ -54,7 +54,7 @@ func writeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	msg.CreatedAt = now
 	msg.UpdatedAt = now
 
