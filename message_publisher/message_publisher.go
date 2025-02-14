@@ -11,9 +11,11 @@ import (
 )
 
 type Message struct {
-	TopicID string `json:"id"`
-	Payload string `json:"payload"`
+    ID           string `json:"id"`
+    Subscription string `json:"subscription"`
+    Payload      string `json:"payload"`
 }
+
 
 const (
 	numMessages = 10
@@ -27,13 +29,10 @@ var endpoints = []string{
 
 func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 	defer wg.Done()
-
-	// Generate unique topic ID based on message ID
-	topicID := fmt.Sprintf("topic%d_sub%d", id%10, id%5)
-
 	msg := Message{
-		TopicID: topicID,
-		Payload: fmt.Sprintf("Payload for message %d", id),
+		ID:           fmt.Sprintf("%d", id),
+		Subscription: fmt.Sprintf("sub-%d", id),
+		Payload:      fmt.Sprintf("MESSAGE TO NODE %d", id%len(endpoints)+1),
 	}
 
 	data, err := json.Marshal(msg)
