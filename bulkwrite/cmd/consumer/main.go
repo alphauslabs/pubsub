@@ -17,12 +17,22 @@ var (
 func main() {
 	flag.Parse()
 
+	// Prompt the user to enter the custom IP and port if not provided via flag
+	if *nodeURL == "http://localhost:8081" {
+		var customURL string
+		fmt.Print("Enter the custom IP and port (e.g., http://192.168.1.100:8081): ")
+		fmt.Scanln(&customURL)
+		if customURL != "" {
+			nodeURL = &customURL
+		}
+	}
+
 	for i := 0; i < 10; i++ {
 		// Simulate a message based on the table schema.
 		message := map[string]interface{}{
 			"id":          "-", // Unique message ID
 			"subsription": "bulkwrite-sample", // Subscription ID
-			"payload":     fmt.Sprintf("BULKWRITE PAYLOAD NO. %d out of 10 (20ms per message - 1 second to aggregate from [LEADER] NODE )", i), // Payload with index
+			"payload":     fmt.Sprintf("[VM INSTANCE]BULKWRITE PAYLOAD NO. %d out of 10 (20ms per message - 1 second to aggregate from [LEADER] NODE )", i), // Payload with index
 			"createdAt":   time.Now().Format(time.RFC3339), // Current timestamp
 			"updatedAt":   time.Now().Format(time.RFC3339), // Current timestamp
 		}
