@@ -6,31 +6,50 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"net/http"
 	"sync"
 	"time"
-	"io"
 
 	"cloud.google.com/go/spanner"
 	"github.com/google/uuid"
 )
 
 var (
-	isLeader      = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL     = flag.String("leader-url", "http://35.221.112.183:8080", "URL of the leader node")
-	batchSize     = flag.Int("batchsize", 5000, "Batch size for bulk writes")
-	messagesBuffer= flag.Int("messagesbuffer", 100000, "Buffer size for messages channel")
-	waitTime      = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
-	numWorkers    = flag.Int("workers", 10, "Number of concurrent workers") // New flag for number of workers
-	messages      = make(chan map[string]interface{}, *messagesBuffer) // Larger buffer
-	mutex         sync.Mutex
+	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
+	leaderURL      = flag.String("leader-url", "http://35.221.112.183:8080", "URL of the leader node")
+	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
+	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel") // Increased buffer size
+	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
+	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers") // Increased worker count
+	numShards      = 16                                                     // Number of shards for message channels
 )
 
 type BatchStats struct {
-	totalBatches int
-	totalMessages int
+	totalBatches     int
+	totalMessages    int
 	averageBatchSize float64
+}
+
+var (
+	shardedChans = make([]chan map[string]interface{}, numShards) // Sharded channels for messages
+	workerPool   = make(chan struct{}, *numWorkers)              // Worker pool semaphore
+	wg           sync.WaitGroup
+)
+
+func init() {
+	// Initialize sharded channels
+	for i := 0; i < numShards; i++ {
+		shardedChans[i] = make(chan map[string]interface{}, *messagesBuffer/numShards)
+	}
+}
+
+// Hash messages to shards
+func getShard(message map[string]interface{}) int {
+	hash := fnv.New32a()
+	hash.Write([]byte(message["subsription"].(string))) // Use a unique field for hashing
+	return int(hash.Sum32()) % numShards
 }
 
 func createClients(ctx context.Context, db string) (*spanner.Client, error) {
@@ -45,47 +64,35 @@ func createClients(ctx context.Context, db string) (*spanner.Client, error) {
 func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]interface{}) error {
 	ctx := context.Background()
 
-	_, err := client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		var stmts []spanner.Statement
-		for _, message := range batch {
-			id := uuid.New().String()
-			currentTime := time.Now().Format(time.RFC3339) // Use explicit timestamp
-			stmt := spanner.Statement{
-				SQL: `INSERT INTO Messages (id, subsription, payload, createdAt, updatedAt)
-					  VALUES (@id, @subsription, @payload, @createdAt, @updatedAt)`,
-				Params: map[string]interface{}{
-					"id":          id,
-					"subsription": message["subsription"], // Note the typo here
-					"payload":     message["payload"],
-					"createdAt":   currentTime,
-					"updatedAt":   currentTime,
-				},
-			}
-			stmts = append(stmts, stmt)
-		}
+	mutations := make([]*spanner.Mutation, 0, len(batch))
+	for _, message := range batch {
+		id := uuid.New().String()
+		currentTime := time.Now().Format(time.RFC3339)
+		mutations = append(mutations, spanner.Insert(
+			"Messages",
+			[]string{"id", "subsription", "payload", "createdAt", "updatedAt"},
+			[]interface{}{id, message["subsription"], message["payload"], currentTime, currentTime},
+		))
+	}
 
-		_, err := txn.BatchUpdate(ctx, stmts)
-		if err != nil {
-			return fmt.Errorf("failed to execute batch DML: %v", err)
-		}
-		fmt.Fprintf(w, "BATCH record() inserted.\n")
-		return nil
-	})
-	return err
+	_, err := client.Apply(ctx, mutations)
+	if err != nil {
+		return fmt.Errorf("failed to apply mutations: %v", err)
+	}
+	fmt.Fprintf(w, "BATCH record() inserted.\n")
+	return nil
 }
 
 func main() {
 	flag.Parse()
 
-	// Reinitialize the messages channel with the configured buffer size
-	messages = make(chan map[string]interface{}, *messagesBuffer)
-
 	if *isLeader {
 		log.Println("Running as [LEADER].")
 		go startPublisherListener()
 		go startLeaderHTTPServer()
-		for i := 0; i < *numWorkers; i++ { // Use the flag value for number of workers
-			go runBulkWriterAsLeader()
+		for i := 0; i < *numWorkers; i++ {
+			wg.Add(1)
+			go runBulkWriterAsLeader(i)
 		}
 	} else {
 		log.Println("Running as [FOLLOWER].")
@@ -93,7 +100,7 @@ func main() {
 		go runBulkWriterAsFollower()
 	}
 
-	select {}
+	wg.Wait()
 }
 
 func startPublisherListener() {
@@ -114,8 +121,8 @@ func startLeaderHTTPServer() {
 			return
 		}
 
-		// log.Printf("[LEADER] received message: %v\n", message)
-		messages <- message
+		// Send message to the appropriate shard
+		shardedChans[getShard(message)] <- message
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("[LEADER] Message received successfully"))
 	})
@@ -124,7 +131,9 @@ func startLeaderHTTPServer() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func runBulkWriterAsLeader() {
+func runBulkWriterAsLeader(workerID int) {
+	defer wg.Done()
+
 	db := "projects/labs-169405/instances/alphaus-dev/databases/main"
 	ctx := context.Background()
 	client, err := createClients(ctx, db)
@@ -138,12 +147,14 @@ func runBulkWriterAsLeader() {
 
 	for {
 		select {
-		case msg := <-messages:
+		case msg := <-shardedChans[workerID%numShards]: // Process messages from the assigned shard
 			batch = append(batch, msg)
 			if len(batch) >= *batchSize {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
+				workerPool <- struct{}{} // Acquire worker
 				go func(batch []map[string]interface{}) {
+					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
 						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
@@ -157,7 +168,9 @@ func runBulkWriterAsLeader() {
 			if len(batch) > 0 {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
+				workerPool <- struct{}{} // Acquire worker
 				go func(batch []map[string]interface{}) {
+					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
 						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
