@@ -12,10 +12,9 @@ import (
 
 type Message struct {
     ID           string `json:"id"`
-    Subsription string `json:"subsription"`
+    Subsription  string `json:"subsription"`
     Payload      string `json:"payload"`
 }
-
 
 const (
 	numMessages = 10
@@ -31,7 +30,7 @@ func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 	defer wg.Done()
 	msg := Message{
 		ID:           fmt.Sprintf("%d", id),
-		Subsription: fmt.Sprintf("sub-%d", id),
+		Subsription:  fmt.Sprintf("sub-%d", id),
 		Payload:      fmt.Sprintf("MESSAGE TO NODE %d", id%len(endpoints)+1),
 	}
 
@@ -43,11 +42,11 @@ func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 
 	_, err = http.Post(endpoint, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		log.Printf("%s Message %d (Topic: %s) failed: %v", time.Now().Format(time.RFC3339), id, topicID, err)
+		log.Printf("%s Message %d (ID: %s) failed: %v", time.Now().Format(time.RFC3339), id, msg.ID, err)
 		return
 	}
 
-	log.Printf("%s Message %d (ID: %s) published successfully", time.Now().Format(time.RFC3339), id, topicID)
+	log.Printf("%s Message %d (ID: %s) published successfully", time.Now().Format(time.RFC3339), id, msg.ID)
 }
 
 func main() {
