@@ -95,5 +95,5 @@ func main() {
 	}
 
 	wg.Wait()
-	log.Printf("All messages published. Total: %d, Time: %.2f s, Message per second: %.2f", numMessages, time.Since(startTime).Seconds(), float64(*numMessages)/time.Since(startTime).Seconds())
+	log.Printf("All messages published. Total: %d, Time: %.2f s, Message per second: %.2f", *numMessages, time.Since(startTime).Seconds(), float64(*numMessages)/time.Since(startTime).Seconds())
 }
