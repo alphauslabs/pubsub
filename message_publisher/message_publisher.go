@@ -88,9 +88,9 @@ func main() {
 	var wg sync.WaitGroup
 	startTime := time.Now()
 
-	for i := 0; i < numMessages; i++ {
+	for i := 0; i < *numMessages; i++ {
 		wg.Add(1)
-		endpoint := endpoints[i%len(activeEndpoints)] // Round-robin distribution
+		endpoint := activeEndpoints[i%len(activeEndpoints)] // Round-robin distribution
 		go publishMessage(&wg, i, endpoint)
 	}
 
