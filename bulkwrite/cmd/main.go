@@ -24,7 +24,7 @@ var (
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
 	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers") // Increased worker count
 	numShards      = 16                                                     // Number of shards for message channels
-)
+) 
 
 type BatchStats struct {
 	totalBatches     int
@@ -39,13 +39,11 @@ var (
 )
 
 func init() {
-	// Initialize sharded channels
 	for i := 0; i < numShards; i++ {
 		shardedChans[i] = make(chan map[string]interface{}, *messagesBuffer/numShards)
 	}
 }
 
-// Hash messages to shards
 func getShard(message map[string]interface{}) int {
 	hash := fnv.New32a()
 	hash.Write([]byte(message["subsription"].(string))) // Use a unique field for hashing
@@ -60,7 +58,6 @@ func createClients(ctx context.Context, db string) (*spanner.Client, error) {
 	return client, nil
 }
 
-// WriteBatchUsingDML inserts a batch of messages into the Messages table using DML.
 func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]interface{}) error {
 	ctx := context.Background()
 
