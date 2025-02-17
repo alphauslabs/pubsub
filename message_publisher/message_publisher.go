@@ -81,7 +81,7 @@ func main() {
 		log.Println("Using bulk write GCP endpoints (ports 8080)")
 	} else {
 		activeEndpoints = directWriteEndpoints
-		log.Println("Using direct write GCP endpoints (ports 8080)")
+		log.Println("Using direct write GCP endpoints (ports 8085)")
 	}
 
 	
