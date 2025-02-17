@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package pubsubproto;
+
+option go_package = "github.com/alphauslabs/pubsubproto";
+
+service PubSubService {
+  // Publish a message to a topic
+  rpc Publish(Message) returns (PublishResponse) {}
+  // Subscribe to a topic and receive messages
+  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+  // Acknowledge receipt of a message
+  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse) {}
+  // Modify the visibility timeout of a message
+  rpc ModifyVisibilityTimeout(ModifyVisibilityTimeoutRequest) returns (ModifyVisibilityTimeoutResponse) {}
+}
+
+message Topic {
+  string id = 1;
+  string name = 2;
+}
+//based on the instruction
+message Subscription {
+  string id = 1;
+  string name = 2;
+  string topic_id = 3;
+  int32 visibility_timeout = 4;
+}
+
+message Message {
+  string id = 1;
+  string topic_id = 2;
+  bytes payload = 3;
+  int64 created_at = 4;
+  int64 expires_at = 5;
+}
+
+message PublishResponse {
+  string message_id = 1;
+}
+
+message SubscribeRequest {
+  string subscription_id = 1;
+  int32  visibility_timeout = 2;
+}
+
+message AcknowledgeRequest {
+  string subscription_id = 1;
+  string message_id = 2;
+}
+
+message AcknowledgeResponse {
+  bool acknowledge = 1;
+}
+
+message ModifyVisibilityTimeoutRequest {
+  string message_id = 1;
+  int32 new_timeout = 2;
+}
+
+message ModifyVisibilityTimeoutResponse {
+  bool success = 1;
+}
