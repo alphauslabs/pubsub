@@ -22,7 +22,7 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 func main() {
 	listener, err := net.Listen("tcp", ":8081")
 	if err != nil {
-		log.Fatalf("[FATAL] Failed to listen on port 8081: %v", err)
+		log.Fatalf("Failed to listen on port 8081: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
