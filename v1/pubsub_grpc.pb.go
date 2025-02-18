@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: proto/v1/pubsub.proto
+// source: v1/pubsub.proto
 
-package pubsubproto
+package v1
 
 import (
 	context "context"
@@ -19,10 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PubSubService_Publish_FullMethodName                 = "/pubsubproto.PubSubService/Publish"
-	PubSubService_Subscribe_FullMethodName               = "/pubsubproto.PubSubService/Subscribe"
-	PubSubService_Acknowledge_FullMethodName             = "/pubsubproto.PubSubService/Acknowledge"
-	PubSubService_ModifyVisibilityTimeout_FullMethodName = "/pubsubproto.PubSubService/ModifyVisibilityTimeout"
+	PubSubService_Publish_FullMethodName                 = "/PubSubService/Publish"
+	PubSubService_Subscribe_FullMethodName               = "/PubSubService/Subscribe"
+	PubSubService_Acknowledge_FullMethodName             = "/PubSubService/Acknowledge"
+	PubSubService_ModifyVisibilityTimeout_FullMethodName = "/PubSubService/ModifyVisibilityTimeout"
 )
 
 // PubSubServiceClient is the client API for PubSubService service.
@@ -220,7 +220,7 @@ func _PubSubService_ModifyVisibilityTimeout_Handler(srv interface{}, ctx context
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var PubSubService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "pubsubproto.PubSubService",
+	ServiceName: "PubSubService",
 	HandlerType: (*PubSubServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -243,5 +243,5 @@ var PubSubService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/v1/pubsub.proto",
+	Metadata: "v1/pubsub.proto",
 }

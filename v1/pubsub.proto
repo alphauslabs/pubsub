@@ -1,8 +1,6 @@
 syntax = "proto3";
 
-package pubsubproto;
-
-option go_package = "github.com/alphauslabs/pubsubproto";
+option go_package = "github.com/alphauslabs/pubsub/v1";
 
 service PubSubService {
   // Publish a message to a topic
