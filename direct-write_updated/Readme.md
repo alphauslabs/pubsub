@@ -33,3 +33,9 @@ TRIAL 3:
 
 
 
+
+**Added Performance Metrics**
+total_time_ms → Total request time, including parsing, writing, and commit retrieval.
+spanner_write_ms → Time taken for the Spanner Apply() operation.
+commit_retrieval_ms → Time spent retrieving commit timestamps from Spanner.
+commit_time → Actual Spanner commit timestamp.
