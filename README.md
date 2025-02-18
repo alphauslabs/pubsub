@@ -33,3 +33,7 @@ go mod tidy
 ```
 if error persists in go.mod
 delete go.sum and rerun go mod tidy
+
+export GO_PATH=~/go
+export PATH=$PATH:/$GO_PATH/bin
+source ~/.bash_profile

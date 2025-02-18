@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+// import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/alphauslabs/pubsub/v1";
 
 service PubSubService {
@@ -100,10 +102,10 @@ message ListSubscriptionsResponse {
 // Message Handling
 message Message {
   string id = 1;
-  string topic_id = 2;
+  string topic = 2;
   bytes payload = 3;
-  int64 created_at = 4;
-  int64 expires_at = 5;
+  // google.protobuf.Timestamp created_at = 4; // Use Timestamp type
+  // google.protobuf.Timestamp expires_at = 5;
 }
 
 message PublishResponse {

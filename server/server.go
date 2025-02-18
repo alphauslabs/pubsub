@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/alphauslabs/pubsub/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 // In-memory storage for topics (acts like a database)
@@ -103,6 +104,8 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(grpcServer, server)
+
+	reflection.Register(grpcServer) // Enable reflection for debugging
 
 	log.Println("gRPC server listening on :50051")
 	if err := grpcServer.Serve(listener); err != nil {
