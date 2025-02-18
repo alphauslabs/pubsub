@@ -3,14 +3,12 @@ package main
 //---
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"sync"
 	"time"
 
@@ -88,30 +86,6 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubprot
 
 func startPublisherListener() {
 	log.Println("[LEADER] Listening for publisher messages...")
-}
-
-func startLeaderHTTPServer() {
-	http.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var message pubsubproto.Message
-		err := json.NewDecoder(r.Body).Decode(&message)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		// Send message to the appropriate shard
-		shardedChans[getShard(&message)] <- &message
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("[LEADER] Message received successfully"))
-	})
-
-	log.Println("[LEADER] now listening for forwarded messages from followers on :50050...")
-	log.Fatal(http.ListenAndServe(":50050", nil))
 }
 
 func runBulkWriterAsLeader(workerID int) {
