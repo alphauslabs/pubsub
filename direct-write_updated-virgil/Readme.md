@@ -37,3 +37,10 @@ ORDER BY
 ```
 OUTPUT:
 ![image](https://github.com/user-attachments/assets/dfac2a66-ae4c-4ffc-8023-0a885ced69aa)
+
+
+
+**TESTED NEW CODES LOCALLY**
+Added test client to test codes locally.
+![f129eef1-0240-48fe-ba2e-35f0c64075fc](https://github.com/user-attachments/assets/a4c0f851-60b8-4b9a-a931-7adb8c1ec99e)
+![df981bdb-55df-4979-b93b-02591f18eb95](https://github.com/user-attachments/assets/14823b12-053c-4ffb-97ed-8f6233b57c96)
