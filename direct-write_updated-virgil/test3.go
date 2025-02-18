@@ -42,7 +42,7 @@ func main() {
 	}
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
-	log.Printf("gRPC server is running on port %d", port)
+	log.Printf("gRPC server is running on port: %d", port)
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
@@ -51,10 +51,21 @@ func main() {
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
 	messageID := uuid.New().String()
 
+	// Use msg.Id if provided, otherwise use the generated messageID
+	if msg.Id != "" {
+		messageID = msg.Id
+	}
+
 	mutation := spanner.InsertOrUpdate(
 		table,
-		[]string{"id", "payload", "createdAt", "updatedAt", "topic"},
-		[]interface{}{messageID, msg.Payload, spanner.CommitTimestamp, spanner.CommitTimestamp, msg.TopicId},
+		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
+		[]interface{}{
+			messageID,
+			msg.TopicId,
+			msg.Payload,
+			spanner.CommitTimestamp,
+			spanner.CommitTimestamp,
+		},
 	)
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
