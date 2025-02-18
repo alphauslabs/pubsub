@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pubsubproto "bulkwrite/pubsubproto"
+	pubsubproto "bulkwrite/bulkwrite_proto"
 )
 
 var (
@@ -34,9 +34,8 @@ var (
 )
 
 type BatchStats struct {
-	totalBatches     int
-	totalMessages    int
-	averageBatchSize float64
+	totalBatches  int
+	totalMessages int
 }
 
 var (
@@ -263,6 +262,34 @@ func (s *server) BatchWrite(ctx context.Context, req *pubsubproto.BatchWriteRequ
 	}
 
 	return &pubsubproto.BatchWriteResponse{Success: true}, nil
+}
+
+func (s *server) Subscribe(req *pubsubproto.SubscribeRequest, stream pubsubproto.PubSubService_SubscribeServer) error {
+	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+}
+
+// Acknowledge implements the Acknowledge RPC method.
+func (s *server) Acknowledge(ctx context.Context, req *pubsubproto.AcknowledgeRequest) (*pubsubproto.AcknowledgeResponse, error) {
+	// Placeholder implementation
+	return nil, status.Errorf(codes.Unimplemented, "method Acknowledge not implemented")
+}
+
+// ModifyVisibilityTimeout implements the ModifyVisibilityTimeout RPC method.
+func (s *server) ModifyVisibilityTimeout(ctx context.Context, req *pubsubproto.ModifyVisibilityTimeoutRequest) (*pubsubproto.ModifyVisibilityTimeoutResponse, error) {
+	// Placeholder implementation
+	return nil, status.Errorf(codes.Unimplemented, "method ModifyVisibilityTimeout not implemented")
+}
+
+// LeaderHealthCheck implements the LeaderHealthCheck RPC method.
+func (s *server) LeaderHealthCheck(ctx context.Context, req *pubsubproto.LeaderHealthCheckRequest) (*pubsubproto.LeaderHealthCheckResponse, error) {
+	// Placeholder implementation
+	return &pubsubproto.LeaderHealthCheckResponse{IsLeaderAlive: true}, nil
+}
+
+// LeaderElection implements the LeaderElection RPC method.
+func (s *server) LeaderElection(ctx context.Context, req *pubsubproto.LeaderElectionRequest) (*pubsubproto.LeaderElectionResponse, error) {
+	// Placeholder implementation
+	return &pubsubproto.LeaderElectionResponse{IsElected: true}, nil
 }
 
 type server struct {
