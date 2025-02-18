@@ -3,9 +3,9 @@
 
 *gRPC Server*
 
--Listens on port 50051.
+-Listens on port 8085.
 
-=Implements a Publish method to accept and store messages.
+-Implements a Publish method to accept and store messages.
 
 
 *Message Writing to Spanner*
