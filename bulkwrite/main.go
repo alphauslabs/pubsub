@@ -2,7 +2,6 @@ package main
 
 //---
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -131,7 +130,7 @@ func runBulkWriterAsLeader(workerID int) {
 
 	for {
 		select {
-		case msg := <-shardedChans[workerID%numShards]: // Process messages from the assigned shard
+		case msg := <-shardedChans[workerID%numShards]:
 			batch = append(batch, msg)
 			if len(batch) >= *batchSize {
 				stats.totalBatches++
@@ -166,86 +165,33 @@ func runBulkWriterAsLeader(workerID int) {
 			}
 		}
 	}
-
 }
-
 func runBulkWriterAsFollower() {
-	http.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var message pubsubproto.Message
-		err := json.NewDecoder(r.Body).Decode(&message)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		log.Printf("[FOLLOWER] Follower received message: %v\n", message)
-
-		jsonData, err := json.Marshal(message)
-		if err != nil {
-			log.Printf("[FOLLOWER] Error marshalling message: %v\n", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		resp, err := http.Post(*leaderURL+"/write", "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			log.Printf("[FOLLOWER] Error forwarding message to leader: %v\n", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("[FOLLOWER] Error reading response from leader: %v\n", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		log.Printf("[FOLLOWER] Leader response: %s\n", string(body))
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("[FOLLOWER] Message forwarded to leader successfully"))
-	})
-
-	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
-	log.Fatal(http.ListenAndServe(":50050", nil)) // Use a different port for the follower
-}
-
-// Publish implements the Publish RPC method.
-func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
-	// Forward the message to the leader if this is a follower
-	if !*isLeader {
-		jsonData, err := json.Marshal(req)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to marshal message: %v", err)
-		}
-
-		resp, err := http.Post(*leaderURL+"/write", "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to forward message to leader: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, status.Errorf(codes.Internal, "leader returned non-OK status: %v", resp.StatusCode)
-		}
-
-		return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
+	// Connect to the leader's gRPC server
+	conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("[FOLLOWER] Failed to connect to leader: %v", err)
 	}
+	defer conn.Close()
 
-	// If this is the leader, process the message directly
-	shardedChans[getShard(req)] <- req
-	return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
-}
+	client := pubsubproto.NewPubSubServiceClient(conn)
 
-// ForwardMessage implements the ForwardMessage RPC method.
-func (s *server) ForwardMessage(ctx context.Context, req *pubsubproto.ForwardMessageRequest) (*pubsubproto.ForwardMessageResponse, error) {
-	shardedChans[req.ShardId] <- req.Message
-	return &pubsubproto.ForwardMessageResponse{Success: true}, nil
+	// Start the gRPC server for the follower
+	lis, err := net.Listen("tcp", ":50050")
+	if err != nil {
+		log.Fatalf("[FOLLOWER] Failed to listen: %v", err)
+	}
+	s := grpc.NewServer()
+	pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
+	log.Println("[FOLLOWER] gRPC server is running on :50050")
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("[FOLLOWER] Failed to serve: %v", err)
+		}
+	}()
+
+	// Handle incoming messages via gRPC
+	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
 }
 
 // BatchWrite implements the BatchWrite RPC method.
@@ -295,6 +241,32 @@ func (s *server) LeaderElection(ctx context.Context, req *pubsubproto.LeaderElec
 
 type server struct {
 	pubsubproto.UnimplementedPubSubServiceServer
+	client pubsubproto.PubSubServiceClient // Add this field
+}
+
+// Publish handles messages from clients or followers.
+func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
+	// Forward the message to the leader
+	shardID := getShard(req)
+	forwardReq := &pubsubproto.ForwardMessageRequest{
+		Message: req,
+		ShardId: int32(shardID),
+	}
+
+	_, err := s.client.ForwardMessage(ctx, forwardReq)
+	if err != nil {
+		log.Printf("[FOLLOWER] Error forwarding message to leader: %v\n", err)
+		return nil, status.Errorf(codes.Internal, "failed to forward message to leader: %v", err)
+	}
+
+	log.Printf("[FOLLOWER] Message forwarded to leader successfully: %v\n", req)
+	return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
+}
+
+// ForwardMessage handles messages forwarded from followers to the leader.
+func (s *server) ForwardMessage(ctx context.Context, req *pubsubproto.ForwardMessageRequest) (*pubsubproto.ForwardMessageResponse, error) {
+	shardedChans[req.ShardId] <- req.Message
+	return &pubsubproto.ForwardMessageResponse{Success: true}, nil
 }
 
 func main() {
@@ -305,28 +277,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
 	s := grpc.NewServer()
-	pubsubproto.RegisterPubSubServiceServer(s, &server{})
-	log.Println("gRPC server is running on :50050")
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
-	}()
 
 	if *isLeader {
 		log.Println("Running as [LEADER].")
+		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
-		go startLeaderHTTPServer()
 		for i := 0; i < *numWorkers; i++ {
 			wg.Add(1)
 			go runBulkWriterAsLeader(i)
 		}
 	} else {
 		log.Println("Running as [FOLLOWER].")
+		conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("[FOLLOWER] Failed to connect to leader: %v", err)
+		}
+		defer conn.Close()
+
+		client := pubsubproto.NewPubSubServiceClient(conn)
+		pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
 		go startPublisherListener()
 		go runBulkWriterAsFollower()
 	}
+
+	log.Println("gRPC server is running on :50050")
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
 
 	wg.Wait()
 }
