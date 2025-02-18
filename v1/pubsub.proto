@@ -5,19 +5,63 @@ option go_package = "github.com/alphauslabs/pubsub/v1";
 service PubSubService {
   // Publish a message to a topic
   rpc Publish(Message) returns (PublishResponse) {}
+
   // Subscribe to a topic and receive messages
   rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+
   // Acknowledge receipt of a message
   rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse) {}
+
   // Modify the visibility timeout of a message
   rpc ModifyVisibilityTimeout(ModifyVisibilityTimeoutRequest) returns (ModifyVisibilityTimeoutResponse) {}
+
+  // --- CRUD Operations for Topics ---
+  rpc CreateTopic(CreateTopicRequest) returns (Topic) {}
+  rpc GetTopic(GetTopicRequest) returns (Topic) {}
+  rpc UpdateTopic(UpdateTopicRequest) returns (Topic) {}
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse) {}
+  rpc ListTopics(Empty) returns (ListTopicsResponse) {}
+
+  // --- CRUD Operations for Subscriptions ---
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (Subscription) {}
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription) {}
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (Subscription) {}
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse) {}
+  rpc ListSubscriptions(Empty) returns (ListSubscriptionsResponse) {}
 }
 
+// Topic Messages
 message Topic {
   string id = 1;
   string name = 2;
 }
-//based on the instruction
+
+message CreateTopicRequest {
+  string name = 1;
+}
+
+message GetTopicRequest {
+  string id = 1;
+}
+
+message UpdateTopicRequest {
+  string id = 1;
+  string name = 2;
+}
+
+message DeleteTopicRequest {
+  string id = 1;
+}
+
+message DeleteTopicResponse {
+  bool success = 1;
+}
+
+message ListTopicsResponse {
+  repeated Topic topics = 1;
+}
+
+// Subscription Messages
 message Subscription {
   string id = 1;
   string name = 2;
@@ -25,6 +69,35 @@ message Subscription {
   int32 visibility_timeout = 4;
 }
 
+message CreateSubscriptionRequest {
+  string name = 1;
+  string topic_id = 2;
+  int32 visibility_timeout = 3;
+}
+
+message GetSubscriptionRequest {
+  string id = 1;
+}
+
+message UpdateSubscriptionRequest {
+  string id = 1;
+  string name = 2;
+  int32 visibility_timeout = 3;
+}
+
+message DeleteSubscriptionRequest {
+  string id = 1;
+}
+
+message DeleteSubscriptionResponse {
+  bool success = 1;
+}
+
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+}
+
+// Message Handling
 message Message {
   string id = 1;
   string topic_id = 2;
@@ -39,7 +112,7 @@ message PublishResponse {
 
 message SubscribeRequest {
   string subscription_id = 1;
-  int32  visibility_timeout = 2;
+  int32 visibility_timeout = 2;
 }
 
 message AcknowledgeRequest {
@@ -59,3 +132,5 @@ message ModifyVisibilityTimeoutRequest {
 message ModifyVisibilityTimeoutResponse {
   bool success = 1;
 }
+
+message Empty {}

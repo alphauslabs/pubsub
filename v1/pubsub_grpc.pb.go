@@ -23,6 +23,16 @@ const (
 	PubSubService_Subscribe_FullMethodName               = "/PubSubService/Subscribe"
 	PubSubService_Acknowledge_FullMethodName             = "/PubSubService/Acknowledge"
 	PubSubService_ModifyVisibilityTimeout_FullMethodName = "/PubSubService/ModifyVisibilityTimeout"
+	PubSubService_CreateTopic_FullMethodName             = "/PubSubService/CreateTopic"
+	PubSubService_GetTopic_FullMethodName                = "/PubSubService/GetTopic"
+	PubSubService_UpdateTopic_FullMethodName             = "/PubSubService/UpdateTopic"
+	PubSubService_DeleteTopic_FullMethodName             = "/PubSubService/DeleteTopic"
+	PubSubService_ListTopics_FullMethodName              = "/PubSubService/ListTopics"
+	PubSubService_CreateSubscription_FullMethodName      = "/PubSubService/CreateSubscription"
+	PubSubService_GetSubscription_FullMethodName         = "/PubSubService/GetSubscription"
+	PubSubService_UpdateSubscription_FullMethodName      = "/PubSubService/UpdateSubscription"
+	PubSubService_DeleteSubscription_FullMethodName      = "/PubSubService/DeleteSubscription"
+	PubSubService_ListSubscriptions_FullMethodName       = "/PubSubService/ListSubscriptions"
 )
 
 // PubSubServiceClient is the client API for PubSubService service.
@@ -37,6 +47,18 @@ type PubSubServiceClient interface {
 	Acknowledge(ctx context.Context, in *AcknowledgeRequest, opts ...grpc.CallOption) (*AcknowledgeResponse, error)
 	// Modify the visibility timeout of a message
 	ModifyVisibilityTimeout(ctx context.Context, in *ModifyVisibilityTimeoutRequest, opts ...grpc.CallOption) (*ModifyVisibilityTimeoutResponse, error)
+	// --- CRUD Operations for Topics ---
+	CreateTopic(ctx context.Context, in *CreateTopicRequest, opts ...grpc.CallOption) (*Topic, error)
+	GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*Topic, error)
+	UpdateTopic(ctx context.Context, in *UpdateTopicRequest, opts ...grpc.CallOption) (*Topic, error)
+	DeleteTopic(ctx context.Context, in *DeleteTopicRequest, opts ...grpc.CallOption) (*DeleteTopicResponse, error)
+	ListTopics(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListTopicsResponse, error)
+	// --- CRUD Operations for Subscriptions ---
+	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
+	GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
+	UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
+	DeleteSubscription(ctx context.Context, in *DeleteSubscriptionRequest, opts ...grpc.CallOption) (*DeleteSubscriptionResponse, error)
+	ListSubscriptions(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 }
 
 type pubSubServiceClient struct {
@@ -96,6 +118,106 @@ func (c *pubSubServiceClient) ModifyVisibilityTimeout(ctx context.Context, in *M
 	return out, nil
 }
 
+func (c *pubSubServiceClient) CreateTopic(ctx context.Context, in *CreateTopicRequest, opts ...grpc.CallOption) (*Topic, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Topic)
+	err := c.cc.Invoke(ctx, PubSubService_CreateTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*Topic, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Topic)
+	err := c.cc.Invoke(ctx, PubSubService_GetTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) UpdateTopic(ctx context.Context, in *UpdateTopicRequest, opts ...grpc.CallOption) (*Topic, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Topic)
+	err := c.cc.Invoke(ctx, PubSubService_UpdateTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) DeleteTopic(ctx context.Context, in *DeleteTopicRequest, opts ...grpc.CallOption) (*DeleteTopicResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteTopicResponse)
+	err := c.cc.Invoke(ctx, PubSubService_DeleteTopic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) ListTopics(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListTopicsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTopicsResponse)
+	err := c.cc.Invoke(ctx, PubSubService_ListTopics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Subscription)
+	err := c.cc.Invoke(ctx, PubSubService_CreateSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Subscription)
+	err := c.cc.Invoke(ctx, PubSubService_GetSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Subscription)
+	err := c.cc.Invoke(ctx, PubSubService_UpdateSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) DeleteSubscription(ctx context.Context, in *DeleteSubscriptionRequest, opts ...grpc.CallOption) (*DeleteSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteSubscriptionResponse)
+	err := c.cc.Invoke(ctx, PubSubService_DeleteSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubServiceClient) ListSubscriptions(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, PubSubService_ListSubscriptions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PubSubServiceServer is the server API for PubSubService service.
 // All implementations must embed UnimplementedPubSubServiceServer
 // for forward compatibility.
@@ -108,6 +230,18 @@ type PubSubServiceServer interface {
 	Acknowledge(context.Context, *AcknowledgeRequest) (*AcknowledgeResponse, error)
 	// Modify the visibility timeout of a message
 	ModifyVisibilityTimeout(context.Context, *ModifyVisibilityTimeoutRequest) (*ModifyVisibilityTimeoutResponse, error)
+	// --- CRUD Operations for Topics ---
+	CreateTopic(context.Context, *CreateTopicRequest) (*Topic, error)
+	GetTopic(context.Context, *GetTopicRequest) (*Topic, error)
+	UpdateTopic(context.Context, *UpdateTopicRequest) (*Topic, error)
+	DeleteTopic(context.Context, *DeleteTopicRequest) (*DeleteTopicResponse, error)
+	ListTopics(context.Context, *Empty) (*ListTopicsResponse, error)
+	// --- CRUD Operations for Subscriptions ---
+	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error)
+	GetSubscription(context.Context, *GetSubscriptionRequest) (*Subscription, error)
+	UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*Subscription, error)
+	DeleteSubscription(context.Context, *DeleteSubscriptionRequest) (*DeleteSubscriptionResponse, error)
+	ListSubscriptions(context.Context, *Empty) (*ListSubscriptionsResponse, error)
 	mustEmbedUnimplementedPubSubServiceServer()
 }
 
@@ -129,6 +263,36 @@ func (UnimplementedPubSubServiceServer) Acknowledge(context.Context, *Acknowledg
 }
 func (UnimplementedPubSubServiceServer) ModifyVisibilityTimeout(context.Context, *ModifyVisibilityTimeoutRequest) (*ModifyVisibilityTimeoutResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ModifyVisibilityTimeout not implemented")
+}
+func (UnimplementedPubSubServiceServer) CreateTopic(context.Context, *CreateTopicRequest) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateTopic not implemented")
+}
+func (UnimplementedPubSubServiceServer) GetTopic(context.Context, *GetTopicRequest) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTopic not implemented")
+}
+func (UnimplementedPubSubServiceServer) UpdateTopic(context.Context, *UpdateTopicRequest) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTopic not implemented")
+}
+func (UnimplementedPubSubServiceServer) DeleteTopic(context.Context, *DeleteTopicRequest) (*DeleteTopicResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTopic not implemented")
+}
+func (UnimplementedPubSubServiceServer) ListTopics(context.Context, *Empty) (*ListTopicsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTopics not implemented")
+}
+func (UnimplementedPubSubServiceServer) CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSubscription not implemented")
+}
+func (UnimplementedPubSubServiceServer) GetSubscription(context.Context, *GetSubscriptionRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSubscription not implemented")
+}
+func (UnimplementedPubSubServiceServer) UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSubscription not implemented")
+}
+func (UnimplementedPubSubServiceServer) DeleteSubscription(context.Context, *DeleteSubscriptionRequest) (*DeleteSubscriptionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSubscription not implemented")
+}
+func (UnimplementedPubSubServiceServer) ListSubscriptions(context.Context, *Empty) (*ListSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
 func (UnimplementedPubSubServiceServer) mustEmbedUnimplementedPubSubServiceServer() {}
 func (UnimplementedPubSubServiceServer) testEmbeddedByValue()                       {}
@@ -216,6 +380,186 @@ func _PubSubService_ModifyVisibilityTimeout_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PubSubService_CreateTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).CreateTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_CreateTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).CreateTopic(ctx, req.(*CreateTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_GetTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).GetTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_GetTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).GetTopic(ctx, req.(*GetTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_UpdateTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).UpdateTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_UpdateTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).UpdateTopic(ctx, req.(*UpdateTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_DeleteTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).DeleteTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_DeleteTopic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).DeleteTopic(ctx, req.(*DeleteTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_ListTopics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).ListTopics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_ListTopics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).ListTopics(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_CreateSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).CreateSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_CreateSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).CreateSubscription(ctx, req.(*CreateSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_GetSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).GetSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_GetSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).GetSubscription(ctx, req.(*GetSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_UpdateSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).UpdateSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_UpdateSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).UpdateSubscription(ctx, req.(*UpdateSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_DeleteSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).DeleteSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_DeleteSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).DeleteSubscription(ctx, req.(*DeleteSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PubSubService_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServiceServer).ListSubscriptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PubSubService_ListSubscriptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServiceServer).ListSubscriptions(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PubSubService_ServiceDesc is the grpc.ServiceDesc for PubSubService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -234,6 +578,46 @@ var PubSubService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ModifyVisibilityTimeout",
 			Handler:    _PubSubService_ModifyVisibilityTimeout_Handler,
+		},
+		{
+			MethodName: "CreateTopic",
+			Handler:    _PubSubService_CreateTopic_Handler,
+		},
+		{
+			MethodName: "GetTopic",
+			Handler:    _PubSubService_GetTopic_Handler,
+		},
+		{
+			MethodName: "UpdateTopic",
+			Handler:    _PubSubService_UpdateTopic_Handler,
+		},
+		{
+			MethodName: "DeleteTopic",
+			Handler:    _PubSubService_DeleteTopic_Handler,
+		},
+		{
+			MethodName: "ListTopics",
+			Handler:    _PubSubService_ListTopics_Handler,
+		},
+		{
+			MethodName: "CreateSubscription",
+			Handler:    _PubSubService_CreateSubscription_Handler,
+		},
+		{
+			MethodName: "GetSubscription",
+			Handler:    _PubSubService_GetSubscription_Handler,
+		},
+		{
+			MethodName: "UpdateSubscription",
+			Handler:    _PubSubService_UpdateSubscription_Handler,
+		},
+		{
+			MethodName: "DeleteSubscription",
+			Handler:    _PubSubService_DeleteSubscription_Handler,
+		},
+		{
+			MethodName: "ListSubscriptions",
+			Handler:    _PubSubService_ListSubscriptions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
