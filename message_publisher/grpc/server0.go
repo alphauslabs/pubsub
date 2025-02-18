@@ -5,19 +5,20 @@ import (
 	"log"
 	"net"
 
-	pb "github.com/alphauslabs/pubsub-proto" // Import directly
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"google.golang.org/grpc"
 )
 
-// server is used to implement pb.PubSubServiceServer.
 type server struct {
 	pb.UnimplementedPubSubServiceServer
 }
 
-// Publish implements the gRPC Publish method
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	log.Printf("[Mock Server 8080] Received message: ID=%s, Subsription=%s, Payload=%s",
-		msg.Id, msg.Subsription, string(msg.Payload))
+	
+	log.Printf("[Mock Server 8080] Received message:\n  ID: %s\n   Payload: %s\n   Topic: %s",
+		msg.Id, string(msg.Payload), msg.TopicId)
+
+
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
@@ -30,7 +31,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(grpcServer, &server{})
 
-	log.Println("[INFO] Mock gRPC Server is running on port 8080")
+	log.Println("Mock gRPC Server is running on port 8080")
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatalf("[FATAL] Failed to serve gRPC server: %v", err)
 	}
