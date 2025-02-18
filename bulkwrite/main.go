@@ -7,24 +7,31 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/spanner"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	pubsubproto "bulkwrite/pubsubproto"
 )
 
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL      = flag.String("leader-url", "http://35.221.112.183:8080", "URL of the leader node")
+	leaderURL      = flag.String("leader-url", "http://35.221.112.183:50051", "URL of the leader node")
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel") // Increased buffer size
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
 	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers") // Increased worker count
-	numShards      = 16                                                     // Number of shards for message channels
-) 
+	numShards      = 16                                                      // Number of shards for message channels
+)
 
 type BatchStats struct {
 	totalBatches     int
@@ -33,20 +40,20 @@ type BatchStats struct {
 }
 
 var (
-	shardedChans = make([]chan map[string]interface{}, numShards) // Sharded channels for messages
-	workerPool   = make(chan struct{}, *numWorkers)              // Worker pool semaphore
+	shardedChans = make([]chan *pubsubproto.Message, numShards) // Sharded channels for messages
+	workerPool   = make(chan struct{}, *numWorkers)             // Worker pool semaphore
 	wg           sync.WaitGroup
 )
 
 func init() {
 	for i := 0; i < numShards; i++ {
-		shardedChans[i] = make(chan map[string]interface{}, *messagesBuffer/numShards)
+		shardedChans[i] = make(chan *pubsubproto.Message, *messagesBuffer/numShards)
 	}
 }
 
-func getShard(message map[string]interface{}) int {
+func getShard(message *pubsubproto.Message) int {
 	hash := fnv.New32a()
-	hash.Write([]byte(message["subsription"].(string))) // Use a unique field for hashing
+	hash.Write([]byte(message.TopicId)) // Use topic ID for hashing
 	return int(hash.Sum32()) % numShards
 }
 
@@ -58,7 +65,7 @@ func createClients(ctx context.Context, db string) (*spanner.Client, error) {
 	return client, nil
 }
 
-func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]interface{}) error {
+func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubproto.Message) error {
 	ctx := context.Background()
 
 	mutations := make([]*spanner.Mutation, 0, len(batch))
@@ -67,8 +74,8 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]
 		currentTime := time.Now().Format(time.RFC3339)
 		mutations = append(mutations, spanner.Insert(
 			"Messages",
-			[]string{"id", "subsription", "payload", "createdAt", "updatedAt"},
-			[]interface{}{id, message["subsription"], message["payload"], currentTime, currentTime},
+			[]string{"id", "subscription", "payload", "createdAt", "updatedAt"},
+			[]interface{}{id, message.TopicId, message.Payload, currentTime, currentTime},
 		))
 	}
 
@@ -78,26 +85,6 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []map[string]
 	}
 	fmt.Fprintf(w, "BATCH record() inserted.\n")
 	return nil
-}
-
-func main() {
-	flag.Parse()
-
-	if *isLeader {
-		log.Println("Running as [LEADER].")
-		go startPublisherListener()
-		go startLeaderHTTPServer()
-		for i := 0; i < *numWorkers; i++ {
-			wg.Add(1)
-			go runBulkWriterAsLeader(i)
-		}
-	} else {
-		log.Println("Running as [FOLLOWER].")
-		go startPublisherListener()
-		go runBulkWriterAsFollower()
-	}
-
-	wg.Wait()
 }
 
 func startPublisherListener() {
@@ -111,7 +98,7 @@ func startLeaderHTTPServer() {
 			return
 		}
 
-		var message map[string]interface{}
+		var message pubsubproto.Message
 		err := json.NewDecoder(r.Body).Decode(&message)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -119,13 +106,13 @@ func startLeaderHTTPServer() {
 		}
 
 		// Send message to the appropriate shard
-		shardedChans[getShard(message)] <- message
+		shardedChans[getShard(&message)] <- &message
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("[LEADER] Message received successfully"))
 	})
 
-	log.Println("[LEADER] now listening for forwarded messages from followers on :8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("[LEADER] now listening for forwarded messages from followers on :50051...")
+	log.Fatal(http.ListenAndServe(":50051", nil))
 }
 
 func runBulkWriterAsLeader(workerID int) {
@@ -139,7 +126,7 @@ func runBulkWriterAsLeader(workerID int) {
 	}
 	defer client.Close()
 
-	var batch []map[string]interface{}
+	var batch []*pubsubproto.Message
 	stats := BatchStats{}
 
 	for {
@@ -150,7 +137,7 @@ func runBulkWriterAsLeader(workerID int) {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
 				workerPool <- struct{}{} // Acquire worker
-				go func(batch []map[string]interface{}) {
+				go func(batch []*pubsubproto.Message) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
@@ -166,7 +153,7 @@ func runBulkWriterAsLeader(workerID int) {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
 				workerPool <- struct{}{} // Acquire worker
-				go func(batch []map[string]interface{}) {
+				go func(batch []*pubsubproto.Message) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
@@ -180,11 +167,6 @@ func runBulkWriterAsLeader(workerID int) {
 		}
 	}
 
-	// Calculate and log the average batch size
-	if stats.totalBatches > 0 {
-		stats.averageBatchSize = float64(stats.totalMessages) / float64(stats.totalBatches)
-		log.Printf("Average batch size: %.2f\n", stats.averageBatchSize)
-	}
 }
 
 func runBulkWriterAsFollower() {
@@ -194,7 +176,7 @@ func runBulkWriterAsFollower() {
 			return
 		}
 
-		var message map[string]interface{}
+		var message pubsubproto.Message
 		err := json.NewDecoder(r.Body).Decode(&message)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -230,5 +212,93 @@ func runBulkWriterAsFollower() {
 	})
 
 	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
-	log.Fatal(http.ListenAndServe(":8080", nil)) // Use a different port for the follower
+	log.Fatal(http.ListenAndServe(":50051", nil)) // Use a different port for the follower
+}
+
+// Publish implements the Publish RPC method.
+func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
+	// Forward the message to the leader if this is a follower
+	if !*isLeader {
+		jsonData, err := json.Marshal(req)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to marshal message: %v", err)
+		}
+
+		resp, err := http.Post(*leaderURL+"/write", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to forward message to leader: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, status.Errorf(codes.Internal, "leader returned non-OK status: %v", resp.StatusCode)
+		}
+
+		return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
+	}
+
+	// If this is the leader, process the message directly
+	shardedChans[getShard(req)] <- req
+	return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
+}
+
+// ForwardMessage implements the ForwardMessage RPC method.
+func (s *server) ForwardMessage(ctx context.Context, req *pubsubproto.ForwardMessageRequest) (*pubsubproto.ForwardMessageResponse, error) {
+	shardedChans[req.ShardId] <- req.Message
+	return &pubsubproto.ForwardMessageResponse{Success: true}, nil
+}
+
+// BatchWrite implements the BatchWrite RPC method.
+func (s *server) BatchWrite(ctx context.Context, req *pubsubproto.BatchWriteRequest) (*pubsubproto.BatchWriteResponse, error) {
+	db := "projects/labs-169405/instances/alphaus-dev/databases/main"
+	client, err := createClients(ctx, db)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create Spanner client: %v", err)
+	}
+	defer client.Close()
+
+	err = WriteBatchUsingDML(log.Writer(), client, req.Messages)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write batch: %v", err)
+	}
+
+	return &pubsubproto.BatchWriteResponse{Success: true}, nil
+}
+
+type server struct {
+	pubsubproto.UnimplementedPubSubServiceServer
+}
+
+func main() {
+	flag.Parse()
+
+	// Start the gRPC server
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	s := grpc.NewServer()
+	pubsubproto.RegisterPubSubServiceServer(s, &server{})
+	log.Println("gRPC server is running on :50051")
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
+	if *isLeader {
+		log.Println("Running as [LEADER].")
+		go startPublisherListener()
+		go startLeaderHTTPServer()
+		for i := 0; i < *numWorkers; i++ {
+			wg.Add(1)
+			go runBulkWriterAsLeader(i)
+		}
+	} else {
+		log.Println("Running as [FOLLOWER].")
+		go startPublisherListener()
+		go runBulkWriterAsFollower()
+	}
+
+	wg.Wait()
 }
