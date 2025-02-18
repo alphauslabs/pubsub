@@ -1,12 +1,14 @@
 module spanner-http
 
-go 1.22.7
+go 1.23.1
 
 toolchain go1.23.6
 
 require (
 	cloud.google.com/go/spanner v1.75.0
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250217034648-47e18fdbb62d
 	github.com/google/uuid v1.6.0
+	google.golang.org/grpc v1.70.0
 )
 
 require (
@@ -51,6 +53,5 @@ require (
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250124145028-65684f501c47 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250207221924-e9438ea467c6 // indirect
-	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 )
