@@ -30,6 +30,6 @@ func main() {
 
 	log.Println("Mock gRPC Server is running on port 8081")
 	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("[FATAL] Failed to serve gRPC server: %v", err)
+		log.Fatalf("Failed to serve gRPC server: %v", err)
 	}
 }
