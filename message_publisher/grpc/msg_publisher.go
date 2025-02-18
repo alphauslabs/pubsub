@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/alphauslabs/pubsub-proto"
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"google.golang.org/grpc"
 )
 
@@ -19,7 +19,7 @@ var (
 	useBulkWrite = flag.Bool("bulkwrite", false, "Use bulk write GCP gRPC endpoints")
 )
 
-// gRPC endpoints for different scenarios
+
 var (
 	directWriteEndpoints = []string{
 		"10.146.0.4:8085",
@@ -38,19 +38,23 @@ var (
 		"localhost:8081",
 		"localhost:8082",
 	}
+)
 
+var (
 	activeEndpoints []string
 	clients         []pb.PubSubServiceClient
 )
 
+// Publishes a message using gRPC
 func publishMessage(wg *sync.WaitGroup, id int, client pb.PubSubServiceClient) {
 	defer wg.Done()
 
+	topicID := fmt.Sprintf("topic-%d", id%1000)
+
 	msg := &pb.Message{
-		Id:          fmt.Sprintf("%d", id),
-		TopicId:     "test-topic",
-		Subsription: fmt.Sprintf("sub-%d", id), // Intentionally using "subsription" typo
-		Payload:     []byte(fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1)),
+		Id:      fmt.Sprintf("%d", id),
+		Payload: []byte(fmt.Sprintf("MESSAGE %d", id)),
+		TopicId: topicID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -58,13 +62,14 @@ func publishMessage(wg *sync.WaitGroup, id int, client pb.PubSubServiceClient) {
 
 	resp, err := client.Publish(ctx, msg)
 	if err != nil {
-		log.Printf("[ERROR] Message %d failed to publish: %v", id, err)
+		log.Printf("[ERROR] Message %d to %s failed: %v", id, topicID, err)
 		return
 	}
 
-	log.Printf("[SUCCESS] Message %d published. Server Message ID: %s", id, resp.MessageId)
+	log.Printf("[SUCCESS] Message %d published to %s. Message ID: %s", id, topicID, resp.MessageId)
 }
 
+// Connects to a gRPC server and returns a client
 func connectToGRPC(endpoint string) (pb.PubSubServiceClient, error) {
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -76,6 +81,7 @@ func connectToGRPC(endpoint string) (pb.PubSubServiceClient, error) {
 func main() {
 	flag.Parse()
 
+	// Determine active endpoints
 	if *useMock {
 		activeEndpoints = mockEndpoints
 		log.Println("Using mock gRPC servers (localhost:8080, localhost:8081, localhost:8082)")
@@ -90,7 +96,7 @@ func main() {
 	for _, endpoint := range activeEndpoints {
 		client, err := connectToGRPC(endpoint)
 		if err != nil {
-			log.Fatalf("[FATAL] Could not create gRPC client: %v", err)
+			log.Fatalf("Could not create gRPC client for %s: %v", endpoint, err)
 		}
 		clients = append(clients, client)
 	}
@@ -98,17 +104,19 @@ func main() {
 	var wg sync.WaitGroup
 	startTime := time.Now()
 
+	// Publish messages using round-robin distribution
 	for i := 0; i < *numMessages; i++ {
 		wg.Add(1)
-		client := clients[i%len(clients)] // Round-robin across clients
+		client := clients[i%len(clients)]
 		go publishMessage(&wg, i, client)
 	}
 
 	wg.Wait()
 	duration := time.Since(startTime)
 
-	log.Printf("[SUMMARY] All messages published.")
-	log.Printf("[SUMMARY] Total Messages: %d", *numMessages)
-	log.Printf("[SUMMARY] Total Time: %.2f seconds", duration.Seconds())
-	log.Printf("[SUMMARY] Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
+
+	log.Printf("All messages published.")
+	log.Printf("Total Messages: %d", *numMessages)
+	log.Printf("Total Time: %.2f seconds", duration.Seconds())
+	log.Printf("Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
 }
