@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	pb "github.com/alphauslabs/pubsub-proto"
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"google.golang.org/grpc"
 )
 
@@ -14,8 +14,8 @@ type server struct {
 }
 
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	log.Printf("[Mock Server 8081] Received message: ID=%s, Subscription=%s, Payload=%s",
-		msg.Id, msg.Subsription, string(msg.Payload))
+	log.Printf("[Mock Server 8081] Received message:\n   ID: %s\n   Payload: %s\n   Topic: %s",
+		msg.Id, string(msg.Payload), msg.TopicId)
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
@@ -28,7 +28,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(grpcServer, &server{})
 
-	log.Println("[INFO] Mock gRPC Server is running on port 8081")
+	log.Println("Mock gRPC Server is running on port 8081")
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatalf("[FATAL] Failed to serve gRPC server: %v", err)
 	}
