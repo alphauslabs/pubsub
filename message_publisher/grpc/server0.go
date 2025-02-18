@@ -25,7 +25,7 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 func main() {
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
-		log.Fatalf("[FATAL] Failed to listen on port 8080: %v", err)
+		log.Fatalf("Failed to listen on port 8080: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -33,6 +33,6 @@ func main() {
 
 	log.Println("Mock gRPC Server is running on port 8080")
 	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("[FATAL] Failed to serve gRPC server: %v", err)
+		log.Fatalf("[Failed to serve gRPC server: %v", err)
 	}
 }
