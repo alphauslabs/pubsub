@@ -36,5 +36,4 @@ ORDER BY
     second DESC;
 ```
 OUTPUT:
-![476897005_942324144684003_4433576153511227976_n](https://github.com/user![476872421_646427291388688_1801037326851234251_n](https://github.com/user-attachments/assets/d88a1193-b054-45d7-a6c9-170cf5301fe5)
--attachments/assets/f81600bc-570b-420b-a3da-aea6fd91eac0)
+![image](https://github.com/user-attachments/assets/dfac2a66-ae4c-4ffc-8023-0a885ced69aa)
