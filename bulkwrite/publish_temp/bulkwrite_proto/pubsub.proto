@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pubsubproto;
 
-option go_package = "bulkwrite/bulkwrite_proto";
+option go_package = "bulkwrite/publish_temp/bulkwrite_proto";
 
 service PubSubService {
   // Publish a message to a topic
