@@ -274,7 +274,11 @@ func main() {
 		client := pubsubproto.NewPubSubServiceClient(conn)
 		pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
 		go startPublisherListener()
-		go runBulkWriterAsFollower()
+		wg.Add(1) // Add the follower to the WaitGroup
+		go func() {
+			defer wg.Done()
+			runBulkWriterAsFollower()
+		}()
 	}
 
 	log.Println("gRPC server is running on :50050")
@@ -286,3 +290,5 @@ func main() {
 
 	wg.Wait()
 }
+
+//---
