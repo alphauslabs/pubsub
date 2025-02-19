@@ -6,7 +6,7 @@ toolchain go1.23.6
 
 require (
 	cloud.google.com/go/spanner v1.75.0
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250217034648-47e18fdbb62d
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250218231741-e9dc6feca1ac
 	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.70.0
 )
