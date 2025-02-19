@@ -143,7 +143,12 @@ func runBulkWriterAsLeader(workerID int) {
 }
 func runBulkWriterAsFollower() {
 	// Connect to the leader's gRPC server
-	conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
+
+	conn, err := grpc.Dial(
+		*leaderURL,
+		grpc.WithInsecure(),
+		grpc.WithTimeout(10*time.Second), // Increase timeout
+	)
 	if err != nil {
 		log.Fatalf("[FOLLOWER] Failed to connect to leader: %v", err)
 	}
@@ -282,7 +287,7 @@ func main() {
 		}()
 	}
 
-	log.Printf("gRPC server is running on :%s\n", *followerPort)
+	log.Printf("(MAIN) gRPC server is running on :50050\n")
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
