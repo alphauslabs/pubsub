@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/spanner"
+	pb "github.com/alphauslabs/pubsubproto"
 	"github.com/google/uuid"
-	pb "github.com/alphauslabs/pubsub-proto/v1" // Import generated package
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc"
 )
@@ -28,12 +28,11 @@ type server struct {
 
 // gRPC Publish Method - Writes Message to Spanner
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-//	log.Printf("Received Publish request: Topic=%s, PayloadSize=%d bytes", msg.Topic, len(msg.Payload))
+	log.Printf("Received Publish request: Topic=%s, PayloadSize=%d bytes", msg.Topic, len(msg.Payload))
 
 	startTotal := time.Now()
 
-	msg.Id = uuid.New().String()
-	msg.CreatedAt = time.Now().Unix()
+	msg.Id = uuid.New().String() // Generate unique message ID
 
 	// Measure Spanner write time
 	startSpanner := time.Now()
@@ -73,10 +72,9 @@ func insertMessage(ctx context.Context, msg *pb.Message) error {
 
 	mutation := spanner.InsertOrUpdate(
 		table,
-		[]string{"id", "payload", "createdAt", "updatedAt", "topic"},
-		[]interface{}{msg.Id, msg.Payload, spanner.CommitTimestamp, spanner.CommitTimestamp, msg.Topic},
+		[]string{"id", "payload", "topic", "createdAt", "updatedAt"},
+		[]interface{}{msg.Id, msg.Payload, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
-	
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
