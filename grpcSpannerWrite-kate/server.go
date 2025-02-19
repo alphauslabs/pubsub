@@ -73,7 +73,7 @@ func insertMessage(ctx context.Context, msg *pb.Message) error {
 	mutation := spanner.InsertOrUpdate(
 		table,
 		[]string{"id", "payload", "topic", "createdAt", "updatedAt"},
-		[]interface{}{msg.Id, msg.Payload, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]interface{}{msg.Id, string(msg.Payload), msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
