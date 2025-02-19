@@ -69,11 +69,11 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubprot
 	mutations := make([]*spanner.Mutation, 0, len(batch))
 	for _, message := range batch {
 		id := uuid.New().String()
-		currentTime := time.Now().Format(time.RFC3339)
+		// currentTime := time.Now().Format(time.RFC3339)
 		mutations = append(mutations, spanner.Insert(
 			"Messages",
-			[]string{"id", "subscription", "payload", "createdAt", "updatedAt"},
-			[]interface{}{id, message.TopicId, message.Payload, currentTime, currentTime},
+			[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
+			[]interface{}{id, message.TopicId, message.Payload, spanner.CommitTimestamp, spanner.CommitTimestamp},
 		))
 	}
 
