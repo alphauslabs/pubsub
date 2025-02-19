@@ -48,11 +48,9 @@ func publishMessage(wg *sync.WaitGroup, client pubsubproto.PubSubServiceClient, 
 	defer wg.Done()
 
 	msg := &pubsubproto.Message{
-		Id:        fmt.Sprintf("%d", id),
-		TopicId:   "test-topic",
-		Payload:   []byte(fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1)),
-		CreatedAt: time.Now().Unix(),
-		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
+		Id:      fmt.Sprintf("%d", id),
+		Topic:   "test-topic",
+		Payload: []byte(fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1)),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -122,7 +120,6 @@ func main() {
 
 	duration := time.Since(startTime)
 
-	log.Printf("[SUMMARY] All messages published.")
 	log.Printf("[SUMMARY] Total Messages: %d", *numMessages)
 	log.Printf("[SUMMARY] Total Time: %.2f seconds", duration.Seconds())
 	log.Printf("[SUMMARY] Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
