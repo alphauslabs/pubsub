@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	serverAddr = flag.String("server-addr", "localhost:50050", "Address of the gRPC server")
+	serverAddr = flag.String("server-addr", "localhost:50051", "Address of the gRPC server")
 	topicID    = flag.String("topic-id", "test-topic", "Topic ID to publish messages to")
 	payload    = flag.String("payload", "Hello, World!", "Payload of the message")
 )
