@@ -1,6 +1,5 @@
 package main
 
-//---
 import (
 	"context"
 	"flag"
@@ -40,6 +39,7 @@ var (
 	shardedChans = make([]chan *pubsubproto.Message, numShards) // Sharded channels for messages
 	workerPool   = make(chan struct{}, *numWorkers)             // Worker pool semaphore
 	wg           sync.WaitGroup
+	mu           sync.Mutex // Mutex to protect shared resources
 )
 
 func init() {
@@ -140,6 +140,7 @@ func runBulkWriterAsLeader(workerID int) {
 		}
 	}
 }
+
 func runBulkWriterAsFollower() {
 	// Connect to the leader's gRPC server
 	conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
@@ -149,20 +150,6 @@ func runBulkWriterAsFollower() {
 	defer conn.Close()
 
 	client := pubsubproto.NewPubSubServiceClient(conn)
-
-	// Start the gRPC server for the follower
-	lis, err := net.Listen("tcp", ":50050")
-	if err != nil {
-		log.Fatalf("[FOLLOWER] Failed to listen: %v", err)
-	}
-	s := grpc.NewServer()
-	pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
-	log.Println("[FOLLOWER] gRPC server is running on :50050")
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("[FOLLOWER] Failed to serve: %v", err)
-		}
-	}()
 
 	// Handle incoming messages via gRPC
 	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
@@ -239,6 +226,8 @@ func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsub
 
 // ForwardMessage handles messages forwarded from followers to the leader.
 func (s *server) ForwardMessage(ctx context.Context, req *pubsubproto.ForwardMessageRequest) (*pubsubproto.ForwardMessageResponse, error) {
+	mu.Lock()
+	defer mu.Unlock()
 	shardedChans[req.ShardId] <- req.Message
 	return &pubsubproto.ForwardMessageResponse{Success: true}, nil
 }
