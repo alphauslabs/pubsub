@@ -57,8 +57,7 @@ func publishMessage(wg *sync.WaitGroup, id int, client pb.PubSubServiceClient) {
 		Topic: topicID,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx :=context.Background()
 
 	resp, err := client.Publish(ctx, msg)
 	if err != nil {
