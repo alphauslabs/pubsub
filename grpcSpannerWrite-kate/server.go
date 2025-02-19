@@ -45,6 +45,24 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 }
 
 
+func getCommitTime(ctx context.Context, id string) (time.Time, error) {
+	stmt := spanner.Statement{
+		SQL:    "SELECT updatedAt FROM Messages WHERE id = @id",
+		Params: map[string]interface{}{"id": id},
+	}
+
+	iter := spannerClient.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var commitTime time.Time
+	err := iter.Do(func(row *spanner.Row) error {
+		return row.Columns(&commitTime)
+	})
+
+	return commitTime, err
+}
+
+
 // Optimized direct Spanner write
 func insertMessage(ctx context.Context, msg *pb.Message) (time.Time, error) {
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
@@ -56,14 +74,16 @@ func insertMessage(ctx context.Context, msg *pb.Message) (time.Time, error) {
 		[]interface{}{msg.Id, msg.Payload, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
-	// Apply mutation and capture commit timestamp
-	ms, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation}, spanner.ApplyOptions{ReturnCommitStats: true})
+	// Apply mutation
+	err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	return ms.CommitTimestamp, nil
+	// Query the commit timestamp
+	return getCommitTime(ctx, msg.Id)
 }
+
 
 
 func main() {
