@@ -23,7 +23,7 @@ import (
 
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL      = flag.String("leader-url", "http://34.84.132.47:50051", "URL of the leader node")
+	leaderURL      = flag.String("leader-url", "http://35.243.83.115:50050", "URL of the leader node")
 	followerPort   = flag.String("follower-port", "50050", "Port for the follower node") // New flag for follower port
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel")
@@ -249,7 +249,7 @@ func main() {
 	flag.Parse()
 
 	// Start the gRPC server
-	lis, err := net.Listen("tcp", ":50050") // Use the followerPort flag
+	lis, err := net.Listen("tcp", ":50050")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
