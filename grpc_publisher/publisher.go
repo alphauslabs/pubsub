@@ -22,15 +22,15 @@ var (
 // gRPC endpoints for different scenarios
 var (
 	directWriteEndpoints = []string{
-		"10.146.0.4:8085",
-		"10.146.0.8:8085",
-		"10.146.0.18:8085",
+		"10.146.0.43:8085",
+		"10.146.0.46:8085",
+		"10.146.0.51:8085",
 	}
 
 	bulkWriteEndpoints = []string{
-		"10.146.0.4:8080",
-		"10.146.0.8:8080",
-		"10.146.0.18:8080",
+		"10.146.0.43:8080",
+		"10.146.0.46:8080",
+		"10.146.0.51:8080",
 	}
 
 	mockEndpoints = []string{
@@ -53,8 +53,7 @@ func publishMessage(wg *sync.WaitGroup, client pubsubproto.PubSubServiceClient, 
 		Payload: []byte(fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1)),
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	res, err := client.Publish(ctx, msg)
 	if err != nil {
