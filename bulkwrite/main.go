@@ -9,10 +9,7 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -27,11 +24,12 @@ import (
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
 	leaderURL      = flag.String("leader-url", "http://34.84.132.47:50051", "URL of the leader node")
+	followerPort   = flag.String("follower-port", "50050", "Port for the follower node") // New flag for follower port
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
-	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel") // Increased buffer size
+	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel")
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
-	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers") // Increased worker count
-	numShards      = 16                                                      // Number of shards for message channels
+	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers")
+	numShards      = 16
 )
 
 type BatchStats struct {
@@ -154,13 +152,13 @@ func runBulkWriterAsFollower() {
 	client := pubsubproto.NewPubSubServiceClient(conn)
 
 	// Start the gRPC server for the follower
-	lis, err := net.Listen("tcp", ":50050")
+	lis, err := net.Listen("tcp", ":"+*followerPort) // Use the followerPort flag
 	if err != nil {
 		log.Fatalf("[FOLLOWER] Failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
-	log.Println("[FOLLOWER] gRPC server is running on :50050")
+	log.Printf("[FOLLOWER] gRPC server is running on :%s\n", *followerPort)
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("[FOLLOWER] Failed to serve: %v", err)
@@ -251,7 +249,7 @@ func main() {
 	flag.Parse()
 
 	// Start the gRPC server
-	lis, err := net.Listen("tcp", ":50050")
+	lis, err := net.Listen("tcp", ":"+*followerPort) // Use the followerPort flag
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -284,22 +282,12 @@ func main() {
 		}()
 	}
 
-	log.Println("gRPC server is running on :50050")
+	log.Printf("gRPC server is running on :%s\n", *followerPort)
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
-	// Graceful shutdown
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-
-	log.Println("Shutting down gRPC server...")
-	s.GracefulStop()
 	wg.Wait()
-	log.Println("Server stopped.")
 }
-
-//---
