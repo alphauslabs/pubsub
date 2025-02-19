@@ -85,7 +85,7 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubprot
 }
 
 func startPublisherListener() {
-	log.Println("[LEADER] Listening for publisher messages...")
+	log.Println("[FO] Listening for publisher messages...")
 }
 
 func runBulkWriterAsLeader(workerID int) {
@@ -166,6 +166,7 @@ func runBulkWriterAsFollower() {
 
 	// Handle incoming messages via gRPC
 	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
+	select {}
 }
 
 // BatchWrite implements the BatchWrite RPC method.
