@@ -282,7 +282,7 @@ func main() {
 		}()
 	}
 
-	log.Printf("gRPC server is running on :%s\n", *followerPort)
+	log.Printf("gRPC server is running on :50050")
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
