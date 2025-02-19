@@ -2,12 +2,7 @@ module tidy
 
 go 1.23.6
 
-require (
-	cloud.google.com/go/spanner v1.75.0
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250219071234-ddc9b50dc09b
-	google.golang.org/api v0.218.0
-	google.golang.org/grpc v1.70.0
-)
+require cloud.google.com/go/spanner v1.75.0
 
 require (
 	cel.dev/expr v0.19.0 // indirect
@@ -18,6 +13,7 @@ require (
 	cloud.google.com/go/monitoring v1.23.0 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.2 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 // indirect
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250219071234-ddc9b50dc09b
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.3 // indirect
@@ -48,8 +44,10 @@ require (
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
+	google.golang.org/api v0.218.0
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250124145028-65684f501c47 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250124145028-65684f501c47 // indirect
+	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5 // indirect
 )
