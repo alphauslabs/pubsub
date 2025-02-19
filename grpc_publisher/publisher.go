@@ -47,9 +47,11 @@ var (
 func publishMessage(wg *sync.WaitGroup, client pubsubproto.PubSubServiceClient, id int) {
 	defer wg.Done()
 
+	topicID := fmt.Sprintf("topic-%d", id%10000)
+
 	msg := &pubsubproto.Message{
 		Id:      fmt.Sprintf("%d", id),
-		Topic:   "test-topic",
+		Topic:   topicID,
 		Payload: []byte(fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1)),
 	}
 
@@ -57,11 +59,11 @@ func publishMessage(wg *sync.WaitGroup, client pubsubproto.PubSubServiceClient, 
 
 	res, err := client.Publish(ctx, msg)
 	if err != nil {
-		log.Printf("Message %d failed to publish: %v", id, err)
+		log.Printf("[ERROR] Message %d failed to publish: %v", id, err)
 		return
 	}
 
-	log.Printf("Message %d published successfully. Message ID: %s", id, res.MessageId)
+	log.Printf("[SUCCESS] Message %d published successfully. Message ID: %s", id, res.MessageId)
 }
 
 func setActiveEndpoints() {
