@@ -34,7 +34,7 @@ func main() {
 	message := &pubsubproto.Message{
 		Id:        "msg-" + time.Now().Format("20060102-150405"), // Unique message ID
 		TopicId:   *topicID,
-		Payload:   []byte(*payload),
+		Payload:   *payload,
 		CreatedAt: time.Now().UnixNano(),
 		ExpiresAt: time.Now().Add(24 * time.Hour).UnixNano(), // Expires in 24 hours
 	}
