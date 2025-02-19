@@ -19,10 +19,9 @@ const (
 var spannerClient *spanner.Client
 
 type Message struct {
-	ID           string `json:"id"`
-	Subscription string `json:"subsription"`
-	Payload      string `json:"payload"`
-	Topic        string `json:"topic"`
+	ID      string `json:"id"`
+	Payload string `json:"payload"`
+	Topic   string `json:"topic"`
 }
 
 func main() {
@@ -69,7 +68,7 @@ func writeHandler(w http.ResponseWriter, r *http.Request) {
 func insertMessage(ctx context.Context, msg Message) error {
 	mutation := spanner.InsertOrUpdate(
 		table,
-		[]string{"id", "payload", "createdAt", "updatedAt", "topic"},
+		[]string{"id", "topic", "createdAt", "updatedAt", "payload"},
 		[]interface{}{msg.ID, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, msg.Payload},
 	)
 
