@@ -16,8 +16,9 @@ import (
 
 var (
 	serverAddrs = []string{
+		"10.146.0.43:50051",
 		"10.146.0.46:50051",
-		"10.146.0.51:50050",
+		"10.146.0.51:50051",
 	}
 	topicID  = flag.String("topic-id", "test-topic", "Topic ID to publish messages to")
 	rowCount = flag.Int("row-count", 10000, "Number of rows to publish")
