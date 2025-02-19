@@ -627,6 +627,8 @@ github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af/go.mod h1:K08gAheRH3
 github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b/go.mod h1:1KcenG0jGWcpt8ov532z81sp/kMMUG485J2InIOyADM=
 github.com/alphauslabs/pubsub-proto v0.0.0-20250217034648-47e18fdbb62d h1:4v73h6gCZEFzCJgXLJtg975+9JZsd7/a5+l3E9XG69E=
 github.com/alphauslabs/pubsub-proto v0.0.0-20250217034648-47e18fdbb62d/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
+github.com/alphauslabs/pubsub-proto v0.0.0-20250218231741-e9dc6feca1ac h1:9wA4rFccRloJXErBKB/I1JyLk/EO3Nf1JVYcheHQ3uE=
+github.com/alphauslabs/pubsub-proto v0.0.0-20250218231741-e9dc6feca1ac/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
 github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
 github.com/apache/arrow/go/v10 v10.0.1/go.mod h1:YvhnlEePVnBS4+0z3fhPfUy7W1Ikj0Ih0vcRo/gZ1M0=
