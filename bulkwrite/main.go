@@ -264,10 +264,20 @@ func main() {
 		log.Println("Running as [LEADER].")
 		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
+
+		// Start the leader's bulk writer workers
 		for i := 0; i < *numWorkers; i++ {
 			wg.Add(1)
 			go runBulkWriterAsLeader(i)
 		}
+
+		// Also start the follower logic on the leader
+		log.Println("Leader is also running as a follower.")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runBulkWriterAsFollower()
+		}()
 	} else {
 		log.Println("Running as [FOLLOWER].")
 		conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
