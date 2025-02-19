@@ -10,7 +10,6 @@ import (
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/google/uuid"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc"
 )
 
@@ -28,89 +27,29 @@ type server struct {
 
 // gRPC Publish Method - Writes Message to Spanner
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	log.Printf("Received Publish request: Topic=%s, PayloadSize=%d bytes", msg.Topic, len(msg.Payload))
+	msg.Id = uuid.New().String() // Assign unique ID
 
-	startTotal := time.Now()
-
-	msg.Id = uuid.New().String() // Generate unique message ID
-
-	// Measure Spanner write time
-	startSpanner := time.Now()
-	err := insertMessage(ctx, msg)
-	spannerDuration := time.Since(startSpanner)
-
-	if err != nil {
-		log.Printf("Error writing to Spanner: %v", err)
-		return nil, fmt.Errorf("failed to write to Spanner: %v", err)
+	// Perform Spanner write
+	if err := insertMessage(ctx, msg); err != nil {
+		return nil, fmt.Errorf("Spanner write failed: %v", err)
 	}
 
-	// Retrieve commit timestamp with timeout
-	startCommit := time.Now()
-	commitTime, err := getCommitTime(ctx, msg.Id)
-	commitDuration := time.Since(startCommit)
-
-	if err != nil {
-		log.Printf("Error retrieving commit timestamp: %v", err)
-		return nil, fmt.Errorf("failed to retrieve commit time: %v", err)
-	}
-
-	totalDuration := time.Since(startTotal)
-
-	// Log performance metrics
-	log.Printf("Write Operation Metrics: Total=%v ms | SpannerWrite=%v ms | CommitRetrieval=%v ms | CommitTime=%s",
-		totalDuration.Milliseconds(), spannerDuration.Milliseconds(), commitDuration.Milliseconds(), commitTime)
-
-	return &pb.PublishResponse{
-		MessageId: msg.Id,
-	}, nil
+	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
-// Writes message directly to Spanner with a timeout
+// Optimized direct Spanner write
 func insertMessage(ctx context.Context, msg *pb.Message) error {
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // Timeout for DB write
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // Optimized timeout
 	defer cancel()
 
 	mutation := spanner.InsertOrUpdate(
 		table,
 		[]string{"id", "payload", "topic", "createdAt", "updatedAt"},
-		[]interface{}{msg.Id, string(msg.Payload), msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]interface{}{msg.Id, msg.Payload, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
-	if err != nil {
-		log.Printf("Spanner write failed: %v", err)
-	}
 	return err
-}
-
-// Retrieves commit timestamp with a timeout
-func getCommitTime(ctx context.Context, id string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // Timeout for DB read
-	defer cancel()
-
-	stmt := spanner.Statement{
-		SQL:    "SELECT updatedAt FROM Messages WHERE id = @id",
-		Params: map[string]interface{}{"id": id},
-	}
-
-	iter := spannerClient.Single().Query(ctx, stmt)
-	defer iter.Stop()
-
-	var commitTime time.Time
-	for {
-		row, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		if err := row.Columns(&commitTime); err != nil {
-			return "", err
-		}
-	}
-
-	return commitTime.Format(time.RFC3339Nano), nil
 }
 
 func main() {
