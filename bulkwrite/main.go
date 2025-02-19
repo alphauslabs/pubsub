@@ -249,7 +249,7 @@ func main() {
 	flag.Parse()
 
 	// Start the gRPC server
-	lis, err := net.Listen("tcp", ":"+*followerPort) // Use the followerPort flag
+	lis, err := net.Listen("tcp", ":50050") // Use the followerPort flag
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
