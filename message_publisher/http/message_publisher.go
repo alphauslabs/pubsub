@@ -25,15 +25,15 @@ var (
 
 var (
 	directWriteEndpoints = []string{
-		"http://10.146.0.4:8085/write",
-		"http://10.146.0.8:8085/write",
-		"http://10.146.0.18:8085/write",
+		"http://10.146.0.43:8085/write",
+		"http://10.146.0.46:8085/write",
+		"http://10.146.0.51:8085/write",
 	}
 
 	bulkWriteEndpoints = []string{
-		"http://10.146.0.4:8080/write",
-		"http://10.146.0.8:8080/write",
-		"http://10.146.0.18:8080/write",
+		"http://10.146.0.43:8080/write",
+		"http://10.146.0.46:8080/write",
+		"http://10.146.0.51:8080/write",
 	}
 
 	mockEndpoints = []string{
