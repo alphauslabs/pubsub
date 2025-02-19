@@ -3,72 +3,50 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"time"
 
-	pb "bulkwrite/bulkwrite_proto" // Replace with the correct import path
-
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
+
+	pubsubproto "bulkwrite/bulkwrite_proto"
 )
 
-const (
-	connectTimeout = 5 * time.Second // Timeout for connection setup
-	rpcTimeout     = 3 * time.Second // Timeout for RPC calls
+var (
+	serverAddr = flag.String("server-addr", "localhost:50050", "Address of the gRPC server")
+	topicID    = flag.String("topic-id", "test-topic", "Topic ID to publish messages to")
+	payload    = flag.String("payload", "Hello, World!", "Payload of the message")
 )
 
 func main() {
-	log.Println("Starting gRPC client...")
-
-	// Define command-line flags for IP and port
-	serverIP := flag.String("ip", "35.243.83.115", "IP address of the server")
-	serverPort := flag.String("port", "50051", "Port number of the server")
 	flag.Parse()
 
-	// Create server address from IP and port
-	serverAddr := fmt.Sprintf("%s:%s", *serverIP, *serverPort)
-
-	// Configure connection options
-	dialOptions := []grpc.DialOption{
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
-		grpc.WithTimeout(connectTimeout), // Ensures connection does not block forever
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff:           backoff.Config{MaxDelay: 2 * time.Second}, // Retry delay
-			MinConnectTimeout: 2 * time.Second,
-		}),
-	}
-
-	// Attempt to connect to the server
-	log.Printf("Connecting to server at %s...\n", serverAddr)
-	conn, err := grpc.Dial(serverAddr, dialOptions...)
+	// Set up a connection to the server
+	conn, err := grpc.Dial(*serverAddr, grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("Failed to connect to server: %v", err)
 	}
 	defer conn.Close()
-	log.Println("Successfully connected to gRPC server.")
 
-	client := pb.NewPubSubServiceClient(conn)
+	// Create a gRPC client
+	client := pubsubproto.NewPubSubServiceClient(conn)
 
-	// Create a message
-	message := &pb.Message{
-		Id:        "paultest",
-		TopicId:   "topic-456",
-		Payload:   []byte("Hello, World!"),
-		CreatedAt: time.Now().Unix(),
-		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	// Create a message to publish
+	message := &pubsubproto.Message{
+		Id:        "msg-" + time.Now().Format("20060102-150405"), // Unique message ID
+		TopicId:   *topicID,
+		Payload:   []byte(*payload),
+		CreatedAt: time.Now().UnixNano(),
+		ExpiresAt: time.Now().Add(24 * time.Hour).UnixNano(), // Expires in 24 hours
 	}
 
-	// Create a context with timeout for RPC call
-	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	// Call the Publish RPC
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	log.Println("Sending message to gRPC server...")
 	response, err := client.Publish(ctx, message)
 	if err != nil {
-		log.Fatalf("Publish failed: %v", err)
+		log.Fatalf("Failed to publish message: %v", err)
 	}
 
-	log.Printf("Message published successfully. ID: %s\n", response.MessageId)
+	log.Printf("Message published successfully! Message ID: %s\n", response.MessageId)
 }
