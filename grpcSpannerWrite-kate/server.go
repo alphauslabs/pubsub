@@ -28,7 +28,7 @@ type server struct {
 
 // gRPC Publish Method - Writes Message to Spanner
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	log.Printf("Received Publish request: Topic=%s, PayloadSize=%d bytes", msg.TopicId, len(msg.Payload))
+	log.Printf("Received Publish request: Topic=%s, PayloadSize=%d bytes", msg.Topic, len(msg.Payload))
 
 	startTotal := time.Now()
 
@@ -73,7 +73,7 @@ func insertMessage(ctx context.Context, msg *pb.Message) error {
 	mutation := spanner.InsertOrUpdate(
 		table,
 		[]string{"id", "payload", "topic", "createdAt", "updatedAt"},
-		[]interface{}{msg.Id, string(msg.Payload), msg.TopicId, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]interface{}{msg.Id, string(msg.Payload), msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
