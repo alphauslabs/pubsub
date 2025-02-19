@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	serverAddr     = "35.243.83.115:50050"
+	serverAddr     = "http://34.84.132.47:50050"
 	connectTimeout = 5 * time.Second // Timeout for connection setup
 	rpcTimeout     = 3 * time.Second // Timeout for RPC calls
 )
