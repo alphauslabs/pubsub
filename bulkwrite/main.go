@@ -1,5 +1,6 @@
 package main
 
+//---
 import (
 	"context"
 	"flag"
@@ -22,8 +23,8 @@ import (
 
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL      = flag.String("leader-url", "35.243.83.115:50050", "URL of the leader node")
-	followerPort   = flag.String("follower-port", "50051", "Port for the follower node") // New flag for follower port
+	leaderURL      = flag.String("leader-url", "http://34.84.132.47:50051", "URL of the leader node")
+	followerPort   = flag.String("follower-port", "50050", "Port for the follower node") // New flag for follower port
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel")
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
@@ -140,7 +141,6 @@ func runBulkWriterAsLeader(workerID int) {
 		}
 	}
 }
-
 func runBulkWriterAsFollower() {
 	// Connect to the leader's gRPC server
 	conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
@@ -248,26 +248,16 @@ func (s *server) ForwardMessage(ctx context.Context, req *pubsubproto.ForwardMes
 func main() {
 	flag.Parse()
 
-	var lis net.Listener
-	var err error
-
-	if *isLeader {
-		log.Println("Running as [LEADER].")
-		lis, err = net.Listen("tcp", ":50050")
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-	} else {
-		log.Println("Running as [FOLLOWER].")
-		lis, err = net.Listen("tcp", ":"+*followerPort)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
+	// Start the gRPC server
+	lis, err := net.Listen("tcp", ":50050")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
 	}
 
 	s := grpc.NewServer()
 
 	if *isLeader {
+		log.Println("Running as [LEADER].")
 		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
 		for i := 0; i < *numWorkers; i++ {
@@ -275,6 +265,7 @@ func main() {
 			go runBulkWriterAsLeader(i)
 		}
 	} else {
+		log.Println("Running as [FOLLOWER].")
 		conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("[FOLLOWER] Failed to connect to leader: %v", err)
@@ -291,7 +282,7 @@ func main() {
 		}()
 	}
 
-	log.Printf("gRPC server is running on %s\n", lis.Addr().String())
+	log.Printf("gRPC server is running on :%s\n", *followerPort)
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
