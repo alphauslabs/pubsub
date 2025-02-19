@@ -71,7 +71,7 @@ func main() {
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
 
-	log.Printf("🚀 gRPC server listening on %s", port)
+	log.Printf(" gRPC server listening on %s", port)
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("❌ Failed to serve: %v", err)
 	}
