@@ -53,8 +53,6 @@ func writeHandler(w http.ResponseWriter, r *http.Request) {
 
 	msg.ID = uuid.New().String()
 
-	fmt.Printf("Received published message: %+v\n", msg)
-
 	if err := insertMessage(context.Background(), msg); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to write to Spanner: %v", err), http.StatusInternalServerError)
 		return
