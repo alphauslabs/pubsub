@@ -23,7 +23,7 @@ func main() {
 
 	// Create a test message
 	message := &pb.Message{
-		TopicId: "test-topic-virgil",
+		TopicId: "test-topic-virgil-new",
 		Payload: []byte("Hello, this is a test message!"),
 	}
 
