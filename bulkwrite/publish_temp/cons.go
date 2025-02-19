@@ -8,37 +8,58 @@ import (
 	pb "bulkwrite/bulkwrite_proto" // Replace with the correct import path
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+)
+
+const (
+	serverAddr     = "35.243.83.115:50050"
+	connectTimeout = 5 * time.Second // Timeout for connection setup
+	rpcTimeout     = 3 * time.Second // Timeout for RPC calls
 )
 
 func main() {
-	// Set up a connection to the server.
-	conn, err := grpc.Dial("http://35.243.83.115:50050", grpc.WithInsecure(), grpc.WithBlock())
+	log.Println("Starting gRPC client...")
+
+	// Configure connection options
+	dialOptions := []grpc.DialOption{
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
+		grpc.WithTimeout(connectTimeout), // Ensures connection does not block forever
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff:           backoff.Config{MaxDelay: 2 * time.Second}, // Retry delay
+			MinConnectTimeout: 2 * time.Second,
+		}),
+	}
+
+	// Attempt to connect to the server
+	log.Printf("Connecting to server at %s...\n", serverAddr)
+	conn, err := grpc.Dial(serverAddr, dialOptions...)
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
+	log.Println("Successfully connected to gRPC server.")
 
 	client := pb.NewPubSubServiceClient(conn)
 
-	// Create a context with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	// Create a Message to publish
+	// Create a message
 	message := &pb.Message{
-		Id:        "msg-123",
+		Id:        "paultest",
 		TopicId:   "topic-456",
 		Payload:   []byte("Hello, World!"),
 		CreatedAt: time.Now().Unix(),
-		ExpiresAt: time.Now().Add(time.Hour * 1).Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
 	}
 
-	// Send the Publish request
+	// Create a context with timeout for RPC call
+	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	defer cancel()
+
+	log.Println("Sending message to gRPC server...")
 	response, err := client.Publish(ctx, message)
 	if err != nil {
-		log.Fatalf("could not publish: %v", err)
+		log.Fatalf("Publish failed: %v", err)
 	}
 
-	// Print the response
-	log.Printf("Message published with ID: %s", response.MessageId)
+	log.Printf("Message published successfully. ID: %s\n", response.MessageId)
 }
