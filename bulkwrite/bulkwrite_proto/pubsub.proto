@@ -38,7 +38,7 @@ message Subscription {
 message Message {
   string id = 1;
   string topic_id = 2;
-  bytes payload = 3;
+  string payload = 3;
   int64 created_at = 4;
   int64 expires_at = 5;
 }
