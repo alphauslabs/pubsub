@@ -22,15 +22,15 @@ var (
 
 var (
 	directWriteEndpoints = []string{
-		"10.146.0.4:8085",
-		"10.146.0.8:8085",
-		"10.146.0.18:8085",
+		"10.146.0.43:8085",
+		"10.146.0.46:8085",
+		"10.146.0.51:8085",
 	}
 
 	bulkWriteEndpoints = []string{
-		"10.146.0.4:8080",
-		"10.146.0.8:8080",
-		"10.146.0.18:8080",
+		"10.146.0.43:8080",
+		"10.146.0.46:8080",
+		"10.146.0.51:8080",
 	}
 
 	mockEndpoints = []string{
@@ -54,7 +54,7 @@ func publishMessage(wg *sync.WaitGroup, id int, client pb.PubSubServiceClient) {
 	msg := &pb.Message{
 		Id:      fmt.Sprintf("%d", id),
 		Payload: []byte(fmt.Sprintf("MESSAGE %d", id)),
-		TopicId: topicID,
+		Topic: topicID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
