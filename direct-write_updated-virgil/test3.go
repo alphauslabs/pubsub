@@ -56,13 +56,15 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 		messageID = msg.Id
 	}
 
+	stringPayload := string(msg.Payload)
+
 	mutation := spanner.InsertOrUpdate(
 		table,
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
 		[]interface{}{
 			messageID,
 			msg.TopicId,
-			msg.Payload,
+			stringPayload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
 		},
