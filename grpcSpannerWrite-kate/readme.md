@@ -1,25 +1,23 @@
-## Key Features
+# gRPC Pub/Sub Service with Google Spanner
 
-###  gRPC Server
-- Listens on **port 8085**.  
-- Implements a **Publish** method to accept and store messages.  
+This project implements a gRPC-based Pub/Sub service that writes messages directly to Google Spanner.
 
-###  Message Writing to Spanner
-- Each message gets a **unique ID (UUID)**.  
-- Uses **InsertOrUpdate** to store messages in the `Messages` table.  
+## Features
 
-###  Performance Metrics Logged
-- **Total operation time** (end-to-end).  
-- **Spanner write time** (how long the DB write took).  
-- **Commit retrieval time** (fetching the commit timestamp).  
+- **gRPC Server**
+  - Listens on port `8085`
+  - Implements a `Publish` method to store messages in Spanner
 
-###  Timeouts for Reliability
-- **5-second timeout** for writing to Spanner to prevent hanging.  
-- **5-second timeout** for reading commit timestamps.  
+- **Google Spanner Integration**
+  - Each message is assigned a unique ID (`UUID`)
+  - Uses `InsertOrUpdate` to store messages in the `Messages` table
+  - Includes logging for successful message writes
 
-###  Spanner Commit Timestamp
-- Uses `spanner.CommitTimestamp` to track when the message was stored.  
+- **Performance Optimizations**
+  - Direct writes to Spanner for efficiency
+  - Timeout of 120 seconds for database operations to prevent hanging
 
-###  Error Handling & Logging
-- Logs failures if writing or reading from Spanner fails.  
-- Returns errors if Spanner operations don't complete successfully.  
+- **Logging**
+  - Logs when the gRPC server starts
+  - Logs errors if Spanner operations fail
+  - Logs when a message is successfully written to Spanner
