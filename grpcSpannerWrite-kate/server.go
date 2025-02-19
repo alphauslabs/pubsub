@@ -34,6 +34,8 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 		return nil, fmt.Errorf("Spanner write failed: %v", err)
 	}
 
+	log.Printf("✅ Message successfully added to Spanner | ID: %s | Topic: %s", msg.Id, msg.Topic)
+
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
@@ -57,20 +59,20 @@ func main() {
 	var err error
 	spannerClient, err = spanner.NewClient(ctx, database)
 	if err != nil {
-		log.Fatalf("Failed to create Spanner client: %v", err)
+		log.Fatalf("❌ Failed to create Spanner client: %v", err)
 	}
 	defer spannerClient.Close()
 
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		log.Fatalf("❌ Failed to listen: %v", err)
 	}
 
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
 
-	log.Printf("gRPC server listening on %s", port)
+	log.Printf("🚀 gRPC server listening on %s", port)
 	if err := s.Serve(listener); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		log.Fatalf("❌ Failed to serve: %v", err)
 	}
 }
