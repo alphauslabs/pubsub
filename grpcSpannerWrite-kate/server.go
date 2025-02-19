@@ -27,21 +27,27 @@ type server struct {
 
 // gRPC Publish Method - Writes Message to Spanner
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	msg.Id = uuid.New().String() // Assign unique ID
+	startTime := time.Now() // Start timing
 
-	// Perform Spanner write
-	if err := insertMessage(ctx, msg); err != nil {
+	msg.Id = uuid.New().String()
+
+	commitTime, err := insertMessage(ctx, msg)
+	if err != nil {
 		return nil, fmt.Errorf("Spanner write failed: %v", err)
 	}
 
-	log.Printf("✅ Message successfully added to Spanner | ID: %s | Topic: %s", msg.Id, msg.Topic)
+	// Calculate delay
+	latency := commitTime.Sub(startTime)
+	log.Printf("Message successfully written to Spanner | ID: %s | Latency: %v ms | CommitTime: %s", 
+		msg.Id, latency.Milliseconds(), commitTime.Format(time.RFC3339Nano))
 
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
+
 // Optimized direct Spanner write
-func insertMessage(ctx context.Context, msg *pb.Message) error {
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // Optimized timeout
+func insertMessage(ctx context.Context, msg *pb.Message) (time.Time, error) {
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
 	mutation := spanner.InsertOrUpdate(
@@ -50,9 +56,15 @@ func insertMessage(ctx context.Context, msg *pb.Message) error {
 		[]interface{}{msg.Id, msg.Payload, msg.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
-	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
-	return err
+	// Apply mutation and capture commit timestamp
+	ms, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation}, spanner.ApplyOptions{ReturnCommitStats: true})
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return ms.CommitTimestamp, nil
 }
+
 
 func main() {
 	ctx := context.Background()
