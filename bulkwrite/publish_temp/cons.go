@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -13,8 +14,6 @@ import (
 )
 
 const (
-	serverIP       = "35.243.83.115" // IP address of the server
-	serverPort     = "50051"         // Port number of the server
 	connectTimeout = 5 * time.Second // Timeout for connection setup
 	rpcTimeout     = 3 * time.Second // Timeout for RPC calls
 )
@@ -22,8 +21,13 @@ const (
 func main() {
 	log.Println("Starting gRPC client...")
 
+	// Define command-line flags for IP and port
+	serverIP := flag.String("ip", "35.243.83.115", "IP address of the server")
+	serverPort := flag.String("port", "50051", "Port number of the server")
+	flag.Parse()
+
 	// Create server address from IP and port
-	serverAddr := fmt.Sprintf("%s:%s", serverIP, serverPort)
+	serverAddr := fmt.Sprintf("%s:%s", *serverIP, *serverPort)
 
 	// Configure connection options
 	dialOptions := []grpc.DialOption{
