@@ -67,7 +67,7 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 
 // Writes message directly to Spanner with a timeout
 func insertMessage(ctx context.Context, msg *pb.Message) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second) // Timeout for DB write
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second) // Timeout for DB write
 	defer cancel()
 
 	mutation := spanner.InsertOrUpdate(
@@ -85,7 +85,7 @@ func insertMessage(ctx context.Context, msg *pb.Message) error {
 
 // Retrieves commit timestamp with a timeout
 func getCommitTime(ctx context.Context, id string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second) // Timeout for DB read
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second) // Timeout for DB read
 	defer cancel()
 
 	stmt := spanner.Statement{
