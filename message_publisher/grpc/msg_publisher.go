@@ -54,7 +54,7 @@ func publishMessage(wg *sync.WaitGroup, id int, client pb.PubSubServiceClient) {
 	msg := &pb.Message{
 		Id:      fmt.Sprintf("%d", id),
 		Payload: []byte(fmt.Sprintf("MESSAGE %d", id)),
-		TopicId: topicID,
+		Topic: topicID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
