@@ -31,40 +31,27 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 
 	msg.Id = uuid.New().String()
 
-	commitTime, err := insertMessage(ctx, msg)
-	if err != nil {
+	// Insert message into Spanner
+	if err := insertMessage(ctx, msg); err != nil {
 		return nil, fmt.Errorf("Spanner write failed: %v", err)
+	}
+
+	// Get commit timestamp
+	commitTime, err := getCommitTime(ctx, msg.Id)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get commit timestamp: %v", err)
 	}
 
 	// Calculate delay
 	latency := commitTime.Sub(startTime)
-	log.Printf("Message successfully written to Spanner | ID: %s | Latency: %v ms | CommitTime: %s", 
+	log.Printf("✅ Message written to Spanner | ID: %s | Latency: %v ms | CommitTime: %s", 
 		msg.Id, latency.Milliseconds(), commitTime.Format(time.RFC3339Nano))
 
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
 
-
-func getCommitTime(ctx context.Context, id string) (time.Time, error) {
-	stmt := spanner.Statement{
-		SQL:    "SELECT updatedAt FROM Messages WHERE id = @id",
-		Params: map[string]interface{}{"id": id},
-	}
-
-	iter := spannerClient.Single().Query(ctx, stmt)
-	defer iter.Stop()
-
-	var commitTime time.Time
-	err := iter.Do(func(row *spanner.Row) error {
-		return row.Columns(&commitTime)
-	})
-
-	return commitTime, err
-}
-
-
-// Optimized direct Spanner write
-func insertMessage(ctx context.Context, msg *pb.Message) (time.Time, error) {
+// Inserts a message into Spanner
+func insertMessage(ctx context.Context, msg *pb.Message) error {
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
@@ -75,16 +62,32 @@ func insertMessage(ctx context.Context, msg *pb.Message) (time.Time, error) {
 	)
 
 	// Apply mutation
-	err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
+	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
+	return err
+}
+
+// Queries Spanner to get the commit timestamp of the inserted message
+func getCommitTime(ctx context.Context, messageID string) (time.Time, error) {
+	stmt := spanner.Statement{
+		SQL:    "SELECT createdAt FROM Messages WHERE id = @id",
+		Params: map[string]interface{}{"id": messageID},
+	}
+
+	iter := spannerClient.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	row, err := iter.Next()
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	// Query the commit timestamp
-	return getCommitTime(ctx, msg.Id)
+	var commitTime time.Time
+	if err := row.Columns(&commitTime); err != nil {
+		return time.Time{}, err
+	}
+
+	return commitTime, nil
 }
-
-
 
 func main() {
 	ctx := context.Background()
@@ -103,7 +106,7 @@ func main() {
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
 
-	log.Printf(" gRPC server listening on %s", port)
+	log.Printf("🚀 gRPC server listening on %s", port)
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("❌ Failed to serve: %v", err)
 	}
