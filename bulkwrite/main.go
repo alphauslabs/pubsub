@@ -37,18 +37,18 @@ type BatchStats struct {
 }
 
 var (
-	shardedChans = make([]chan *pubsubproto.Message, numShards) // Sharded channels for messages
-	workerPool   = make(chan struct{}, *numWorkers)             // Worker pool semaphore
+	shardedChans = make([]chan *pubsubproto.PublishRequest, numShards) // Sharded channels for messages
+	workerPool   = make(chan struct{}, *numWorkers)                    // Worker pool semaphore
 	wg           sync.WaitGroup
 )
 
 func init() {
 	for i := 0; i < numShards; i++ {
-		shardedChans[i] = make(chan *pubsubproto.Message, *messagesBuffer/numShards)
+		shardedChans[i] = make(chan *pubsubproto.PublishRequest, *messagesBuffer/numShards)
 	}
 }
 
-func getShard(message *pubsubproto.Message) int {
+func getShard(message *pubsubproto.PublishRequest) int {
 	hash := fnv.New32a()
 	hash.Write([]byte(message.TopicId)) // Use topic ID for hashing
 	return int(hash.Sum32()) % numShards
@@ -62,7 +62,7 @@ func createClients(ctx context.Context, db string) (*spanner.Client, error) {
 	return client, nil
 }
 
-func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubproto.Message) error {
+func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubproto.PublishRequest) error {
 	ctx := context.Background()
 
 	mutations := make([]*spanner.Mutation, 0, len(batch))
@@ -99,7 +99,7 @@ func runBulkWriterAsLeader(workerID int) {
 	}
 	defer client.Close()
 
-	var batch []*pubsubproto.Message
+	var batch []*pubsubproto.PublishRequest
 	stats := BatchStats{}
 
 	for {
@@ -110,7 +110,7 @@ func runBulkWriterAsLeader(workerID int) {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
 				workerPool <- struct{}{} // Acquire worker
-				go func(batch []*pubsubproto.Message) {
+				go func(batch []*pubsubproto.PublishRequest) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
@@ -126,7 +126,7 @@ func runBulkWriterAsLeader(workerID int) {
 				stats.totalBatches++
 				stats.totalMessages += len(batch)
 				workerPool <- struct{}{} // Acquire worker
-				go func(batch []*pubsubproto.Message) {
+				go func(batch []*pubsubproto.PublishRequest) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
@@ -225,8 +225,7 @@ type server struct {
 }
 
 // Publish handles messages from clients or followers.
-func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
-	// Forward the message to the leader
+func (s *server) Publish(ctx context.Context, req *pubsubproto.PublishRequest) (*pubsubproto.PublishResponse, error) { // Forward the message to the leader
 	shardID := getShard(req)
 	forwardReq := &pubsubproto.ForwardMessageRequest{
 		Message: req,
@@ -240,7 +239,7 @@ func (s *server) Publish(ctx context.Context, req *pubsubproto.Message) (*pubsub
 	}
 
 	log.Printf("[FOLLOWER] Message forwarded to leader successfully: %v\n", req)
-	return &pubsubproto.PublishResponse{MessageId: req.Id}, nil
+	return &pubsubproto.PublishResponse{MessageId: "00"}, nil
 }
 
 // ForwardMessage handles messages forwarded from followers to the leader.

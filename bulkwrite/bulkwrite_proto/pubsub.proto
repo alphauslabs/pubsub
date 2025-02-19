@@ -1,18 +1,12 @@
 syntax = "proto3";
 
 package pubsubproto;
-
 option go_package = "bulkwrite/bulkwrite_proto";
+// import "google/protobuf/timestamp.proto";
+
+
 
 service PubSubService {
-  // Publish a message to a topic
-  rpc Publish(Message) returns (PublishResponse) {}
-  // Subscribe to a topic and receive messages
-  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
-  // Acknowledge receipt of a message
-  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse) {}
-  // Modify the visibility timeout of a message
-  rpc ModifyVisibilityTimeout(ModifyVisibilityTimeoutRequest) returns (ModifyVisibilityTimeoutResponse) {}
 
   // New methods for leader-follower architecture
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse) {};
@@ -20,57 +14,177 @@ service PubSubService {
   rpc LeaderElection(LeaderElectionRequest) returns (LeaderElectionResponse) {};
   rpc BatchWrite(BatchWriteRequest) returns (BatchWriteResponse) {};
 
+  // --- CRUD Operations for Topics ---
+  rpc CreateTopic(CreateTopicRequest) returns (Topic) {}
+  rpc GetTopic(GetTopicRequest) returns (Topic) {}
+  rpc UpdateTopic(UpdateTopicRequest) returns (Topic) {}
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse) {}
+  rpc ListTopics(Empty) returns (ListTopicsResponse) {}
 
+  // --- CRUD Operations for Subscriptions ---
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (Subscription) {}
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription) {}
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (Subscription) {}
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse) {}
+  rpc ListSubscriptions(Empty) returns (ListSubscriptionsResponse) {}
+
+  // --- Pub/Sub Operations ---
+  rpc Publish(PublishRequest) returns (PublishResponse) {}
+  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse) {}
+  rpc ModifyVisibilityTimeout(ModifyVisibilityTimeoutRequest) returns (ModifyVisibilityTimeoutResponse) {}
+  
 }
 
+// --- Topic Definitions ---
 message Topic {
-  string id = 1;
-  string name = 2;
-}
-//based on the instruction
-message Subscription {
-  string id = 1;
-  string name = 2;
-  string topic_id = 3;
-  int32 visibility_timeout = 4;
+  string topic_id = 1;    // Unique ID for the topic
+  string name = 2;  // Human-readable name for the topic
 }
 
-message Message {
-  string id = 1;
-  string topic_id = 2;
-  string payload = 3;
-  int64 created_at = 4;
-  int64 expires_at = 5;
+message CreateTopicRequest {
+  string name = 1;  // Name of the topic to create
+}
+
+message GetTopicRequest {
+  string id = 1;    // ID of the topic to retrieve
+}
+
+message UpdateTopicRequest {
+  string id = 1;      // ID of the topic to update
+  optional string new_name = 2; // New name for the topic
+}
+
+message DeleteTopicRequest {
+  string id = 1;      // ID of the topic to delete
+}
+
+message DeleteTopicResponse {
+  bool success = 1;   // Indicates if the deletion was successful
+}
+
+message ListTopicsResponse {
+  repeated Topic topics = 1; // List of all topics
+}
+
+// --- Subscription Definitions ---
+message Subscription {
+  string id = 1;                // Unique ID for the subscription
+  string topic_id = 2;          // ID of the topic this subscription belongs to
+  int32 visibility_timeout = 3; // Default visibility timeout (in seconds)
+}
+
+message CreateSubscriptionRequest {
+  string topic_id = 1;          // ID of the topic to subscribe to
+  int32 visibility_timeout = 2; // Default visibility timeout (in seconds)
+}
+
+message GetSubscriptionRequest {
+  string id = 1;                // ID of the subscription to retrieve
+}
+
+message UpdateSubscriptionRequest {
+  string id = 1;                // ID of the subscription to update
+  int32 visibility_timeout = 2; // New visibility timeout (in seconds)
+}
+
+message DeleteSubscriptionRequest {
+  string id = 1;                // ID of the subscription to delete
+}
+
+message DeleteSubscriptionResponse {
+  bool success = 1;             // Indicates if the deletion was successful
+}
+
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1; // List of all subscriptions
+}
+
+// --- Pub/Sub Message Definitions ---
+// message Message {
+//   string id = 1;                      // Unique ID for the message
+//   string payload = 2;                 // Content of the message
+//   google.protobuf.Timestamp createdAt = 3; // Timestamp when the message was created
+//   google.protobuf.Timestamp updatedAt = 4; // Timestamp when the message was last updated
+//   string topic_id = 5;                // ID of the topic this message belongs to
+// }
+
+message PublishRequest {
+  string topic_id = 1;                // ID of the topic to publish to
+  string payload = 2;                 // Content of the message to publish
 }
 
 message PublishResponse {
-  string message_id = 1;
+  string message_id = 1;              // ID of the published message
 }
 
 message SubscribeRequest {
-  string subscription_id = 1;
-  int32  visibility_timeout = 2;
+  string subscription_id = 1;         // ID of the subscription to pull messages from
 }
 
 message AcknowledgeRequest {
-  string subscription_id = 1;
-  string message_id = 2;
+  string subscription_id = 1;         // ID of the subscription
+  string message_id = 2;              // ID of the message to acknowledge
 }
 
 message AcknowledgeResponse {
-  bool acknowledge = 1;
+  bool success = 1;                   // Indicates if the acknowledgment was successful
 }
 
 message ModifyVisibilityTimeoutRequest {
-  string message_id = 1;
-  int32 new_timeout = 2;
+  string message_id = 1;              // ID of the message to modify
+  int32 new_timeout = 2;              // New visibility timeout (in seconds)
 }
 
 message ModifyVisibilityTimeoutResponse {
-  bool success = 1;
+  bool success = 1;                   // Indicates if the modification was successful
 }
+
+// --- LeaderConfig Definitions ---
+// message LeaderConfig {
+//   string id = 1;
+//   string ip_address = 2;
+//   google.protobuf.Timestamp last_seen = 3;
+// }
+
+message GetLeaderConfigRequest {
+  string id = 1;
+}
+
+//  --- Empty Message ---
+message Empty {}
+
+
+
+
+
+
+
+
+message LeaderConfig {
+  string id = 1;
+  string ip_address = 2;
+  Timestamp last_seen = 3;  // Changed from google.protobuf.Timestamp
+}
+
+
+message Message {
+  string id = 1;
+  string payload = 2;
+  Timestamp createdAt = 3;  // Changed from google.protobuf.Timestamp
+  Timestamp updatedAt = 4;  // Changed from google.protobuf.Timestamp
+  string topic_id = 5;
+}
+
+
+message Timestamp {
+  int64 seconds = 1;  // Seconds since epoch (1970-01-01T00:00:00Z)
+  int32 nanos = 2;    // Nanoseconds [0, 999999999]
+}
+
+
 message ForwardMessageRequest {
-  Message message = 1;
+  PublishRequest message = 1;
   int32 shard_id = 2;
 }
 
@@ -96,7 +210,7 @@ message LeaderElectionResponse {
 }
 
 message BatchWriteRequest {
-  repeated Message messages = 1;
+  repeated PublishRequest messages = 1;
 }
 
 message BatchWriteResponse {

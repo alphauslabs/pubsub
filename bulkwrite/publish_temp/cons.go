@@ -60,12 +60,9 @@ func main() {
 			client := clients[atomic.AddInt32(&index, 1)%int32(len(clients))]
 
 			// Create a message to publish
-			message := &pubsubproto.Message{
-				Id:        fmt.Sprintf("msg-%d", i),
-				TopicId:   *topicID,
-				Payload:   fmt.Sprintf("Bulkwrite_row_no_%d", i),
-				CreatedAt: time.Now().UnixNano(),
-				ExpiresAt: time.Now().Add(24 * time.Hour).UnixNano(), // Expires in 24 hours
+			message := &pubsubproto.PublishRequest{
+				TopicId: *topicID,
+				Payload: fmt.Sprintf("Bulkwrite_row_no_%d", i),
 			}
 
 			// Call the Publish RPC
