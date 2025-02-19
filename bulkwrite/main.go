@@ -22,7 +22,7 @@ import (
 
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL      = flag.String("leader-url", "34.84.132.47:50050", "URL of the leader node")
+	leaderURL      = flag.String("leader-url", "10.146.0.43:50050", "URL of the leader node")
 	followerPort   = flag.String("follower-port", "50051", "Port for the follower node") // New flag for follower port
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel")
