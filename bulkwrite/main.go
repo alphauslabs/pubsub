@@ -9,7 +9,10 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -248,23 +251,14 @@ func main() {
 	flag.Parse()
 
 	// Start the gRPC server
+	lis, err := net.Listen("tcp", ":50050")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer()
 
 	if *isLeader {
-
-		lis, err := net.Listen("tcp", ":50050")
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-
-		s := grpc.NewServer()
-
-		log.Println("gRPC server is running on :50050")
-		go func() {
-			if err := s.Serve(lis); err != nil {
-				log.Fatalf("failed to serve: %v", err)
-			}
-		}()
-
 		log.Println("Running as [LEADER].")
 		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
@@ -290,7 +284,22 @@ func main() {
 		}()
 	}
 
+	log.Println("gRPC server is running on :50050")
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
+	// Graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+
+	log.Println("Shutting down gRPC server...")
+	s.GracefulStop()
 	wg.Wait()
+	log.Println("Server stopped.")
 }
 
 //---
