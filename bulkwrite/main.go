@@ -23,7 +23,7 @@ import (
 
 var (
 	isLeader       = flag.Bool("leader", false, "Run this node as the leader for bulk writes")
-	leaderURL      = flag.String("leader-url", "http://34.84.132.47:50050", "URL of the leader node")
+	leaderURL      = flag.String("leader-url", "http://34.84.132.47:50051", "URL of the leader node")
 	batchSize      = flag.Int("batchsize", 5000, "Batch size for bulk writes")
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel") // Increased buffer size
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
@@ -248,14 +248,23 @@ func main() {
 	flag.Parse()
 
 	// Start the gRPC server
-	lis, err := net.Listen("tcp", ":50050")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	s := grpc.NewServer()
 
 	if *isLeader {
+
+		lis, err := net.Listen("tcp", ":50050")
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		s := grpc.NewServer()
+
+		log.Println("gRPC server is running on :50050")
+		go func() {
+			if err := s.Serve(lis); err != nil {
+				log.Fatalf("failed to serve: %v", err)
+			}
+		}()
+
 		log.Println("Running as [LEADER].")
 		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
@@ -280,13 +289,6 @@ func main() {
 			runBulkWriterAsFollower()
 		}()
 	}
-
-	log.Println("gRPC server is running on :50050")
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
-	}()
 
 	wg.Wait()
 }
