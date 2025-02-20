@@ -1,74 +1,59 @@
 package main
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"math/rand"
-	"net"
-	"sync"
+// type server struct {
+// 	pubsubproto.UnimplementedPubSubServiceServer
+// 	messagePool sync.Pool
+// }
 
-	"time"
+// func newServer() *server {
+// 	return &server{
+// 		messagePool: sync.Pool{
+// 			New: func() interface{} {
+// 				return fmt.Sprintf("%d", rand.Int63())
+// 			},
+// 		},
+// 	}
+// }
 
-	pubsubproto "github.com/alphauslabs/pubsub-proto/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
-)
+// func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
 
-type server struct {
-	pubsubproto.UnimplementedPubSubServiceServer
-	messagePool sync.Pool
-}
+// 	fmt.Printf("Received message on server 3: %s\n", msg.Payload)
 
-func newServer() *server {
-	return &server{
-		messagePool: sync.Pool{
-			New: func() interface{} {
-				return fmt.Sprintf("%d", rand.Int63())
-			},
-		},
-	}
-}
+// 	messageID := s.messagePool.Get().(string)
+// 	defer s.messagePool.Put(messageID)
 
-func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
+// 	if rand.Intn(100) < 1 {
+// 		time.Sleep(time.Millisecond * 10)
+// 	}
 
-	fmt.Printf("Received message on server 3: %s\n", msg.Payload)
+// 	return &pubsubproto.PublishResponse{
+// 		MessageId: "03",
+// 	}, nil
+// }
 
-	messageID := s.messagePool.Get().(string)
-	defer s.messagePool.Put(messageID)
+// func startMockServer() {
+// 	lis, err := net.Listen("tcp", ":8082")
+// 	if err != nil {
+// 		log.Fatalf("Failed to listen on port 8082: %v", err)
+// 	}
 
-	if rand.Intn(100) < 1 {
-		time.Sleep(time.Millisecond * 10)
-	}
+// 	grpcServer := grpc.NewServer(
+// 		grpc.KeepaliveParams(keepalive.ServerParameters{
+// 			MaxConnectionIdle:     10 * time.Minute,
+// 			Timeout:               20 * time.Second,
+// 			MaxConnectionAgeGrace: 5 * time.Minute,
+// 		}),
+// 	)
 
-	return &pubsubproto.PublishResponse{
-		MessageId: "03",
-	}, nil
-}
+// 	pubsubproto.RegisterPubSubServiceServer(grpcServer, newServer())
 
-func startMockServer() {
-	lis, err := net.Listen("tcp", ":8082")
-	if err != nil {
-		log.Fatalf("Failed to listen on port 8082: %v", err)
-	}
+// 	log.Println("Mock server started on port 8082")
+// 	if err := grpcServer.Serve(lis); err != nil {
+// 		log.Fatalf("Failed to serve: %v", err)
+// 	}
+// }
 
-	grpcServer := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle:     10 * time.Minute,
-			Timeout:               20 * time.Second,
-			MaxConnectionAgeGrace: 5 * time.Minute,
-		}),
-	)
-
-	pubsubproto.RegisterPubSubServiceServer(grpcServer, newServer())
-
-	log.Println("Mock server started on port 8082")
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
-	}
-}
-
-func main() {
-	rand.Seed(time.Now().UnixNano())
-	startMockServer()
-}
+// func main() {
+// 	rand.Seed(time.Now().UnixNano())
+// 	startMockServer()
+// }

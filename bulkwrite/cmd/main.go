@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -23,8 +24,8 @@ var (
 	messagesBuffer = flag.Int("messagesbuffer", 1000000, "Buffer size for messages channel") // Increased buffer size
 	waitTime       = flag.Duration("waittime", 500*time.Millisecond, "Wait time before flushing the batch")
 	numWorkers     = flag.Int("workers", 32, "Number of concurrent workers") // Increased worker count
-	numShards      = 16                                                     // Number of shards for message channels
-) 
+	numShards      = 16                                                      // Number of shards for message channels
+)
 
 type BatchStats struct {
 	totalBatches     int
@@ -34,7 +35,7 @@ type BatchStats struct {
 
 var (
 	shardedChans = make([]chan map[string]interface{}, numShards) // Sharded channels for messages
-	workerPool   = make(chan struct{}, *numWorkers)              // Worker pool semaphore
+	workerPool   = make(chan struct{}, *numWorkers)               // Worker pool semaphore
 	wg           sync.WaitGroup
 )
 
