@@ -31,6 +31,9 @@ func newServer() *server {
 }
 
 func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
+
+	fmt.Printf("Received message on server 1: %s\n", msg.Payload)
+
 	messageID := s.messagePool.Get().(string)
 	defer s.messagePool.Put(messageID)
 
@@ -39,14 +42,14 @@ func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsub
 	}
 
 	return &pubsubproto.PublishResponse{
-		MessageId: messageID,
+		MessageId: "01",
 	}, nil
 }
 
 func startMockServer() {
-	lis, err := net.Listen("tcp", ":8080")
+	lis, err := net.Listen("tcp", ":8081")
 	if err != nil {
-		log.Fatalf("Failed to listen on port 8080: %v", err)
+		log.Fatalf("Failed to listen on port 8081: %v", err)
 	}
 
 	grpcServer := grpc.NewServer(
@@ -59,7 +62,7 @@ func startMockServer() {
 
 	pubsubproto.RegisterPubSubServiceServer(grpcServer, newServer())
 
-	log.Println("Mock server started on port 8080")
+	log.Println("Mock server started on port 8081")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
