@@ -3,42 +3,40 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"time"
-	"flag"
 )
 
 type Message struct {
-    ID           string `json:"id"`
-    Subsription  string `json:"subsription"`
-    Payload      string `json:"payload"`
+	ID      string `json:"id"`
+	Topic   string `json:"topic"`
+	Payload string `json:"payload"`
 }
 
-
 var (
-	numMessages=flag.Int("numMessages", 10000, "Number of messages to publish")
-	useMock     = flag.Bool("mock", false, "Use localhost mock servers (ports 8080, 8081, 8082)")
+	numMessages  = flag.Int("numMessages", 10000, "Number of messages to publish")
+	useMock      = flag.Bool("mock", false, "Use localhost mock servers (ports 8080, 8081, 8082)")
 	useBulkWrite = flag.Bool("bulkwrite", false, "Use bulk write GCP endpoints (ports 8080)")
 )
 
-
 var (
-	directWriteEndpoints = []string{ 
-		"http://10.146.0.4:8085/write",
-		"http://10.146.0.8:8085/write",
-		"http://10.146.0.18:8085/write",
+	directWriteEndpoints = []string{
+		"http://10.146.0.43:8085/write",
+		"http://10.146.0.46:8085/write",
+		"http://10.146.0.51:8085/write",
 	}
-	
-	 bulkWriteEndpoints = []string{
-		"http://10.146.0.4:8080/write",
-		"http://10.146.0.8:8080/write",
-		"http://10.146.0.18:8080/write",
+
+	bulkWriteEndpoints = []string{
+		"http://10.146.0.43:8080/write",
+		"http://10.146.0.46:8080/write",
+		"http://10.146.0.51:8080/write",
 	}
-	
-	 mockEndpoints = []string{
+
+	mockEndpoints = []string{
 		"http://localhost:8080/write",
 		"http://localhost:8081/write",
 		"http://localhost:8082/write",
@@ -48,10 +46,13 @@ var (
 
 func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 	defer wg.Done()
+
+	topicID := fmt.Sprintf("topic-%d", id%10000)
+
 	msg := Message{
-		ID:           fmt.Sprintf("%d", id),
-		Subsription:  fmt.Sprintf("sub-%d", id),
-		Payload:      fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1),
+		ID:      fmt.Sprintf("%d", id),
+		Topic:   topicID,
+		Payload: fmt.Sprintf("MESSAGE TO NODE %d", id%len(activeEndpoints)+1),
 	}
 
 	data, err := json.Marshal(msg)
@@ -69,7 +70,6 @@ func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 	log.Printf("%s Message %d (ID: %s) published successfully", time.Now().Format(time.RFC3339), id, msg.ID)
 }
 
-
 func main() {
 	flag.Parse()
 
@@ -84,7 +84,6 @@ func main() {
 		log.Println("Using direct write GCP endpoints (ports 8085)")
 	}
 
-	
 	var wg sync.WaitGroup
 	startTime := time.Now()
 
