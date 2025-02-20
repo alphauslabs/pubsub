@@ -27,6 +27,6 @@ jobs:
       - name: Upload Release Binary
         uses: softprops/action-gh-release@v1
         with:
-          files: myapp-linux
+          files: pubsub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
