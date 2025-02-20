@@ -1,37 +1,28 @@
 package main
 
-import (
-	"context"
-	"log"
-	"net"
+// type server struct {
+// 	pb.UnimplementedPubSubServiceServer
+// }
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
-	"google.golang.org/grpc"
-)
+// func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
 
-type server struct {
-	pb.UnimplementedPubSubServiceServer
-}
+// 	log.Printf("[Mock Server 8080] Received message:\n  ID: %s\n   Payload: %s\n   Topic: %s",
+// 		msg.Id, string(msg.Payload), msg.TopicId)
 
-func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
+// 	return &pb.PublishResponse{MessageId: msg.Id}, nil
+// }
 
-	log.Printf("[Mock Server 8080] Received message:\n  ID: %s\n   Payload: %s\n   Topic: %s",
-		msg.Id, string(msg.Payload), msg.TopicId)
+// func main() {
+// 	listener, err := net.Listen("tcp", ":8080")
+// 	if err != nil {
+// 		log.Fatalf("Failed to listen on port 8080: %v", err)
+// 	}
 
-	return &pb.PublishResponse{MessageId: msg.Id}, nil
-}
+// 	grpcServer := grpc.NewServer()
+// 	pb.RegisterPubSubServiceServer(grpcServer, &server{})
 
-func main() {
-	listener, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		log.Fatalf("Failed to listen on port 8080: %v", err)
-	}
-
-	grpcServer := grpc.NewServer()
-	pb.RegisterPubSubServiceServer(grpcServer, &server{})
-
-	log.Println("Mock gRPC Server is running on port 8080")
-	if err := grpcServer.Serve(listener); err != nil {
-		log.Fatalf("[Failed to serve gRPC server: %v", err)
-	}
-}
+// 	log.Println("Mock gRPC Server is running on port 8080")
+// 	if err := grpcServer.Serve(listener); err != nil {
+// 		log.Fatalf("[Failed to serve gRPC server: %v", err)
+// 	}
+// }

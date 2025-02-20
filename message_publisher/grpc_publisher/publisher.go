@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -45,28 +43,28 @@ var (
 
 const maxWorkers = 100
 
-func publishMessage(client pubsubproto.PubSubServiceClient, id int) {
+// func publishMessage(client pubsubproto.PubSubServiceClient, id int) {
 
-	topicID := fmt.Sprintf("topic-%d", id%1000)
+// 	topicID := fmt.Sprintf("topic-%d", id%1000)
 
-	msg := &pubsubproto.Message{
-		Id:      fmt.Sprintf("%d", id),
-		Topic:   topicID,
-		Payload: []byte(fmt.Sprintf("[MESSAGE TO NODE %d]", id%len(activeEndpoints)+1)),
-	}
+// 	msg := &pubsubproto.Message{
+// 		Id:      fmt.Sprintf("%d", id),
+// 		Topic:   topicID,
+// 		Payload: []byte(fmt.Sprintf("[MESSAGE TO NODE %d]", id%len(activeEndpoints)+1)),
+// 	}
 
-	ctx := context.Background()
+// 	ctx := context.Background()
 
-	for retry := 0; retry < 3; retry++ {
-		res, err := client.Publish(ctx, msg)
-		if err == nil {
-			log.Printf("[INFO] Message %d published successfully: ID-%s", id, res.MessageId)
-			return
-		}
-		log.Printf("[ERROR] Message %d failed to publish: %v", id, err)
-		time.Sleep(200 * time.Millisecond)
-	}
-}
+// 	for retry := 0; retry < 3; retry++ {
+// 		res, err := client.Publish(ctx, msg)
+// 		if err == nil {
+// 			log.Printf("[INFO] Message %d published successfully: ID-%s", id, res.MessageId)
+// 			return
+// 		}
+// 		log.Printf("[ERROR] Message %d failed to publish: %v", id, err)
+// 		time.Sleep(200 * time.Millisecond)
+// 	}
+// }
 
 func setActiveEndpoints() {
 	if *useMock {
@@ -115,10 +113,10 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for id := range taskCh {
-				client := clients[id%len(clients)]
-				publishMessage(client, id)
-			}
+			// for id := range taskCh {
+			// 	// client := clients[id%len(clients)]
+			// 	// publishMessage(client, id)
+			// }
 		}()
 	}
 

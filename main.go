@@ -1,13 +1,38 @@
 package main
 
 import (
-	"flag"
+	"context"
+	"log"
+	"net"
 
-	"github.com/golang/glog"
+	"cloud.google.com/go/spanner"
+	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
+var port = ":50051"
+
 func main() {
-	flag.Set("logtostderr", "true")
-	flag.Parse()
-	glog.Info("Hello, World!")
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+		return
+	}
+
+	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
+	if err != nil {
+		log.Fatalf("failed to create Spanner client: %v", err)
+		return
+	}
+
+	defer spannerClient.Close()
+
+	s := grpc.NewServer()
+	reflection.Register(s)
+	pb.RegisterPubSubServiceServer(s, &server{client: spannerClient})
+	log.Printf("Server listening on :50051")
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }

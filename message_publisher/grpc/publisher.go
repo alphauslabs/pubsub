@@ -33,11 +33,11 @@ var (
 func publishMessage(id int, client pb.PubSubServiceClient) {
 	topicID := fmt.Sprintf("topic-%d", id%1000)
 
-	msg := &pb.Message{
-		Id:      fmt.Sprintf("%d", id),
+	msg := &pb.PublishRequest{
+		TopicId: fmt.Sprintf("%d", id),
 		//Payload: fmt.Sprintf("MESSAGE %d", id),
-		Payload: []byte(fmt.Sprintf("MESSAGE %d", id)),
-		Topic:   topicID,
+		Payload: fmt.Sprintf("MESSAGE %d", id),
+		// Topic:   topicID,
 	}
 
 	ctx := context.Background()
