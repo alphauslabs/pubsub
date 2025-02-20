@@ -35,7 +35,8 @@ func publishMessage(id int, client pb.PubSubServiceClient) {
 
 	msg := &pb.Message{
 		Id:      fmt.Sprintf("%d", id),
-		Payload: fmt.Sprintf("MESSAGE %d", id),
+		//Payload: fmt.Sprintf("MESSAGE %d", id),
+		Payload: []byte(fmt.Sprintf("MESSAGE %d", id)),
 		Topic:   topicID,
 	}
 
