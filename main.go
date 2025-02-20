@@ -15,6 +15,7 @@ import (
 var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
+	flag.Parse()
 	go serveHealthChecks()
 
 	lis, err := net.Listen("tcp", *port)
