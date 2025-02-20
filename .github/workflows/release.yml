@@ -21,7 +21,7 @@ jobs:
 
       - name: Build Linux binary
         run: |
-          GOOS=linux GOARCH=amd64 go build -o myapp-linux
+          GOOS=linux GOARCH=amd64 go build -o pubsub
           chmod +x pubsub
 
       - name: Upload Release Binary
