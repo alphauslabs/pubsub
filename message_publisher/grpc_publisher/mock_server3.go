@@ -15,17 +15,14 @@ type server struct {
 }
 
 func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
-	// Simulate processing of the message
 	fmt.Printf("Received message on server 3: %s\n", msg.Payload)
 
-	// Mock response (returning a dummy message ID)
 	return &pubsubproto.PublishResponse{
-		MessageId: "mock-message-id-3", // Simulate a generated message ID
+		MessageId: "03",
 	}, nil
 }
 
 func startMockServer() {
-	// Start the mock gRPC server
 	lis, err := net.Listen("tcp", ":8082")
 	if err != nil {
 		log.Fatalf("Failed to listen on port 8082: %v", err)
