@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net"
 
@@ -11,10 +12,10 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-var port = ":50051"
+var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 		return
