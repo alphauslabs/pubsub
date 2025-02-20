@@ -15,6 +15,8 @@ import (
 var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
+	go serveHealthChecks()
+
 	lis, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -35,5 +37,20 @@ func main() {
 	log.Printf("Server listening on :50051")
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func serveHealthChecks() {
+	l, err := net.Listen("tcp", ":80")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatalf("failed to accept: %v", err)
+		}
+		defer conn.Close()
 	}
 }
