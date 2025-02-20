@@ -14,10 +14,9 @@ type server struct {
 }
 
 func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishResponse, error) {
-	
+
 	log.Printf("[Mock Server 8080] Received message:\n  ID: %s\n   Payload: %s\n   Topic: %s",
 		msg.Id, string(msg.Payload), msg.TopicId)
-
 
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
 }
