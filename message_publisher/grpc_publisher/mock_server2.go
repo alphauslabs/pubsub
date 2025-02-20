@@ -31,6 +31,9 @@ func newServer() *server {
 }
 
 func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsubproto.PublishResponse, error) {
+
+	fmt.Printf("Received message on server 2: %s\n", msg.Payload)
+
 	messageID := s.messagePool.Get().(string)
 	defer s.messagePool.Put(messageID)
 
@@ -39,7 +42,7 @@ func (s *server) Publish(ctx context.Context, msg *pubsubproto.Message) (*pubsub
 	}
 
 	return &pubsubproto.PublishResponse{
-		MessageId: messageID,
+		MessageId: "02",
 	}, nil
 }
 
