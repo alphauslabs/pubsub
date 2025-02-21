@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -14,6 +15,7 @@ import (
 
 type server struct {
 	client *spanner.Client
+	op     *hedge.Op
 	pb.UnimplementedPubSubServiceServer
 }
 
@@ -24,6 +26,13 @@ const (
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
 	if in.TopicId == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
+	}
+
+	l, _ := s.op.HasLock()
+	if l {
+		log.Println("[Publish] I'm the leader")
+	} else {
+		log.Println("[Publish] I'm not the leader")
 	}
 
 	b, _ := json.Marshal(in)
