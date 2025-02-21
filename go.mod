@@ -4,6 +4,9 @@ go 1.23.6
 
 toolchain go1.24.0
 
+<<<<<<< HEAD
+require github.com/golang/glog v1.2.4
+=======
 require (
 	cloud.google.com/go/spanner v1.75.0
 	github.com/alphauslabs/pubsub-proto v0.0.0-20250219071234-ddc9b50dc09b
@@ -86,3 +89,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 )
+>>>>>>> fb5463d8d7aa8801766ed53634e34f478ad8caa0
