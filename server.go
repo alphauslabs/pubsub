@@ -28,15 +28,13 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
+	b, _ := json.Marshal(in)
 	l, _ := s.op.HasLock()
 	if l {
-		log.Println("[Publish] I'm the leader")
+		log.Println("[Publish-leader] Received message:\n", string(b))
 	} else {
-		log.Println("[Publish] I'm not the leader")
+		log.Printf("[Publish] Received message:\n%v", string(b))
 	}
-
-	b, _ := json.Marshal(in)
-	log.Printf("[Publish] Received message:\n%v", string(b))
 
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
