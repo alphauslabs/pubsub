@@ -14,7 +14,7 @@ type broadCastInput struct {
 	Msg  []byte
 }
 
-var brdcst = map[string]func(*PubSub, []byte) ([]byte, error){
+var ctrlbroadcast = map[string]func(*PubSub, []byte) ([]byte, error){
 	message:  handleBroadcastedMsg,
 	topicsub: handleBroadcastedTopicsub,
 }
@@ -26,7 +26,7 @@ func broadcast(data any, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
-	return brdcst[in.Type](app, in.Msg)
+	return ctrlbroadcast[in.Type](app, in.Msg)
 }
 
 func handleBroadcastedMsg(app *PubSub, msg []byte) ([]byte, error) {
