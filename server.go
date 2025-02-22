@@ -55,6 +55,20 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, err
 	}
 
+	// broadcast message
+	bcastin := broadCastInput{
+		Type: message,
+		Msg:  b,
+	}
+
+	bin, _ := json.Marshal(bcastin)
+	out := s.op.Broadcast(ctx, bin)
+	for _, v := range out {
+		if v.Error != nil { // for us to know, then do necessary actions if frequent
+			log.Printf("[Publish] Error broadcasting message: %v", v.Error)
+		}
+	}
+
 	log.Printf("[Publish] Message successfully wrote to spanner with ID: %s", messageID)
 	return &pb.PublishResponse{MessageId: messageID}, nil
 }
