@@ -69,6 +69,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		}
 	}
 
-	log.Printf("[Publish] Message successfully wrote to spanner with ID: %s", messageID)
+	log.Printf("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
 	return &pb.PublishResponse{MessageId: messageID}, nil
 }
