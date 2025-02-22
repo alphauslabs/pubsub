@@ -24,7 +24,7 @@ const (
 )
 
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	if in.TopicId == "" {
+	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
@@ -42,7 +42,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
 		[]interface{}{
 			messageID,
-			in.TopicId,
+			in.Topic,
 			in.Payload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
@@ -55,6 +55,20 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, err
 	}
 
-	log.Printf("[Publish] Message successfully wrote to spanner with ID: %s", messageID)
+	// broadcast message
+	bcastin := broadCastInput{
+		Type: message,
+		Msg:  b,
+	}
+
+	bin, _ := json.Marshal(bcastin)
+	out := s.op.Broadcast(ctx, bin)
+	for _, v := range out {
+		if v.Error != nil { // for us to know, then do necessary actions if frequent
+			log.Printf("[Publish] Error broadcasting message: %v", v.Error)
+		}
+	}
+
+	log.Printf("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
 	return &pb.PublishResponse{MessageId: messageID}, nil
 }
