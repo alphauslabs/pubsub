@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 )
@@ -14,12 +15,19 @@ type sendInput struct {
 	Msg  []byte
 }
 
+// Root send handler
 func send(data any, msg []byte) ([]byte, error) {
-	switch data.(broadCastInput).Type {
+	var in sendInput
+	err := json.Unmarshal(msg, &in)
+	if err != nil {
+		return nil, err
+	}
+
+	switch in.Type {
 	case topicsubupdates:
-		log.Println("[send] type topicsubupdates received:", string(msg))
-		return []byte("send " + string(msg)), nil
+		log.Println("[send] type topicsubupdates received:", string(in.Msg))
+		return []byte("send " + string(in.Msg)), nil
 	default:
-		return nil, fmt.Errorf("unknown type: %v", data.(broadCastInput).Type)
+		return nil, fmt.Errorf("unknown type: %v", in.Type)
 	}
 }

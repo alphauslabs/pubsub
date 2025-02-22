@@ -36,15 +36,11 @@ func main() {
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			nil,
-			func(data any, msg []byte) ([]byte, error) {
-				return send(data, msg)
-			},
+			send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			nil,
-			func(data any, msg []byte) ([]byte, error) {
-				return broadcast(data, msg)
-			},
+			broadcast,
 		),
 	)
 
