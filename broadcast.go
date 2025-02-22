@@ -19,7 +19,7 @@ var brdcst = map[string]func(*PubSub, []byte) ([]byte, error){
 	topicsub: handleBroadcastedTopicsub,
 }
 
-// Root handler for broadcasted messages.
+// Root handler for op.Broadcast()
 func broadcast(data any, msg []byte) ([]byte, error) {
 	var in broadCastInput
 	app := data.(*PubSub)

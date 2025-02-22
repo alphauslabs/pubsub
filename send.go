@@ -17,7 +17,7 @@ var ctrlsend = map[string]func(*PubSub, []byte) ([]byte, error){
 	topicsubupdates: handleTopicSubUpdates,
 }
 
-// Root handler for broadcasted messages.
+// Root handler for op.Send()
 func send(data any, msg []byte) ([]byte, error) {
 	var in sendInput
 	app := data.(*PubSub)
