@@ -24,7 +24,7 @@ const (
 )
 
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	if in.TopicId == "" {
+	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
@@ -42,7 +42,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
 		[]interface{}{
 			messageID,
-			in.TopicId,
+			in.Topic,
 			in.Payload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
