@@ -28,6 +28,10 @@ func main() {
 		return
 	}
 
+	app := &PubSub{
+		Client: spannerClient,
+	}
+
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
@@ -35,11 +39,11 @@ func main() {
 		"pubsublock",
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
-			nil,
+			app,
 			send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
-			nil,
+			app,
 			broadcast,
 		),
 	)
@@ -51,24 +55,12 @@ func main() {
 		}
 	}()
 
+	app.Op = op
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
-	// Test
-	func() {
-		l, _ := op.HasLock()
-		if l {
-			log.Println("I'm the leader, I can call Broadcast() but can only handle Send() from my followers")
-			op.Broadcast(context.Background(), []byte("[leader] Hi all nodes"))
-		} else {
-			log.Println("I'm not the leader, I can both call Broadcast() and Send()")
-			op.Send(context.Background(), []byte("Hi leader"))
-			op.Broadcast(context.Background(), []byte("[non-leader] Hi all nodes"))
-		}
-
-	}()
-
 	sigCh := make(chan os.Signal, 1)
+
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
 

@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
 )
 
 const (
@@ -15,19 +13,21 @@ type sendInput struct {
 	Msg  []byte
 }
 
-// Root send handler
+var ctrlsend = map[string]func(*PubSub, []byte) ([]byte, error){
+	topicsubupdates: handleTopicSubUpdates,
+}
+
+// Root handler for broadcasted messages.
 func send(data any, msg []byte) ([]byte, error) {
 	var in sendInput
-	err := json.Unmarshal(msg, &in)
-	if err != nil {
+	app := data.(*PubSub)
+	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
+	return ctrlsend[in.Type](app, in.Msg)
+}
 
-	switch in.Type {
-	case topicsubupdates:
-		log.Println("[send] type topicsubupdates received:", string(in.Msg))
-		return []byte("send " + string(in.Msg)), nil
-	default:
-		return nil, fmt.Errorf("unknown type: %v", in.Type)
-	}
+// Handle topic subscription updates.
+func handleTopicSubUpdates(app *PubSub, msg []byte) ([]byte, error) {
+	return nil, nil
 }
