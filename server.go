@@ -7,15 +7,13 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	"github.com/flowerinthenight/hedge/v2"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type server struct {
-	client *spanner.Client
-	op     *hedge.Op
+	*PubSub
 	pb.UnimplementedPubSubServiceServer
 }
 
@@ -29,7 +27,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	b, _ := json.Marshal(in)
-	l, _ := s.op.HasLock()
+
+	l, _ := s.Op.HasLock()
 	if l {
 		log.Println("[Publish-leader] Received message:\n", string(b))
 	} else {
@@ -49,7 +48,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		},
 	)
 
-	_, err := s.client.Apply(ctx, []*spanner.Mutation{mutation})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
 		log.Printf("Error writing to Spanner: %v", err)
 		return nil, err
@@ -62,7 +61,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	bin, _ := json.Marshal(bcastin)
-	out := s.op.Broadcast(ctx, bin)
+	out := s.Op.Broadcast(ctx, bin)
 	for _, v := range out {
 		if v.Error != nil { // for us to know, then do necessary actions if frequent
 			log.Printf("[Publish] Error broadcasting message: %v", v.Error)
