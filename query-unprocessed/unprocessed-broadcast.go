@@ -1,184 +1,112 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "time"
+	"context"
+	"encoding/json"
+	"log"
+	"sync"
+	"time"
 
-    "cloud.google.com/go/spanner"
-    pb "github.com/alphauslabs/pubsub-proto/v1"
-    "github.com/flowerinthenight/hedge/v2"
+	"cloud.google.com/go/spanner"
+	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/flowerinthenight/hedge/v2"
+	"google.golang.org/api/iterator"
 )
 
-const (
-    MaxQueueSize = 2000  // Queue size limit
-)
-
-// represent message stored in VM queue
 type QueuedMessage struct {
-    ID               string    `json:"id"`
-    Topic            string    `json:"topic"`
-    Payload          string    `json:"payload"`
-    VisibilityTimeout time.Time `json:"visibilityTimeout"`
+	Id      string `json:"id"`
+	Topic   string `json:"topic"`
+	Payload string `json:"payload"`
 }
 
-// hold messages for each VM
 type MessageQueue struct {
-    messages []*QueuedMessage
-    maxSize  int
+	messages map[string]*QueuedMessage // changed slices to map with message ID as key
+	mu       sync.RWMutex
 }
 
-func main() {
-    ctx := context.Background()
+func NewMessageQueue() *MessageQueue {
+	return &MessageQueue{
+		messages: make(map[string]*QueuedMessage),
+	}
+}
 
-    // Initialize queue VM with size limit
-    queue := &MessageQueue{
-        messages: make([]*QueuedMessage, 0),
-        maxSize:  MaxQueueSize,
-    }
+func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
+	queue := NewMessageQueue()
 
-    // Initialize Spanner client
-    spannerClient, err := spanner.NewClient(ctx, "projects/labs-169405/instances/alphaus-dev/databases/main")
-    if err != nil {
-        log.Fatalf("Failed to create Spanner client: %v", err)
-    }
-    defer spannerClient.Close()
+	// used ticker instead of sleep
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
-    // Initialize hedge with broadcast handler
-    op := hedge.New(
-        spannerClient,
-        ":50052",
-        "locktable",
-        "pubsublock",
-        "logtable",
-        hedge.WithBroadcastHandler(
-            nil,
-            func(data interface{}, msg []byte) ([]byte, error) {
-                // Unmarshal received broadcast message
-                var receivedMsg struct {
-                    ID      string `json:"id"`
-                    Topic   string `json:"topic"`
-                    Payload string `json:"payload"`
-                }
-                if err := json.Unmarshal(msg, &receivedMsg); err != nil {
-                    log.Printf("Error unmarshalling message: %v", err)
-                    return nil, err
-                }
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l, _ := op.HasLock()
+			if !l {
+				log.Println("Not leader, skipping")
+				continue
+			}
 
-                // Check if queue is full
-                if len(queue.messages) >= queue.maxSize {
-                    log.Printf("Queue is full (size: %d). Message %s not added", queue.maxSize, receivedMsg.ID)
-                    return nil, fmt.Errorf("queue is full")
-                }
+			// Query unprocessed messages
+			stmt := spanner.Statement{
+				SQL: `SELECT id, topic, payload 
+                      FROM Messages
+                      WHERE processed = FALSE`,
+			}
 
-                // Create queued message with visibility timeout
-                queuedMsg := &QueuedMessage{
-                    ID:               receivedMsg.ID,
-                    Topic:           receivedMsg.Topic,
-                    Payload:         receivedMsg.Payload,
-                    VisibilityTimeout: time.Now().Add(time.Minute),
-                }
+			iter := spannerClient.Single().Query(ctx, stmt)
+			defer iter.Stop()
 
-                // Add to queue
-                queue.messages = append(queue.messages, queuedMsg)
-                log.Printf("Stored message %s in queue. Queue size: %d/%d", 
-                    queuedMsg.ID, len(queue.messages), queue.maxSize)
+			for {
+				row, err := iter.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					log.Printf("Error reading message: %v", err)
+					continue
+				}
 
-                return []byte("stored"), nil
-            },
-        ),
-    )
+				var msg pb.Message
+				if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
+					log.Printf("Error scanning message: %v", err)
+					continue
+				}
 
-    // Start hedge
-    done := make(chan error, 1)
-    go op.Run(ctx, done)
+				// Store in map using message ID as key
+				queue.mu.Lock()
+				queue.messages[msg.Id] = &QueuedMessage{
+					Id:      msg.Id,
+					Topic:   msg.Topic,
+					Payload: msg.Payload,
+				}
+				queue.mu.Unlock()
 
-    // Process messages every second
-    for {
-        // Check if leader
-        l, _ := op.HasLock()
-        if !l {
-            log.Println("Not leader, skipping")
-            time.Sleep(1 * time.Second) // Wait 1 second before next check
-            continue
-        }
+				messageInfo := struct {
+					ID      string `json:"id"`
+					Topic   string `json:"topic"`
+					Payload string `json:"payload"`
+				}{
+					ID:      msg.Id,
+					Topic:   msg.Topic,
+					Payload: msg.Payload,
+				}
 
-        // Query unprocessed messages
-        stmt := spanner.Statement{
-            SQL: `SELECT id, topic, payload 
-                  FROM Messages 
-                  WHERE processed = FALSE`
-        }
+				data, err := json.Marshal(messageInfo)
+				if err != nil {
+					log.Printf("Error marshalling message: %v", err)
+					continue
+				}
 
-        iter := spannerClient.Single().Query(ctx, stmt)
-        defer iter.Stop()
+				// broadcast to all VMs including leader
+				if err := op.Broadcast(ctx, data); err != nil {
+					log.Printf("Error broadcasting message: %v", err)
+					continue
+				}
 
-        // Process message
-        for {
-            row, err := iter.Next()
-            if err == iterator.Done {
-                break
-            }
-            if err != nil {
-                log.Printf("Error reading message: %v", err)
-                continue
-            }
-
-            // Get message details
-            var msg pb.Message
-            if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
-                log.Printf("Error scanning message: %v", err)
-                continue
-            }
-
-            // Prepare message for broadcasting
-            messageInfo := struct {
-                ID      string `json:"id"`
-                Topic   string `json:"topic"`
-                Payload string `json:"payload"`
-            }{
-                ID:      msg.Id,
-                Topic:   msg.Topic,
-                Payload: msg.Payload,
-            }
-
-            // Marshal message for broadcast
-            data, err := json.Marshal(messageInfo)
-            if err != nil {
-                log.Printf("Error marshalling message: %v", err)
-                continue
-            }
-
-            // Broadcast message to all VMs
-            if err := op.Broadcast(ctx, data); err != nil {
-                log.Printf("Error broadcasting message: %v", err)
-                continue
-            }
-
-            // Mark message as processed
-            mutation := spanner.InsertOrUpdate(
-                "Messages",
-                []string{"id", "topic", "payload", "processed", "updatedAt", "visibilityTimeout"},
-                []interface{}{
-                    msg.Id,
-                    msg.Topic,
-                    msg.Payload,
-                    true,
-                    spanner.CommitTimestamp,
-                    time.Now().Add(time.Minute),
-                },
-            )
-
-            if _, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
-                log.Printf("Error marking message as processed: %v", err)
-                continue
-            }
-
-            log.Printf("Successfully processed message: %s", msg.Id)
-        }
-
-        time.Sleep(1 * time.Second) // Wait 1 second before next query
-    }
+				log.Printf("Successfully broadcast message: %s", msg.Id)
+			}
+		}
+	}
 }
