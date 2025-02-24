@@ -49,7 +49,7 @@ func fetchUpdatedTopicSub(client *spanner.Client, lastCheckedTime *time.Time) ma
 }
 
 // leader broadcasts topic-subscription structure if an update happened
-func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
+func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
 		return
@@ -73,7 +73,7 @@ func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
 }
 
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
-func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
+func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 data, err := json.Marshal(topicSub)
 if err != nil {
 log.Printf("Error marshalling topic-subscription: %v", err)
