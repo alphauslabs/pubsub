@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"time"
 
@@ -44,8 +43,10 @@ func main() {
 // leader fetches and broadcasts topic-subs updates every 10 seconds
 func distributeStruct(op *hedge.Hedge, spannerClient *spanner.Client) {
 	lastCheckedTime = time.Now().Add(-10 * time.Second) // Start 10 seconds earlier
+	ticker := time.NewTicker(10 * time.Second)          // ticker for periodic execution
+	defer ticker.Stop()
 
-	for {
+	for range ticker.C {
 		// check if this node is the leader
 		l, _ := op.HasLock()
 		if l {
@@ -55,8 +56,6 @@ func distributeStruct(op *hedge.Hedge, spannerClient *spanner.Client) {
 		} else {
 			log.Println("Follower: No action needed.")
 		}
-
-		time.Sleep(10 * time.Second) // query spanner every 10 seconds
 	}
 }
 
@@ -105,13 +104,14 @@ func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
 		return
 	}
 
-	data, err := json.Marshal(topicSub)
+	//capture response and error from broadcast
+	resp, err := op.Broadcast(context.Background(), data)
 	if err != nil {
-		log.Printf("Error marshalling topic-subscription: %v", err)
-		return
+		log.Printf("Error in broadcast: %v", err)
+	} else {
+		log.Printf("Broadcast response: %s", string(resp))
 	}
 
-	op.Broadcast(context.Background(), data)
 	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
 }
 
