@@ -61,15 +61,24 @@ func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 		return
 	}
 
-	//capture response and error from broadcast
-	resp, err := op.Broadcast(context.Background(), data)
-	if err != nil {
-		log.Printf("Error in broadcast: %v", err)
-	} else {
-		log.Printf("Broadcast response: %s", string(resp))
+	// Broadcast the data
+	resp := op.Broadcast(context.Background(), data)
+
+	// Track errors
+	hasError := false
+	for _, r := range resp {
+		if r.Error != nil {
+			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
+			hasError = true
+		}
 	}
 
-	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
+	// Log final status
+	if hasError {
+		log.Println("Leader: Broadcast completed with errors.")
+	} else {
+		log.Println("Leader: Broadcast successfully completed without errors.")
+	}
 }
 
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
