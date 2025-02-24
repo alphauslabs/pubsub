@@ -2,6 +2,7 @@ package topic
 
 import (
 	"context"
+	"fmt"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -9,129 +10,148 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TopicService implements the PubSubService server interface for topic management
 type TopicService struct {
 	pb.UnimplementedPubSubServiceServer
 	SpannerClient *spanner.Client
 }
 
-// NewTopicService creates a new TopicService with the provided Spanner client
 func NewTopicService(client *spanner.Client) *TopicService {
 	return &TopicService{
 		SpannerClient: client,
 	}
 }
 
-// CreateTopic implements the CreateTopic RPC method
 func (s *TopicService) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "topic name is required")
 	}
 
-	// Generate a unique ID for the topic
-	topicID := uuid.New().String()
+	// Check for existing topic name
+	exist, err := s.topicExists(ctx, req.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check topic existence: %v", err)
+	}
+	if exist {
+		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists", req.Name)
+	}
 
-	// Insert the topic record into the Messages table
+	topicID := uuid.New().String()
 	m := spanner.Insert("Topics",
 		[]string{"id", "name", "createdAt", "updatedAt"},
-		[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp})
+		[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
+	)
 
-	_, err := s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
+	_, err = s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to create topic: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
 
-	// Return the created topic
 	return &pb.Topic{
-		Id:   topicID, // Include ID
+		Id:   topicID,
 		Name: req.Name,
 	}, nil
 }
 
-// GetTopic implements the GetTopic RPC method
-// GetTopic retrieves a topic by name
 func (s *TopicService) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Topic, error) {
 	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT id, name FROM Topics WHERE id = @id LIMIT 1`,
-		Params: map[string]interface{}{"name": req.Id},
+		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE id = @id LIMIT 1`,
+		Params: map[string]interface{}{"id": req.Id},
 	}
 
 	iter := s.SpannerClient.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
 	row, err := iter.Next()
+	if err == iterator.Done {
+		return nil, status.Errorf(codes.NotFound, "topic with ID %q not found", req.Id)
+	}
 	if err != nil {
-		if err == iterator.Done {
-			return nil, status.Errorf(codes.NotFound, "Topic %s not found", req.Id)
-		}
-		return nil, status.Errorf(codes.Internal, "Query failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to query topic: %v", err)
 	}
 
-	var id, topic string
-	if err := row.Columns(&id, &topic); err != nil {
-		return nil, status.Errorf(codes.Internal, "Data parse error: %v", err)
-	}
-
-	return &pb.Topic{Id: id, Name: topic}, nil
-}
-
-// UpdateTopic implements the UpdateTopic RPC method
-func (s *TopicService) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic ID is required")
-	}
-
-	if req.NewName == "" {
-		return nil, status.Error(codes.InvalidArgument, "New topic name is required")
-	}
-
-	// Update the topic name
-	m := spanner.Update("Topics",
-		[]string{"id", "name", "updatedAt"},                         // Include primary key
-		[]interface{}{req.Id, req.NewName, spanner.CommitTimestamp}) // Use ID from request
-
-	_, err := s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to update topic: %v", err)
+	var (
+		id, name             string
+		createdAt, updatedAt spanner.NullTime
+	)
+	if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 	}
 
 	return &pb.Topic{
-		Id:   req.Id,
+		Id:        id,
+		Name:      name,
+		CreatedAt: convertTime(createdAt),
+		UpdatedAt: convertTime(updatedAt),
+	}, nil
+}
+
+func (s *TopicService) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
+	}
+	if req.NewName == "" {
+		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
+	}
+
+	// Check if new name already exists
+	exist, err := s.topicExists(ctx, req.NewName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check name availability: %v", err)
+	}
+	if exist {
+		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists", req.NewName)
+	}
+
+	// Get existing topic to verify existence
+	current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
+	if err != nil {
+		return nil, err
+	}
+
+	m := spanner.Update("Topics",
+		[]string{"id", "name", "updatedAt"},
+		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
+	)
+
+	_, err = s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
+	}
+
+	return &pb.Topic{
+		Id:   current.Id,
 		Name: req.NewName,
 	}, nil
 }
 
-// DeleteTopic implements the DeleteTopic RPC method
 func (s *TopicService) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
 	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
-	// Delete the topic
+	// Verify topic exists before deletion
+	if _, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id}); err != nil {
+		return nil, err
+	}
+
 	m := spanner.Delete("Topics", spanner.Key{req.Id})
 	_, err := s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to delete topic: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 	}
 
-	return &pb.DeleteTopicResponse{
-		Success: true,
-	}, nil
+	return &pb.DeleteTopicResponse{Success: true}, nil
 }
 
-// ListTopics implements the ListTopics RPC method
 func (s *TopicService) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsResponse, error) {
-	// Query to get all unique topics
-	stmt := spanner.Statement{
-		SQL: `SELECT id, name FROM Topics`,
-	}
-
+	stmt := spanner.Statement{SQL: `SELECT id, name, createdAt, updatedAt FROM Topics`}
 	iter := s.SpannerClient.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -142,22 +162,51 @@ func (s *TopicService) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTop
 			break
 		}
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to list topics: %v", err)
+			return nil, status.Errorf(codes.Internal, "failed to list topics: %v", err)
 		}
 
-		var id, name string
-		if err := row.Columns(&id, &name); err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to parse topic data: %v", err)
+		var (
+			id, name             string
+			createdAt, updatedAt spanner.NullTime
+		)
+		if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 		}
 
 		topics = append(topics, &pb.Topic{
-			Id:   id,
-			Name: name,
+			Id:        id,
+			Name:      name,
+			CreatedAt: convertTime(createdAt),
+			UpdatedAt: convertTime(updatedAt),
 		})
-
 	}
 
-	return &pb.ListTopicsResponse{
-		Topics: topics,
-	}, nil
+	return &pb.ListTopicsResponse{Topics: topics}, nil
+}
+
+// Helper functions
+func (s *TopicService) topicExists(ctx context.Context, name string) (bool, error) {
+	stmt := spanner.Statement{
+		SQL:    "SELECT 1 FROM Topics WHERE name = @name LIMIT 1",
+		Params: map[string]interface{}{"name": name},
+	}
+
+	iter := s.SpannerClient.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	_, err := iter.Next()
+	if err == iterator.Done {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("existence check failed: %w", err)
+	}
+	return true, nil
+}
+
+func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
+	if !t.Valid {
+		return nil
+	}
+	return timestamppb.New(t.Time)
 }

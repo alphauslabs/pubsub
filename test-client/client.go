@@ -68,19 +68,19 @@ func hasMultipleCommands() bool {
 }
 
 func createTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
-	resp, err := client.CreateTopic(ctx, &pb.CreateTopicRequest{Topic: name})
+	resp, err := client.CreateTopic(ctx, &pb.CreateTopicRequest{Name: name})
 	if err != nil {
 		log.Fatalf("Create failed: %v", err)
 	}
-	fmt.Printf("Created:\nID: %s\nName: %s\n", resp.Id, resp.Topic)
+	fmt.Printf("Created:\nID: %s\nName: %s\n", resp.Id, resp.Name)
 }
 
 func getTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
-	resp, err := client.GetTopic(ctx, &pb.GetTopicRequest{Topic: name})
+	resp, err := client.GetTopic(ctx, &pb.GetTopicRequest{Id: name})
 	if err != nil {
 		log.Fatalf("Get failed: %v", err)
 	}
-	fmt.Printf("Topic:\nID: %s\nName: %s\n", resp.Id, resp.Topic)
+	fmt.Printf("Topic:\nID: %s\nName: %s\n", resp.Id, resp.Name)
 }
 
 func handleUpdate(ctx context.Context, client pb.PubSubServiceClient) {
@@ -92,17 +92,17 @@ func handleUpdate(ctx context.Context, client pb.PubSubServiceClient) {
 
 	oldName, newName := args[0], args[1]
 	resp, err := client.UpdateTopic(ctx, &pb.UpdateTopicRequest{
-		Topic:    oldName,
-		NewTopic: &newName,
+		Id:      oldName,
+		NewName: newName,
 	})
 	if err != nil {
 		log.Fatalf("Update failed: %v", err)
 	}
-	fmt.Printf("Updated:\nOld Name: %s\nNew Name: %s\n", oldName, resp.Topic)
+	fmt.Printf("Updated:\nOld Name: %s\nNew Name: %s\n", oldName, resp.Name)
 }
 
 func deleteTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
-	resp, err := client.DeleteTopic(ctx, &pb.DeleteTopicRequest{Topic: name})
+	resp, err := client.DeleteTopic(ctx, &pb.DeleteTopicRequest{Id: name})
 	if err != nil {
 		log.Fatalf("Delete failed: %v", err)
 	}
@@ -119,6 +119,6 @@ func listTopics(ctx context.Context, client pb.PubSubServiceClient) {
 
 	fmt.Println("Topics:")
 	for _, t := range resp.Topics {
-		fmt.Printf("• %-20s (ID: %s)\n", t.Topic, t.Id)
+		fmt.Printf("• %-20s (ID: %s)\n", t.Id, t.Id)
 	}
 }
