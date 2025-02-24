@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	queryunprocessed "github.com/alphauslabs/pubsub/queryunprocessed"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -60,6 +61,8 @@ func main() {
 	go op.Run(ctx, done)
 
 	StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
+
+	go queryunprocessed.ProcessUnprocessedMessages(ctx, op, spannerClient)
 
 	// Test
 	func() {

@@ -1,4 +1,4 @@
-package main
+package queryunprocessed
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient
 				continue
 			}
 
-			//// Query unprocessed messages
+			// Query unprocessed messages
 			stmt := spanner.Statement{
 				SQL: `SELECT id, topic, payload 
                       FROM Messages
