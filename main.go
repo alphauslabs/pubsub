@@ -60,7 +60,7 @@ func main() {
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
-	StartDistributor(ctx, op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
+	StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
 
 	// Test
 	func() {
