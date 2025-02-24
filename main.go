@@ -11,7 +11,11 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+<<<<<<< HEAD
 	queryunprocessed "github.com/alphauslabs/pubsub/queryunprocessed"
+=======
+	broadcaststruct "github.com/alphauslabs/pubsub/broadcaststruct"
+>>>>>>> 996fdf4c029befcadd45da3763fef754ef3b8b7f
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -60,6 +64,7 @@ func main() {
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
+<<<<<<< HEAD
 	StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
 
 	go queryunprocessed.ProcessUnprocessedMessages(ctx, op, spannerClient)
@@ -77,6 +82,9 @@ func main() {
 		}
 
 	}()
+=======
+	broadcaststruct.StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
+>>>>>>> 996fdf4c029befcadd45da3763fef754ef3b8b7f
 
 	sigCh := make(chan os.Signal, 1)
 
