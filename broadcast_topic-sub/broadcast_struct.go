@@ -11,7 +11,7 @@ import (
 
 var lastCheckedTime time.Time // track the last Spanner query time to fetch only new updates
 
-func main() {
+/*func main() {
 	ctx := context.Background()
 
 	// spanner Client
@@ -39,7 +39,7 @@ func main() {
 
 	<-done
 }
-
+*/
 // leader fetches and broadcasts topic-subs updates every 10 seconds
 func distributeStruct(op *hedge.Hedge, spannerClient *spanner.Client) {
 	lastCheckedTime = time.Now().Add(-10 * time.Second) // Start 10 seconds earlier
@@ -115,13 +115,14 @@ func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
 	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
 }
 
-// leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
-//func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
-//data, err := json.Marshal(topicSub)
-//if err != nil {
-//log.Printf("Error marshalling topic-subscription: %v", err)
-//return
-//}
-//op.Broadcast(context.Background(), data)
-//log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
-//}
+/* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
+func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
+data, err := json.Marshal(topicSub)
+if err != nil {
+log.Printf("Error marshalling topic-subscription: %v", err)
+return
+}
+op.Broadcast(context.Background(), data)
+log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
+}
+*/
