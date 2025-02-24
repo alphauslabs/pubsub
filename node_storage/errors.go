@@ -3,10 +3,8 @@ package main
 import "errors"
 
 var (
-	ErrMessageNotFound      = errors.New("message not found")
-	ErrTopicNotFound        = errors.New("topic not found")
-	ErrSubscriptionNotFound = errors.New("subscription not found")
-	ErrInvalidMessage       = errors.New("invalid message")
-	ErrInvalidTopic         = errors.New("invalid topic")
-	ErrInvalidSubscription  = errors.New("invalid subscription")
+	ErrMessageNotFound = errors.New("message not found")
+	ErrInvalidMessage  = errors.New("invalid message")
+	ErrTopicNotFound   = errors.New("topic not found")
+	ErrInvalidTopicSub = errors.New("invalid topic-subscription structure")
 )
