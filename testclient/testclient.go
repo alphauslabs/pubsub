@@ -31,7 +31,7 @@ func main() {
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: "topic1", Payload: "Hello World"})
+		r, err := c.Publish(ctx, &pb.PublishRequest{Topic: "topic1", Payload: "Hello World"})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
