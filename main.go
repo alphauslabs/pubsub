@@ -28,6 +28,10 @@ func main() {
 		return
 	}
 
+	app := &PubSub{
+		Client: spannerClient,
+	}
+
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
@@ -35,30 +39,27 @@ func main() {
 		"pubsublock",
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
-			nil,
-			func(data interface{}, msg []byte) ([]byte, error) {
-				log.Println("[leader] received through send():", string(msg))
-				return []byte("hello " + string(msg)), nil
-			},
+			app,
+			send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
-			nil,
-			func(data interface{}, msg []byte) ([]byte, error) {
-				log.Println("[broadcast] received:", string(msg))
-				return []byte("broadcast " + string(msg)), nil
-			},
+			app,
+			broadcast,
 		),
 	)
 
+	app.Op = op
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		if err := run(ctx, &server{client: spannerClient, op: op}); err != nil {
+		if err := run(ctx, &server{PubSub: app}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
 
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
+
+	StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
 
 	// Test
 	func() {
@@ -75,6 +76,7 @@ func main() {
 	}()
 
 	sigCh := make(chan os.Signal, 1)
+
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
 
