@@ -11,12 +11,12 @@ import (
 var lastCheckedTime time.Time // track the last Spanner query time to fetch only new updates
 
 // StartDistributor initializes and starts the topic-subscription distributor
-func StartDistributor(op *hedge.Hedge, spannerClient *spanner.Client) {
+func StartDistributor(op *hedge.Op, spannerClient *spanner.Client) {
 	go distributeStruct(op, spannerClient)
 }
 
 // leader fetches and broadcasts topic-subs updates every 10 seconds
-func distributeStruct(op *hedge.Hedge, spannerClient *spanner.Client) {
+func distributeStruct(op *hedge.Op, spannerClient *spanner.Client) {
 	lastCheckedTime = time.Now().Add(-10 * time.Second) // Start 10 seconds earlier
 	ticker := time.NewTicker(10 * time.Second)          // ticker for periodic execution
 	defer ticker.Stop()
