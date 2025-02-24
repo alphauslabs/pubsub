@@ -33,23 +33,23 @@ func (s *Storage) StoreMessage(msg *pb.Message) error {
 
 	s.messages[msg.Id] = msg
 
-	if _, exists := s.topicMessages[msg.TopicId]; !exists {
-		s.topicMessages[msg.TopicId] = make(map[string]*pb.Message)
+	if _, exists := s.topicMessages[msg.Topic]; !exists {
+		s.topicMessages[msg.Topic] = make(map[string]*pb.Message)
 	}
-	s.topicMessages[msg.TopicId][msg.Id] = msg
+	s.topicMessages[msg.Topic][msg.Id] = msg
 
 	return nil
 }
 
 func (s *Storage) StoreTopic(topic *pb.Topic) error {
-	if topic == nil || topic.TopicId == "" {
+	if topic == nil || topic.Id == "" {
 		return ErrInvalidTopic
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.topics[topic.TopicId] = topic
+	s.topics[topic.Id] = topic
 	return nil
 }
 
