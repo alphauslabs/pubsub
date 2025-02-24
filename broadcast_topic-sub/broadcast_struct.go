@@ -1,4 +1,4 @@
-package main
+package broadcaststruct
 
 import (
 	"context"
@@ -62,11 +62,11 @@ func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 	}
 
 	//capture response and error from broadcast
-	resp, err := op.Broadcast(context.Background(), data)
-	if err != nil {
-		log.Printf("Error in broadcast: %v", err)
-	} else {
-		log.Printf("Broadcast response: %s", string(resp))
+	resp := op.Broadcast(context.Background(), data)
+	for _, r := range resp {
+		if r.Error != nil {
+			log.Printf("Error broadcasting topic-subscription: %v", r.Error)
+		}
 	}
 
 	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
