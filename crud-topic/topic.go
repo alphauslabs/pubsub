@@ -2,10 +2,13 @@ package topic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -16,11 +19,13 @@ import (
 type TopicService struct {
 	pb.UnimplementedPubSubServiceServer
 	SpannerClient *spanner.Client
+	HedgeOp       *hedge.Op
 }
 
-func NewTopicService(client *spanner.Client) *TopicService {
+func NewTopicService(client *spanner.Client, op *hedge.Op) *TopicService {
 	return &TopicService{
 		SpannerClient: client,
+		HedgeOp:       op,
 	}
 }
 
@@ -49,10 +54,15 @@ func (s *TopicService) CreateTopic(ctx context.Context, req *pb.CreateTopicReque
 		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
 
-	return &pb.Topic{
+	topic := &pb.Topic{
 		Id:   topicID,
 		Name: req.Name,
-	}, nil
+	}
+
+	if err := s.notifyLeader(ctx, 1); err != nil {
+		log.Printf("Failed to notify leader: %v", err)
+	}
+	return topic, nil
 }
 
 func (s *TopicService) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Topic, error) {
@@ -125,10 +135,16 @@ func (s *TopicService) UpdateTopic(ctx context.Context, req *pb.UpdateTopicReque
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
 	}
 
-	return &pb.Topic{
+	updatedTopic := &pb.Topic{
 		Id:   current.Id,
 		Name: req.NewName,
-	}, nil
+	}
+
+	if err := s.notifyLeader(ctx, 1); err != nil {
+		log.Printf("Failed to notify leader: %v", err)
+	}
+
+	return updatedTopic, nil
 }
 
 func (s *TopicService) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
@@ -146,7 +162,6 @@ func (s *TopicService) DeleteTopic(ctx context.Context, req *pb.DeleteTopicReque
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 	}
-
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
 
@@ -209,4 +224,22 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(t.Time)
+}
+
+func (s *TopicService) notifyLeader(ctx context.Context, flag int) error {
+	data := map[string]interface{}{
+		"flag": flag,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	resp := s.HedgeOp.Broadcast(ctx, jsonData)
+	for _, r := range resp {
+		if r.Error != nil {
+			return fmt.Errorf("failed to broadcast to %s: %w", r.Id, r.Error)
+		}
+	}
+	return nil
 }

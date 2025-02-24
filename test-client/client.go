@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"text/tabwriter"
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -14,23 +15,18 @@ import (
 )
 
 func main() {
-	create := flag.String("create", "", "Create a new topic with specified name")
-	get := flag.String("get", "", "Get a topic by name")
-	update := flag.Bool("update", false, "Update a topic name (follow with old and new names)")
-	del := flag.String("delete", "", "Delete a topic by name")
-	list := flag.Bool("list", false, "List all topics")
+	var (
+		createTopic   = flag.String("create", "", "Create topic with specified name")
+		getTopic      = flag.String("get", "", "Get topic by ID")
+		updateTopicID = flag.String("update", "", "Topic ID to update")
+		newTopicName  = flag.String("name", "", "New name for the topic")
+		deleteTopicID = flag.String("delete", "", "Delete topic by ID")
+		listTopics    = flag.Bool("list", false, "List all topics")
+	)
 
 	flag.Parse()
 
-	if hasMultipleCommands() {
-		fmt.Println("Error: Specify only one command at a time")
-		os.Exit(1)
-	}
-
-	conn, err := grpc.Dial(
-		"localhost:50051",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Connection failed: %v", err)
 	}
@@ -41,84 +37,87 @@ func main() {
 	defer cancel()
 
 	switch {
-	case *create != "":
-		createTopic(ctx, client, *create)
-	case *get != "":
-		getTopic(ctx, client, *get)
-	case *update:
-		handleUpdate(ctx, client)
-	case *del != "":
-		deleteTopic(ctx, client, *del)
-	case *list:
-		listTopics(ctx, client)
+	case *createTopic != "":
+		createTopicHandler(ctx, client, *createTopic)
+	case *getTopic != "":
+		getTopicHandler(ctx, client, *getTopic)
+	case *updateTopicID != "":
+		if *newTopicName == "" {
+			fmt.Println("Both --update and --name are required")
+			os.Exit(1)
+		}
+		updateTopicHandler(ctx, client, *updateTopicID, *newTopicName)
+	case *deleteTopicID != "":
+		deleteTopicHandler(ctx, client, *deleteTopicID)
+	case *listTopics:
+		listTopicsHandler(ctx, client)
 	default:
-		fmt.Println("Valid commands: --create, --get, --update, --delete, --list")
+		fmt.Println("See -help for usage")
 		os.Exit(1)
 	}
 }
 
-func hasMultipleCommands() bool {
-	count := len(flag.Args())
-	for _, f := range []string{"create", "get", "update", "delete", "list"} {
-		if flag.Lookup(f) != nil && flag.Lookup(f).Value.String() != "" {
-			count--
-		}
-	}
-	return count > 1
-}
-
-func createTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
+func createTopicHandler(ctx context.Context, client pb.PubSubServiceClient, name string) {
 	resp, err := client.CreateTopic(ctx, &pb.CreateTopicRequest{Name: name})
 	if err != nil {
 		log.Fatalf("Create failed: %v", err)
 	}
-	fmt.Printf("Created:\nID: %s\nName: %s\n", resp.Id, resp.Name)
+
+	fmt.Printf("Created topic:\nID: %s\nName: %s\n", resp.Id, resp.Name)
 }
 
-func getTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
-	resp, err := client.GetTopic(ctx, &pb.GetTopicRequest{Id: name})
+func getTopicHandler(ctx context.Context, client pb.PubSubServiceClient, id string) {
+	resp, err := client.GetTopic(ctx, &pb.GetTopicRequest{Id: id})
 	if err != nil {
 		log.Fatalf("Get failed: %v", err)
 	}
-	fmt.Printf("Topic:\nID: %s\nName: %s\n", resp.Id, resp.Name)
+
+	fmt.Printf("Topic details:\nID: %s\nName: %s\nCreated: %v\nUpdated: %v\n",
+		resp.Id,
+		resp.Name,
+		resp.CreatedAt.AsTime().Format(time.RFC3339),
+		resp.UpdatedAt.AsTime().Format(time.RFC3339),
+	)
 }
 
-func handleUpdate(ctx context.Context, client pb.PubSubServiceClient) {
-	args := flag.Args()
-	if len(args) < 2 {
-		fmt.Println("Update requires: --update 'old-name' 'new-name'")
-		os.Exit(1)
-	}
-
-	oldName, newName := args[0], args[1]
+func updateTopicHandler(ctx context.Context, client pb.PubSubServiceClient, id, newName string) {
 	resp, err := client.UpdateTopic(ctx, &pb.UpdateTopicRequest{
-		Id:      oldName,
+		Id:      id,
 		NewName: newName,
 	})
 	if err != nil {
 		log.Fatalf("Update failed: %v", err)
 	}
-	fmt.Printf("Updated:\nOld Name: %s\nNew Name: %s\n", oldName, resp.Name)
+
+	fmt.Printf("Updated topic:\nID: %s\nNew Name: %s\n", resp.Id, resp.Name)
 }
 
-func deleteTopic(ctx context.Context, client pb.PubSubServiceClient, name string) {
-	resp, err := client.DeleteTopic(ctx, &pb.DeleteTopicRequest{Id: name})
+func deleteTopicHandler(ctx context.Context, client pb.PubSubServiceClient, id string) {
+	resp, err := client.DeleteTopic(ctx, &pb.DeleteTopicRequest{Id: id})
 	if err != nil {
 		log.Fatalf("Delete failed: %v", err)
 	}
+
 	if resp.Success {
-		fmt.Printf("Deleted: %s\n", name)
+		fmt.Printf("Deleted topic: %s\n", id)
 	}
 }
 
-func listTopics(ctx context.Context, client pb.PubSubServiceClient) {
+func listTopicsHandler(ctx context.Context, client pb.PubSubServiceClient) {
 	resp, err := client.ListTopics(ctx, &pb.Empty{})
 	if err != nil {
 		log.Fatalf("List failed: %v", err)
 	}
 
-	fmt.Println("Topics:")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tNAME\tCREATED\tUPDATED")
 	for _, t := range resp.Topics {
-		fmt.Printf("• %-20s (ID: %s)\n", t.Id, t.Id)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			t.Id,
+			t.Name,
+			t.CreatedAt.AsTime().Format(time.RFC3339),
+			t.UpdatedAt.AsTime().Format(time.RFC3339),
+		)
 	}
+	w.Flush()
 }
