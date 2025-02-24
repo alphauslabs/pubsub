@@ -11,7 +11,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	broadcaststruct "github.com/alphauslabs/pubsub/broadcast_topic-sub"
+	broadcaststruct "github.com/alphauslabs/pubsub/broadcaststruct"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
