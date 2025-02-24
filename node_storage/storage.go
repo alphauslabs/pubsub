@@ -1,4 +1,4 @@
-package storage
+package main
 
 import (
 	"sync"
@@ -41,6 +41,30 @@ func (s *Storage) StoreMessage(msg *pb.Message) error {
 	return nil
 }
 
+func (s *Storage) StoreTopic(topic *pb.Topic) error {
+	if topic == nil || topic.TopicId == "" {
+		return ErrInvalidTopic
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.topics[topic.TopicId] = topic
+	return nil
+}
+
+func (s *Storage) StoreSubscription(sub *pb.Subscription) error {
+	if sub == nil || sub.Id == "" {
+		return ErrInvalidSubscription
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.subscriptions[sub.Id] = sub
+	return nil
+}
+
 func (s *Storage) GetMessage(id string) (*pb.Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -66,43 +90,4 @@ func (s *Storage) GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
 		messages = append(messages, msg)
 	}
 	return messages, nil
-}
-
-/*
-func (s *Storage) UpdateMessageProcessed(id string, processed bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	msg, exists := s.messages[id]
-	if !exists {
-		return ErrMessageNotFound
-	}
-
-	msg.Processed = processed
-	return nil
-}
-*/
-
-func (s *Storage) StoreTopic(topic *pb.Topic) error {
-	if topic == nil || topic.TopicId == "" {
-		return ErrInvalidTopic
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.topics[topic.TopicId] = topic
-	return nil
-}
-
-func (s *Storage) StoreSubscription(sub *pb.Subscription) error {
-	if sub == nil || sub.Id == "" {
-		return ErrInvalidSubscription
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.subscriptions[sub.Id] = sub
-	return nil
 }
