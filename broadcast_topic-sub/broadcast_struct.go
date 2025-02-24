@@ -2,62 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
 	"cloud.google.com/go/spanner"
 	"github.com/flowerinthenight/hedge/v2"
 )
-
-var lastCheckedTime time.Time // track the last Spanner query time to fetch only new updates
-
-/*func main() {
-	ctx := context.Background()
-
-	// spanner Client
-	spannerClient, err := spanner.NewClient(ctx, "projects/labs-169405/instances/alphaus-dev/databases/main")
-	if err != nil {
-		log.Fatalf("Failed to create Spanner client: %v", err)
-		return
-	}
-	defer spannerClient.Close()
-
-	// leader election
-	op := hedge.New(
-		spannerClient,
-		":50053",
-		"locktable",
-		"pubsublock",
-		"logtable",
-	)
-
-	done := make(chan error, 1)
-	go op.Run(ctx, done)
-
-	// distributre topic-sub struct
-	go distributeStruct(op, spannerClient)
-
-	<-done
-}
-*/
-// leader fetches and broadcasts topic-subs updates every 10 seconds
-func distributeStruct(op *hedge.Hedge, spannerClient *spanner.Client) {
-	lastCheckedTime = time.Now().Add(-10 * time.Second) // Start 10 seconds earlier
-	ticker := time.NewTicker(10 * time.Second)          // ticker for periodic execution
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// check if this node is the leader
-		l, _ := op.HasLock()
-		if l {
-			log.Println("Leader: Fetching and broadcasting topic-subscription updates...")
-			topicSub := fetchUpdatedTopicSub(spannerClient, &lastCheckedTime)
-			broadcastTopicSubStruct(op, topicSub)
-		} else {
-			log.Println("Follower: No action needed.")
-		}
-	}
-}
 
 // query Spanner for only updated topics and subscriptions
 func fetchUpdatedTopicSub(client *spanner.Client, lastCheckedTime *time.Time) map[string][]string {
@@ -85,7 +36,7 @@ func fetchUpdatedTopicSub(client *spanner.Client, lastCheckedTime *time.Time) ma
 		var topic string
 		var subscriptions []string
 		if err := row.Columns(&topic, &subscriptions); err != nil {
-			log.Printf("Error reading row: %v", err)
+			log.Printf("Error reading Spanner row (topic-subscription query): %v", err)
 			continue
 		}
 		topicSub[topic] = subscriptions
@@ -101,6 +52,12 @@ func fetchUpdatedTopicSub(client *spanner.Client, lastCheckedTime *time.Time) ma
 func broadcastTopicSubStruct(op *hedge.Hedge, topicSub map[string][]string) {
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
+		return
+	}
+
+	data, err := json.Marshal(topicSub)
+	if err != nil {
+		log.Printf("Error marshalling topic-subscription: %v", err)
 		return
 	}
 
