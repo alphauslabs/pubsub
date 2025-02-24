@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"sync"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -9,16 +10,14 @@ import (
 type Storage struct {
 	mu            sync.RWMutex
 	messages      map[string]*pb.Message
-	topics        map[string]*pb.Topic
-	subscriptions map[string]*pb.Subscription
+	topicSubs     map[string][]string
 	topicMessages map[string]map[string]*pb.Message
 }
 
 func NewStorage() *Storage {
 	return &Storage{
 		messages:      make(map[string]*pb.Message),
-		topics:        make(map[string]*pb.Topic),
-		subscriptions: make(map[string]*pb.Subscription),
+		topicSubs:     make(map[string][]string),
 		topicMessages: make(map[string]map[string]*pb.Message),
 	}
 }
@@ -41,27 +40,20 @@ func (s *Storage) StoreMessage(msg *pb.Message) error {
 	return nil
 }
 
-func (s *Storage) StoreTopic(topic *pb.Topic) error {
-	if topic == nil || topic.Id == "" {
-		return ErrInvalidTopic
+func (s *Storage) StoreTopicSubscriptions(data []byte) error {
+	if len(data) == 0 {
+		return ErrInvalidTopicSub
+	}
+
+	var topicSubs map[string][]string
+	if err := json.Unmarshal(data, &topicSubs); err != nil {
+		return err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.topics[topic.Id] = topic
-	return nil
-}
-
-func (s *Storage) StoreSubscription(sub *pb.Subscription) error {
-	if sub == nil || sub.Id == "" {
-		return ErrInvalidSubscription
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.subscriptions[sub.Id] = sub
+	s.topicSubs = topicSubs
 	return nil
 }
 
@@ -90,4 +82,18 @@ func (s *Storage) GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
 		messages = append(messages, msg)
 	}
 	return messages, nil
+}
+
+func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	subs, exists := s.topicSubs[topicID]
+	if !exists {
+		return nil, ErrTopicNotFound
+	}
+
+	result := make([]string, len(subs))
+	copy(result, subs)
+	return result, nil
 }
