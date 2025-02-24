@@ -13,7 +13,7 @@ require (
 	cloud.google.com/go/monitoring v1.23.0 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.2 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 // indirect
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250219071234-ddc9b50dc09b
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250224043151-d2fff9627a86
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.3 // indirect
