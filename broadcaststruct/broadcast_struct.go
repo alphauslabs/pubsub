@@ -81,6 +81,33 @@ func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 	}
 }
 
+// StartDistributor initializes and starts the topic-subscription distributor
+func StartDistributor(op *hedge.Op, spannerClient *spanner.Client) {
+	lastCheckedTime := time.Now().Add(-10 * time.Second) // Start 10 seconds earlier
+	go distributeStruct(op, spannerClient, &lastCheckedTime)
+}
+
+// leader fetches and broadcasts topic-subs updates every 10 seconds
+func distributeStruct(op *hedge.Op, spannerClient *spanner.Client, lastCheckedTime *time.Time) {
+	ticker := time.NewTicker(10 * time.Second) // ticker for periodic execution
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// check if this node is the leader
+			l, _ := op.HasLock()
+			if l {
+				log.Println("Leader: Fetching and broadcasting topic-subscription updates...")
+				topicSub := fetchUpdatedTopicSub(spannerClient, lastCheckedTime)
+				broadcastTopicSubStruct(op, topicSub)
+			} else {
+				log.Println("Follower: No action needed.")
+			}
+		}
+	}
+}
+
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
 func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 data, err := json.Marshal(topicSub)
