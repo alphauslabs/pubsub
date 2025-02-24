@@ -28,6 +28,10 @@ func main() {
 		return
 	}
 
+	app := &PubSub{
+		Client: spannerClient,
+	}
+
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
@@ -35,24 +39,19 @@ func main() {
 		"pubsublock",
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
-			nil,
-			func(data interface{}, msg []byte) ([]byte, error) {
-				log.Println("[leader] received through send():", string(msg))
-				return []byte("hello " + string(msg)), nil
-			},
+			app,
+			send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
-			nil,
-			func(data interface{}, msg []byte) ([]byte, error) {
-				log.Println("[broadcast] received:", string(msg))
-				return []byte("broadcast " + string(msg)), nil
-			},
+			app,
+			broadcast,
 		),
 	)
 
+	app.Op = op
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		if err := run(ctx, &server{client: spannerClient, op: op}); err != nil {
+		if err := run(ctx, &server{PubSub: app}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
@@ -77,6 +76,7 @@ func main() {
 	}()
 
 	sigCh := make(chan os.Signal, 1)
+
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
 
