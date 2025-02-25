@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	// Connect to the gRPC server
-	conn, err := grpc.Dial("35.243.83.115:50051", grpc.WithInsecure(), grpc.WithBlock())
+	// Connect to the gRPC serve
+	conn, err := grpc.Dial("10.146.0.43:50051", grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("Failed to connect to server: %v", err)
 	}
