@@ -2,7 +2,6 @@ package storage
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -19,7 +18,6 @@ type Storage struct {
 	messages      map[string]*pb.Message
 	topicSubs     map[string][]string
 	topicMessages map[string]map[string]*pb.Message
-	messageQueue  map[string]*QueuedMessage
 }
 
 func NewStorage() *Storage {
@@ -27,50 +25,7 @@ func NewStorage() *Storage {
 		messages:      make(map[string]*pb.Message),
 		topicSubs:     make(map[string][]string),
 		topicMessages: make(map[string]map[string]*pb.Message),
-		messageQueue:  make(map[string]*QueuedMessage),
 	}
-}
-
-func (s *Storage) QueueMessage(msg *QueuedMessage) error {
-	if msg == nil || msg.Id == "" {
-		return ErrInvalidMessage
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.messageQueue[msg.Id]; exists {
-		return ErrDuplicateMessage
-	}
-
-	s.messageQueue[msg.Id] = msg
-	return nil
-}
-
-func (s *Storage) ProcessQueue() error {
-	s.mu.Lock()
-	queuedMessages := make([]*QueuedMessage, 0, len(s.messageQueue))
-	for _, msg := range s.messageQueue {
-		queuedMessages = append(queuedMessages, msg)
-	}
-	s.messageQueue = make(map[string]*QueuedMessage)
-	s.mu.Unlock()
-
-	for _, qMsg := range queuedMessages {
-		pbMsg := &pb.Message{
-			Id:      qMsg.Id,
-			Topic:   qMsg.Topic,
-			Payload: qMsg.Payload,
-		}
-
-		if err := s.StoreMessage(pbMsg); err != nil {
-			log.Printf("Failed to store message %s: %v", qMsg.Id, err)
-			s.QueueMessage(qMsg)
-			continue
-		}
-	}
-
-	return nil
 }
 
 func (s *Storage) StoreMessage(msg *pb.Message) error {
