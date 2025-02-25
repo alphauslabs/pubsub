@@ -84,12 +84,13 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				}
 
 				// Broadcast
-				if err := op.Broadcast(ctx, broadcastData); err != nil {
-					log.Printf("Error broadcasting message: %v", err)
-					continue
+				if err := op.Broadcast(ctx, broadcastData); err != nil { // Success case
+					log.Printf("Successfully broadcast message: %s", msg.Id)
+					continue // Skip next message
 				}
 
-				log.Printf("Successfully broadcast message: %s", msg.Id)
+				// Error case (err == nil)
+				log.Printf("Error broadcasting message: No Acknowledgment")
 			}
 		}
 	}
