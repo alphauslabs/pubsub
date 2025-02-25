@@ -6,7 +6,7 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
-	storage "github.com/alphauslabs/pubsub/node_storage"
+	storage "github.com/alphauslabs/pubsub/storage"
 )
 
 const (
