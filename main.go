@@ -11,8 +11,8 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	broadcaststruct "github.com/alphauslabs/pubsub/broadcaststruct"
-	queryunprocessed "github.com/alphauslabs/pubsub/queryunprocessed"
+	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/broadcast"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -30,7 +30,7 @@ func main() {
 		return
 	}
 
-	app := &PubSub{
+	app := &app.PubSub{
 		Client: spannerClient,
 	}
 
@@ -46,7 +46,7 @@ func main() {
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			app,
-			broadcast,
+			broadcast.Broadcast,
 		),
 	)
 
@@ -61,8 +61,10 @@ func main() {
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
-	broadcaststruct.StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
-	go queryunprocessed.ProcessUnprocessedMessages(ctx, op, spannerClient)
+	// Start our fetching and broadcast routine for topic-subscription structure.
+	go broadcast.StartDistributor(op, spannerClient)
+	// Start our fetching and broadcast routine for unprocessed messages.
+	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
 	sigCh := make(chan os.Signal, 1)
 

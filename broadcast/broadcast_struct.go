@@ -1,4 +1,4 @@
-package broadcaststruct
+package broadcast
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.Time) {
 	ctx := context.Background()
 	stmt := spanner.Statement{
-		SQL: `SELECT topic_id, ARRAY_AGG(subscription) AS subscriptions
+		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions
               FROM Subscriptions
               WHERE updatedAt > @last_checked_time
-              GROUP BY topic_id`,
+              GROUP BY topic`,
 		Params: map[string]interface{}{"last_checked_time": *lastChecked},
 	}
 
@@ -39,10 +39,10 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 		topicSub[topic] = subscriptions
 	}
 	*lastChecked = time.Now()
-	log.Println("Leader: Fetched topic subscriptions:", topicSub)
+	log.Println("[Leader] Fetched topic subscriptions:", topicSub)
 
 	if len(topicSub) == 0 {
-		log.Println("Leader: No new updates, skipping broadcast.")
+		log.Println("[Leader] No new updates, skipping broadcast.")
 		return
 	}
 
@@ -57,24 +57,22 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
 		}
 	}
-	log.Println("Leader: Broadcast completed.")
+	log.Println("[Leader] Topic-sub structure broadcast completed.")
 }
 
 // StartDistributor initializes the distributor that periodically checks for updates.
 func StartDistributor(op *hedge.Op, client *spanner.Client) {
 	lastChecked := time.Now().Add(-10 * time.Second)
 	ticker := time.NewTicker(10 * time.Second)
-	go func() {
-		defer ticker.Stop()
-		for range ticker.C {
-			if hasLock, _ := op.HasLock(); hasLock {
-				log.Println("Leader: Processing updates...")
-				fetchAndBroadcast(op, client, &lastChecked)
-			} else {
-				log.Println("Follower: No action needed.")
-			}
+	defer ticker.Stop()
+	for range ticker.C {
+		if hasLock, _ := op.HasLock(); hasLock {
+			log.Println("Leader: Processing updates...")
+			fetchAndBroadcast(op, client, &lastChecked)
+		} else {
+			log.Println("Follower: No action needed.")
 		}
-	}()
+	}
 }
 
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
