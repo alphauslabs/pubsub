@@ -1,25 +1,3 @@
-//BRIEF DOC FOR SUBHANDLER PACKAGE
-// Subscriber Handler:
-
-// Maintains a map of subscription IDs to message channels.
-
-// Streams messages to subscribers when available.
-
-// Handles client disconnections gracefully.
-
-// Keep-Alive:
-
-// Sends periodic heartbeats ("heartbeat" messages) to subscribers every 30 seconds.
-
-// Ensures the connection remains open during periods of inactivity.
-
-// Acknowledge RPC:
-
-// This is a no-op in this implementation since visibility timeout handling is managed by another team member.
-
-// Error Handling:
-
-// Logs errors and handles client disconnections gracefully.
 package main
 
 import (
@@ -31,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 )
@@ -83,13 +62,6 @@ func (s *SubscriberHandler) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub
 			// Handle disconnection
 			log.Printf("Subscriber for subscription %s disconnected", subscriptionID)
 			return nil
-
-		case <-time.After(20 * time.Second):
-			// Send a heartbeat to keep the connection alive
-			if err := stream.Send(&pb.Message{Payload: "heartbeat ong"}); err != nil {
-				log.Printf("Failed to send heartbeat to subscriber %s: %v", subscriptionID, err)
-				return err
-			}
 		}
 	}
 }
@@ -105,11 +77,17 @@ func main() {
 	// Initialize the subscriber handler
 	handler := NewSubscriberHandler()
 
-	// Start the gRPC server
+	// Start the gRPC server with verbose keep-alive logging
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    10 * time.Second, // Send keepalive pings every 10 seconds
 			Timeout: 20 * time.Second, // Wait 20 seconds for a ping ack before closing the connection
+		}),
+		grpc.ChainStreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			// Log keep-alive pings
+			md, _ := metadata.FromIncomingContext(ss.Context())
+			log.Printf("Keep-alive ping received: %v", md)
+			return handler(srv, ss)
 		}),
 	)
 	pb.RegisterPubSubServiceServer(grpcServer, handler)
