@@ -16,5 +16,8 @@ type PubSub struct {
 	 
 	 // Timer tracking
 	 timeoutTimers  sync.Map    // messageID -> *time.Timer
+<<<<<<< HEAD
 	 storage         *storage.Storage // jansen's storage
+=======
+>>>>>>> origin/kate_branch
 }

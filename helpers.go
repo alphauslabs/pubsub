@@ -12,6 +12,11 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+<<<<<<< HEAD
+=======
+    "github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/broadcast"
+>>>>>>> origin/kate_branch
 )
 
 // MessageLockInfo tracks lock state across nodes
@@ -240,6 +245,7 @@ func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
 
 	return nil
 }
+<<<<<<< HEAD
 
 // //HELPERFUNCTIONS//
 // // validateTopicSubscription checks if subscription exists in memory
@@ -443,3 +449,5 @@ func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
 
 // 	log.Printf("[HandleTimeoutExtension] Applied timeout extension for message: %s", messageID)
 // }
+=======
+>>>>>>> origin/kate_branch
