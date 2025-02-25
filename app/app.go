@@ -9,5 +9,5 @@ import (
 type PubSub struct {
 	Op      *hedge.Op
 	Client  *spanner.Client
-	storage *storage.Storage
+	Storage *storage.Storage
 }
