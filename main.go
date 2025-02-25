@@ -96,7 +96,7 @@ func run(ctx context.Context, serverconf *server) error {
 		MaxConnectionIdle:     0,                // Never close the connection due to inactivity
 		MaxConnectionAge:      0,                // Never close the connection regardless of duration
 		MaxConnectionAgeGrace: 0,                // No grace period needed since no forced closure
-		Time:                  10 * time.Minute, // Send keepalive ping every 10 minutes to maintain NAT/firewall state
+		Time:                  30 * time.Second, // Send keepalive ping per interval to maintain NAT/firewall state
 		Timeout:               20 * time.Second, // Wait 20 seconds for a ping response before considering the connection dead
 	}
 	s := grpc.NewServer(
