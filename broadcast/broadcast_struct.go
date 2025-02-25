@@ -1,4 +1,4 @@
-package broadcaststruct
+package broadcast
 
 import (
 	"context"
@@ -64,17 +64,15 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 func StartDistributor(op *hedge.Op, client *spanner.Client) {
 	lastChecked := time.Now().Add(-10 * time.Second)
 	ticker := time.NewTicker(10 * time.Second)
-	go func() {
-		defer ticker.Stop()
-		for range ticker.C {
-			if hasLock, _ := op.HasLock(); hasLock {
-				log.Println("Leader: Processing updates...")
-				fetchAndBroadcast(op, client, &lastChecked)
-			} else {
-				log.Println("Follower: No action needed.")
-			}
+	defer ticker.Stop()
+	for range ticker.C {
+		if hasLock, _ := op.HasLock(); hasLock {
+			log.Println("Leader: Processing updates...")
+			fetchAndBroadcast(op, client, &lastChecked)
+		} else {
+			log.Println("Follower: No action needed.")
 		}
-	}()
+	}
 }
 
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
