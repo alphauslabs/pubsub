@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/google/uuid"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type server struct {
@@ -19,11 +22,11 @@ type server struct {
 
 const (
 	MessagesTable = "Messages"
-	TopicsTable = "Topics"
+	TopicsTable   = "Topics"
 )
 
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	if in.Topic == "" {
+	if in.TopicId == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
@@ -42,7 +45,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
 		[]interface{}{
 			messageID,
-			in.Topic,
+			in.TopicId,
 			in.Payload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
@@ -74,16 +77,18 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 }
 
 func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
-	if req.Name = "" {
+	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Topic name is required(JT)")
 	}
 
 	topicID := uuid.New().String()
-	m := spanner.Insert("Topics"),
-	[]string{"id", "name", "createdAt", "updatedAt"},
-	[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp}
+	m := spanner.Insert(
+		"Topics",
+		[]string{"id", "name", "createdAt", "updatedAt"},
+		[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
+	)
 
-	_, err = s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
@@ -99,7 +104,6 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 	return topic, nil
 }
 
-
 func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Topic, error) {
 	if req.Id == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
@@ -110,7 +114,7 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 		Params: map[string]interface{}{"id": req.Id},
 	}
 
-	iter := s.SpannerClient.Single().Query(ctx, stmt)
+	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
 	row, err := iter.Next()
@@ -165,7 +169,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
 	)
 
-	_, err = s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
 	}
@@ -193,7 +197,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	m := spanner.Delete("Topics", spanner.Key{req.Id})
-	_, err := s.SpannerClient.Apply(ctx, []*spanner.Mutation{m})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 	}
@@ -202,7 +206,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 
 func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsResponse, error) {
 	stmt := spanner.Statement{SQL: `SELECT id, name, createdAt, updatedAt FROM Topics`}
-	iter := s.SpannerClient.Single().Query(ctx, stmt)
+	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
 	var topics []*pb.Topic
@@ -241,7 +245,7 @@ func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
 		Params: map[string]interface{}{"name": name},
 	}
 
-	iter := s.SpannerClient.Single().Query(ctx, stmt)
+	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
 	_, err := iter.Next()
@@ -261,6 +265,7 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 	return timestamppb.New(t.Time)
 }
 
+// not sure with this ---
 func (s *server) notifyLeader(ctx context.Context, flag int) error {
 	data := map[string]interface{}{
 		"flag": flag,
@@ -270,7 +275,7 @@ func (s *server) notifyLeader(ctx context.Context, flag int) error {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	resp := s.HedgeOp.Broadcast(ctx, jsonData)
+	resp := s.Op.Broadcast(ctx, jsonData)
 	for _, r := range resp {
 		if r.Error != nil {
 			return fmt.Errorf("failed to broadcast to %s: %w", r.Id, r.Error)
