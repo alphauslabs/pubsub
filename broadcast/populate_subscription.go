@@ -7,20 +7,18 @@ import (
 	"time"
 
 	"cloud.google.com/go/spanner"
-	"google.golang.org/api/option"
 )
 
 const (
-	database        = "projects/labs-169405/instances/alphaus-dev/databases/main"
-	table           = "Subscriptions"
-	credentialsFile = "/home/jennifertongco/service-account.json"
+	database = "projects/labs-169405/instances/alphaus-dev/databases/main"
+	table    = "Subscriptions"
 )
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client, err := spanner.NewClient(ctx, database, option.WithCredentialsFile(credentialsFile))
+	client, err := spanner.NewClient(ctx, database)
 	if err != nil {
 		log.Fatalf("Failed to create Spanner client: %v", err)
 	}
