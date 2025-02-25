@@ -1,4 +1,4 @@
-package main
+package queryunprocessed
 
 import (
 	"context"
@@ -6,37 +6,16 @@ import (
 	"log"
 	"time"
 
-	//"sync" // Commented: used only for mutex
-
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/api/iterator"
 )
 
-// Commented: Not my task
-
-// type QueuedMessage struct {
-//     Id      string `json:"id"`
-//     Topic   string `json:"topic"`
-//     Payload string `json:"payload"`
-// }
-
-// type MessageQueue struct {
-//     messages map[string]*QueuedMessage // changed slices to map with message ID as key
-//     mu       sync.RWMutex
-// }
-
-// func NewMessageQueue() *MessageQueue {
-//     return &MessageQueue{
-//         messages: make(map[string]*QueuedMessage),
-//     }
-// }
-
-func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
-	// Commented: Not my task
-	// queue := NewMessageQueue()
-
+// Todo: Add status to messages table if a message is broadcasted, this is to prevent re-broadcasting
+// and will lessen unnecessary network calls.
+// Currently, all messages are broadcasted to all node every tick.
+func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
 	// used ticker instead of sleep
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -52,7 +31,7 @@ func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient
 				continue
 			}
 
-			//// Query unprocessed messages
+			// Query unprocessed messages
 			stmt := spanner.Statement{
 				SQL: `SELECT id, topic, payload 
                       FROM Messages
@@ -78,16 +57,6 @@ func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient
 					continue
 				}
 
-				// Commented: Not my task
-				// Store in map using message ID as key
-				//    queue.mu.Lock()
-				//    queue.messages[msg.Id] = &QueuedMessage{
-				//        Id:      msg.Id,
-				//        Topic:   msg.Topic,
-				//        Payload: msg.Payload,
-				//    }
-				// queue.mu.Unlock()
-
 				// define message structure
 				messageInfo := struct {
 					ID      string `json:"id"`
@@ -106,10 +75,12 @@ func ProcessUnprocessedMessages(ctx context.Context, op *hedge.Op, spannerClient
 					continue
 				}
 
-				//broadcast JSON msg to all VMs
-				if err := op.Broadcast(ctx, data); err != nil {
-					log.Printf("Error broadcasting message: %v", err)
-					continue
+				//broadcast JSON msg to all Nodes
+				resp := op.Broadcast(ctx, data)
+				for _, r := range resp {
+					if r.Error != nil {
+						log.Printf("Error broadcasting message: %v", r.Error)
+					}
 				}
 
 				log.Printf("Successfully broadcast message: %s", msg.Id)

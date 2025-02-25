@@ -11,7 +11,8 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	broadcaststruct "github.com/alphauslabs/pubsub/broadcaststruct"
+	ts "github.com/alphauslabs/pubsub/broadcaststruct"
+	m "github.com/alphauslabs/pubsub/queryunprocessed"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -60,7 +61,11 @@ func main() {
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
-	broadcaststruct.StartDistributor(op, spannerClient) // leader will distribute the topic-sub structure to the follower nodes
+	// Start our fetching and broadcast routine for topic-subscription structure.
+	go ts.StartDistributor(op, spannerClient)
+
+	// Start our fetching and broadcast routine for unprocessed messages.
+	go m.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
 	sigCh := make(chan os.Signal, 1)
 
