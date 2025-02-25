@@ -5,27 +5,19 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+	"fmt"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-<<<<<<< HEAD
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
-=======
->>>>>>> origin/kate_branch
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-    "github.com/alphauslabs/pubsub/app"
-	"github.com/alphauslabs/pubsub/broadcast"
 )
 
 type server struct {
-<<<<<<< HEAD
 	*app.PubSub
-=======
-	*PubSub
->>>>>>> origin/kate_branch
 	pb.UnimplementedPubSubServiceServer
 }
 
@@ -43,10 +35,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 	b, _ := json.Marshal(in)
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/kate_branch
 	l, _ := s.Op.HasLock()
 	if l {
 		log.Println("[Publish-leader] Received message:\n", string(b))
@@ -56,7 +44,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
-<<<<<<< HEAD
     MessagesTable,
     []string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
     []interface{}{
@@ -70,35 +57,16 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
     },
 )
 
-=======
-		MessagesTable,
-		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
-		[]interface{}{
-			messageID,
-			in.Topic,
-			in.Payload,
-			spanner.CommitTimestamp,
-			spanner.CommitTimestamp,
-			nil,   // Initial visibilityTimeout is NULL
-			false, // Not processed yet
-		},
-	)
->>>>>>> origin/kate_branch
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
 		log.Printf("Error writing to Spanner: %v", err)
 		return nil, err
 	}
 
-<<<<<<< HEAD
 	// broadcast message
 	bcastin := broadcast.BroadCastInput{
-		Type: "message",
-=======
-	// broadcast message - using the correct message Type constant
-	bcastin := broadCastInput{
-		Type: message,
->>>>>>> origin/kate_branch
+		Type: broadcast.message,
 		Msg:  b,
 	}
 	bin, _ := json.Marshal(bcastin)
@@ -171,8 +139,8 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		return nil, err
 	}
 	// Broadcast delete to all nodes - format matching handleBroadcastedMsg
-	broadcastData := broadCastInput{
-		Type: message,
+	broadcastData := broadcast.BroadCastInput{
+		Type: broadcast.msgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 
@@ -193,7 +161,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 	if !ok {
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
-	info := lockInfo.(MessageLockInfo)
+	info := lockInfo.(broadcast.MessageLockInfo)
 	if !info.Locked {
 		return nil, status.Error(codes.FailedPrecondition, "message not locked")
 	}
@@ -202,8 +170,8 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 		return nil, status.Error(codes.PermissionDenied, "only the original lock holder can extend timeout")
 	}
 	// Broadcast new timeout - format matching handleBroadcastedMsg
-	broadcastData := broadCastInput{
-		Type: message,
+	broadcastData := BroadCastInput{
+		Type: broadcast.msgEvent,
 		Msg:  []byte(fmt.Sprintf("extend:%s:%d", in.Id, in.NewTimeout)),
 	}
 	bin, _ := json.Marshal(broadcastData)
