@@ -2,6 +2,8 @@
 *.out
 *.o
 *.a
+*.out
+temp.txt
 *.so
 *.dll
 *.dylib
