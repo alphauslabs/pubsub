@@ -14,10 +14,10 @@ import (
 func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.Time) {
 	ctx := context.Background()
 	stmt := spanner.Statement{
-		SQL: `SELECT topic_id, ARRAY_AGG(subscription) AS subscriptions
+		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions
               FROM Subscriptions
               WHERE updatedAt > @last_checked_time
-              GROUP BY topic_id`,
+              GROUP BY topic`,
 		Params: map[string]interface{}{"last_checked_time": *lastChecked},
 	}
 
