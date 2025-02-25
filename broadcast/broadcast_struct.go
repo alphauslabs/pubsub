@@ -27,26 +27,37 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 	topicSub := make(map[string][]string)
 	for {
 		row, err := iter.Next()
-		if err != nil {
+		if err == spanner.Done {
 			break
 		}
+		if err != nil {
+			log.Printf("Error iterating rows: %v", err)
+			return
+		}
+
 		var topic string
 		var subscriptions []string
 		if err := row.Columns(&topic, &subscriptions); err != nil {
 			log.Printf("Error reading row: %v", err)
 			continue
 		}
+
+		// ensure subscriptions is not nil
+		if subscriptions == nil {
+			subscriptions = []string{}
+		}
+
 		topicSub[topic] = subscriptions
 	}
-	*lastChecked = time.Now()
-	log.Println("Leader: fetched topic subscriptions:", topicSub)
 
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
 		return
 	}
 
-	// Marshal topic subscription data
+	log.Println("Leader: fetched topic subscriptions:", topicSub)
+
+	// marshal topic subscription data
 	msgData, err := json.Marshal(topicSub)
 	if err != nil {
 		log.Printf("Error marshalling topicSub: %v", err)
@@ -58,7 +69,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 		Msg:  msgData,
 	}
 
-	// Marshal BroadCastInput
+	// marshal BroadCastInput
 	broadcastData, err := json.Marshal(broadcastMsg)
 	if err != nil {
 		log.Printf("Error marshalling BroadCastInput: %v", err)
@@ -71,6 +82,8 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
 		}
 	}
+
+	*lastChecked = time.Now()
 	log.Println("Leader: Topic-subscription structure broadcast completed.")
 }
 
