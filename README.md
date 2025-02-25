@@ -1,6 +1,6 @@
 **Project Structure**
 
-- `server.go`: gRPC server implementation.
+- `server.go`: gRPC Handlers implementation.
 - `testclient/testclient.go`: gRPC test client.
 - `main.go`: Entry point of the application.
 - `go.mod`: Go module file.
