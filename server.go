@@ -8,6 +8,8 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/broadcast"
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -16,7 +18,7 @@ import (
 )
 
 type server struct {
-	*PubSub
+	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
 }
 
@@ -59,8 +61,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	// broadcast message
-	bcastin := broadCastInput{
-		Type: message,
+	bcastin := broadcast.BroadCastInput{
+		Type: "message",
 		Msg:  b,
 	}
 
@@ -201,7 +203,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 	}
-	if err := s.notifyLeader(ctx, 3); err != nil {
+	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("DeleteTopic notification failed: %v", err)
 	}
 	return &pb.DeleteTopicResponse{Success: true}, nil
@@ -271,15 +273,13 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 // not sure with this ---
 func (s *server) notifyLeader(ctx context.Context, flag int) error {
 	data := map[string]interface{}{
-		"operation": flag, // 1=create, 2=update, 3=delete
+		"operation": flag,
 	}
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
-
-	// Only send notification if we're not the leader
 	if isLeader, _ := s.Op.HasLock(); !isLeader {
 		resp := s.Op.Broadcast(ctx, jsonData)
 		for _, r := range resp {
