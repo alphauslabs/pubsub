@@ -8,44 +8,69 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/flowerinthenight/hedge/v2"
+	"google.golang.org/api/iterator"
 )
 
 // fetchAndBroadcast fetches updated topic-subscription data and broadcasts it if there are updates.
 func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.Time) {
 	ctx := context.Background()
+	queryTime := time.Now()
+
+	/*
+	   	stmt := spanner.Statement{
+	   		SQL: `SELECT topic_id, ARRAY_AGG(subscription) AS subscriptions
+	                 FROM Subscriptions
+	                 WHERE updatedAt > @last_checked_time
+	                 GROUP BY topic_id`,
+	   		Params: map[string]interface{}{"last_checked_time": *lastChecked},
+	   	}
+	*/
+
 	stmt := spanner.Statement{
-		SQL: `SELECT topic_id, ARRAY_AGG(subscription) AS subscriptions
-              FROM Subscriptions
-              WHERE updatedAt > @last_checked_time
-              GROUP BY topic_id`,
-		Params: map[string]interface{}{"last_checked_time": *lastChecked},
+		SQL: `SELECT t.name AS topic_name, ARRAY_AGG(s.subscriber) AS subscriptions
+			FROM Subscriptions s
+			JOIN Topics t ON s.topic_id = t.id
+			WHERE s.updatedAt > @last_checked_time
+			GROUP BY t.name`,
+		Params: map[string]interface{}{
+			"last_checked_time": *lastChecked,
+		},
 	}
 
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
 	topicSub := make(map[string][]string)
+
 	for {
 		row, err := iter.Next()
-		if err != nil {
+		if err == iterator.Done {
 			break
 		}
-		var topic string
-		var subscriptions []string
-		if err := row.Columns(&topic, &subscriptions); err != nil {
+		if err != nil {
 			log.Printf("Error reading row: %v", err)
 			continue
 		}
-		topicSub[topic] = subscriptions
+
+		var topicName string
+		var subscriptions []string
+		if err := row.Columns(&topicName, &subscriptions); err != nil {
+			log.Printf("Error parsing row: %v", err)
+			continue
+		}
+
+		topicSub[topicName] = subscriptions
 	}
-	*lastChecked = time.Now()
-	log.Println("Leader: Fetched topic subscriptions:", topicSub)
+
+	*lastChecked = queryTime
+	log.Println("Leader: Fetched topic-subscriptions structure:", topicSub)
 
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
 		return
 	}
 
+	// Convert the data to JSON for broadcasting
 	data, err := json.Marshal(topicSub)
 	if err != nil {
 		log.Printf("Error marshalling topicSub: %v", err)
@@ -71,7 +96,7 @@ func StartDistributor(op *hedge.Op, client *spanner.Client) {
 				log.Println("Leader: Processing updates...")
 				fetchAndBroadcast(op, client, &lastChecked)
 			} else {
-				log.Println("Follower: No action needed.")
+				log.Println("Follower: Not retrieving topic-subscription structure.")
 			}
 		}
 	}()
