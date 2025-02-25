@@ -2,7 +2,10 @@ package broadcast
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 )
 
@@ -32,9 +35,24 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
+	log.Println("Received message:\n", string(msg))
+	var message pb.Message
+	if err := json.Unmarshal(msg, &message); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
+	}
+
+	if err := app.Storage.StoreMessage(&message); err != nil {
+		return nil, fmt.Errorf("failed to store message: %w", err)
+	}
+
 	return nil, nil
 }
 
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
+	log.Println("Received topic-subscriptions:\n", string(msg))
+	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
+		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
+	}
+
 	return nil, nil
 }

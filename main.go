@@ -13,6 +13,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -31,7 +32,8 @@ func main() {
 	}
 
 	app := &app.PubSub{
-		Client: spannerClient,
+		Client:  spannerClient,
+		Storage: storage.NewStorage(),
 	}
 
 	op := hedge.New(
