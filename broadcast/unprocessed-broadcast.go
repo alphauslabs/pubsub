@@ -1,4 +1,4 @@
-package queryunprocessed
+package broadcast
 
 import (
 	"context"
@@ -12,11 +12,7 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// Todo: Add status to messages table if a message is broadcasted, this is to prevent re-broadcasting
-// and will lessen unnecessary network calls.
-// Currently, all messages are broadcasted to all node every tick.
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
-	// used ticker instead of sleep
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -31,7 +27,6 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				continue
 			}
 
-			// Query unprocessed messages
 			stmt := spanner.Statement{
 				SQL: `SELECT id, topic, payload 
                       FROM Messages
@@ -57,30 +52,41 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 					continue
 				}
 
-				// define message structure
+				// Structure the message
 				messageInfo := struct {
 					ID      string `json:"id"`
 					Topic   string `json:"topic"`
 					Payload string `json:"payload"`
-				}{ // fill values
+				}{
 					ID:      msg.Id,
 					Topic:   msg.Topic,
 					Payload: msg.Payload,
 				}
 
-				// conv structured msg to JSON
+				// Marshal message info
 				data, err := json.Marshal(messageInfo)
 				if err != nil {
 					log.Printf("Error marshalling message: %v", err)
 					continue
 				}
 
-				//broadcast JSON msg to all Nodes
-				resp := op.Broadcast(ctx, data)
-				for _, r := range resp {
-					if r.Error != nil {
-						log.Printf("Error broadcasting message: %v", r.Error)
-					}
+				// Create broadcast input
+				broadcastInput := BroadCastInput{
+					Type: message, // Using const from same package
+					Msg:  data,
+				}
+
+				// Marshal broadcast input
+				broadcastData, err := json.Marshal(broadcastInput)
+				if err != nil {
+					log.Printf("Error marshalling broadcast input: %v", err)
+					continue
+				}
+
+				// Broadcast
+				if err := op.Broadcast(ctx, broadcastData); err != nil {
+					log.Printf("Error broadcasting message: %v", err)
+					continue
 				}
 
 				log.Printf("Successfully broadcast message: %s", msg.Id)

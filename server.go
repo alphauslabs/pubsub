@@ -7,13 +7,15 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/broadcast"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type server struct {
-	*PubSub
+	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
 
 	visibilityTimeouts sync.Map // messageID -> VisibilityInfo
@@ -87,8 +89,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	// broadcast message
-	bcastin := broadCastInput{
-		Type: message,
+	bcastin := broadcast.BroadCastInput{
+		Type: "message",
 		Msg:  b,
 	}
 

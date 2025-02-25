@@ -1,4 +1,4 @@
-package broadcaststruct
+package broadcast
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/flowerinthenight/hedge/v2"
+	"google.golang.org/api/iterator"
 )
 
 // fetchAndBroadcast fetches updated topic-subscription data and broadcasts it if there are updates.
@@ -27,54 +28,79 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 	topicSub := make(map[string][]string)
 	for {
 		row, err := iter.Next()
-		if err != nil {
+		if err == iterator.Done {
 			break
 		}
+		if err != nil {
+			log.Printf("Error iterating rows: %v", err)
+			return
+		}
+
 		var topic string
 		var subscriptions []string
 		if err := row.Columns(&topic, &subscriptions); err != nil {
 			log.Printf("Error reading row: %v", err)
 			continue
 		}
+
+		// ensure subscriptions is not nil
+		if subscriptions == nil {
+			subscriptions = []string{}
+		}
+
 		topicSub[topic] = subscriptions
 	}
-	*lastChecked = time.Now()
-	log.Println("[Leader] Fetched topic subscriptions:", topicSub)
 
 	if len(topicSub) == 0 {
-		log.Println("[Leader] No new updates, skipping broadcast.")
+		log.Println("Leader: No new updates, skipping broadcast.")
 		return
 	}
 
-	data, err := json.Marshal(topicSub)
+	log.Println("Leader: fetched topic subscriptions:", topicSub)
+
+	// marshal topic subscription data
+	msgData, err := json.Marshal(topicSub)
 	if err != nil {
 		log.Printf("Error marshalling topicSub: %v", err)
 		return
 	}
 
-	for _, r := range op.Broadcast(ctx, data) {
+	broadcastMsg := BroadCastInput{
+		Type: topicsub,
+		Msg:  msgData,
+	}
+
+	// marshal BroadCastInput
+	broadcastData, err := json.Marshal(broadcastMsg)
+	if err != nil {
+		log.Printf("Error marshalling BroadCastInput: %v", err)
+		return
+	}
+
+	// broadcast message
+	for _, r := range op.Broadcast(ctx, broadcastData) {
 		if r.Error != nil {
 			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
 		}
 	}
-	log.Println("[Leader] Topic-sub structure broadcast completed.")
+
+	*lastChecked = time.Now()
+	log.Println("Leader: Topic-subscription structure broadcast completed.")
 }
 
 // StartDistributor initializes the distributor that periodically checks for updates.
 func StartDistributor(op *hedge.Op, client *spanner.Client) {
 	lastChecked := time.Now().Add(-10 * time.Second)
 	ticker := time.NewTicker(10 * time.Second)
-	go func() {
-		defer ticker.Stop()
-		for range ticker.C {
-			if hasLock, _ := op.HasLock(); hasLock {
-				log.Println("Leader: Processing updates...")
-				fetchAndBroadcast(op, client, &lastChecked)
-			} else {
-				log.Println("Follower: No action needed.")
-			}
+	defer ticker.Stop()
+	for range ticker.C {
+		if hasLock, _ := op.HasLock(); hasLock {
+			log.Println("Leader: Processing updates...")
+			fetchAndBroadcast(op, client, &lastChecked)
+		} else {
+			log.Println("Follower: No action needed.")
 		}
-	}()
+	}
 }
 
 /* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
