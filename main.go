@@ -11,6 +11,8 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	ts "github.com/alphauslabs/pubsub/broadcaststruct"
+	m "github.com/alphauslabs/pubsub/queryunprocessed"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -48,16 +50,22 @@ func main() {
 		),
 	)
 
+	app.Op = op
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		if err := run(ctx, &server{client: spannerClient, op: op}); err != nil {
+		if err := run(ctx, &server{PubSub: app}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
 
-	app.Op = op
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
+
+	// Start our fetching and broadcast routine for topic-subscription structure.
+	go ts.StartDistributor(op, spannerClient)
+
+	// Start our fetching and broadcast routine for unprocessed messages.
+	go m.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
 	sigCh := make(chan os.Signal, 1)
 
