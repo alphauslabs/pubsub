@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"google.golang.org/grpc"
@@ -10,7 +11,7 @@ import (
 
 func main() {
 	// Connect to the gRPC server
-	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial("35.243.83.115:50051", grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("Failed to connect to server: %v", err)
 	}
@@ -27,6 +28,9 @@ func main() {
 
 	log.Printf("Subscribed to subscription ID: %s", subscriptionID)
 
+	// Start the timer
+	startTime := time.Now()
+
 	// Listen for messages
 	for {
 		msg, err := stream.Recv()
@@ -34,6 +38,10 @@ func main() {
 			log.Fatalf("Failed to receive message: %v", err)
 		}
 
-		log.Printf("Received message: %s", msg.Payload)
+		// Calculate the elapsed time
+		elapsedTime := time.Since(startTime)
+
+		// Print the received message along with the elapsed time on the same line
+		log.Printf("Received message: %s [Connection Time: %v]", msg.Payload, elapsedTime)
 	}
 }
