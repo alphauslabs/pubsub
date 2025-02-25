@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time" // Needed for duration constants
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -16,8 +17,11 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 )
+
+// Assuming your server type is defined as follows:
 
 var port = flag.String("port", ":50051", "Main gRPC server port")
 
@@ -69,7 +73,6 @@ func main() {
 	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
 	sigCh := make(chan os.Signal, 1)
-
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
 
@@ -84,10 +87,25 @@ func run(ctx context.Context, serverconf *server) error {
 		return err
 	}
 
-	s := grpc.NewServer()
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             5 * time.Second,
+		PermitWithoutStream: true,
+	}
+
+	kasp := keepalive.ServerParameters{
+		MaxConnectionIdle:     0,                // Never close the connection due to inactivity
+		MaxConnectionAge:      0,                // Never close the connection regardless of duration
+		MaxConnectionAgeGrace: 0,                // No grace period needed since no forced closure
+		Time:                  10 * time.Minute, // Send keepalive ping every 10 minutes to maintain NAT/firewall state
+		Timeout:               20 * time.Second, // Wait 20 seconds for a ping response before considering the connection dead
+	}
+	s := grpc.NewServer(
+		grpc.KeepaliveEnforcementPolicy(kaep),
+		grpc.KeepaliveParams(kasp),
+	)
 	reflection.Register(s)
 	pb.RegisterPubSubServiceServer(s, serverconf)
-	log.Printf("gRPC Server listening on :50051")
+	log.Printf("gRPC Server listening on %s", *port)
 
 	go func() {
 		<-ctx.Done()
@@ -100,13 +118,13 @@ func run(ctx context.Context, serverconf *server) error {
 func serveHealthChecks() {
 	l, err := net.Listen("tcp", ":8080")
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("failed to listen for health checks: %v", err)
 	}
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Fatalf("failed to accept: %v", err)
+			log.Fatalf("failed to accept health check connection: %v", err)
 		}
 		conn.Close()
 	}

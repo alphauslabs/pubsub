@@ -84,10 +84,11 @@ func (s *SubscriberHandler) Acknowledge(ctx context.Context, req *pb.Acknowledge
 // logConnectionTimers periodically logs the elapsed time for each active connection
 func (s *SubscriberHandler) logConnectionTimers() {
 	for {
-		time.Sleep(60 * time.Second) // Update every 60 seconds
+		time.Sleep(1 * time.Second) // Update every 1 second
 		s.mu.Lock()
 		for subscriptionID, startTime := range s.connTimers {
 			elapsedTime := time.Since(startTime)
+			// Use \r to overwrite the current line
 			log.Printf("CONNECT CLIENT: %s [Elapsed Time: %v]", subscriptionID, elapsedTime)
 		}
 		s.mu.Unlock()
