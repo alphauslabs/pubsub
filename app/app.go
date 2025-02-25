@@ -2,7 +2,7 @@ package app
 
 import (
 	"cloud.google.com/go/spanner"
-	storage "github.com/alphauslabs/pubsub/node_storage"
+	storage "github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 )
 
