@@ -1,9 +1,11 @@
-*.bin
 *.exe
-*.dll
-*.so
-*.dylib
+*.out
 *.o
 *.a
 *.out
 temp.txt
+*.so
+*.dll
+*.dylib
+
+/pubsub
