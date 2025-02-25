@@ -3,10 +3,10 @@ package broadcast
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
-	storage "github.com/alphauslabs/pubsub/storage"
 )
 
 const (
@@ -17,12 +17,6 @@ const (
 type BroadCastInput struct {
 	Type string
 	Msg  []byte
-}
-
-func NewPubSub() *app.PubSub {
-	return &app.PubSub{
-		Storage: storage.NewStorage(),
-	}
 }
 
 var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
@@ -41,6 +35,7 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
+	log.Println("Received message:\n", string(msg))
 	var message pb.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -54,6 +49,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
+	log.Println("Received topic-subscriptions:\n", string(msg))
 	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}

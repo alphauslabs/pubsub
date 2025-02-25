@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/flowerinthenight/hedge/v2"
+	"google.golang.org/api/iterator"
 )
 
 // fetchAndBroadcast fetches updated topic-subscription data and broadcasts it if there are updates.
@@ -27,7 +28,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 	topicSub := make(map[string][]string)
 	for {
 		row, err := iter.Next()
-		if err == spanner.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
