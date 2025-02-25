@@ -39,25 +39,39 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 		topicSub[topic] = subscriptions
 	}
 	*lastChecked = time.Now()
-	log.Println("[Leader] Fetched topic subscriptions:", topicSub)
+	log.Println("Leader: fetched topic subscriptions:", topicSub)
 
 	if len(topicSub) == 0 {
-		log.Println("[Leader] No new updates, skipping broadcast.")
+		log.Println("Leader: No new updates, skipping broadcast.")
 		return
 	}
 
-	data, err := json.Marshal(topicSub)
+	// Marshal topic subscription data
+	msgData, err := json.Marshal(topicSub)
 	if err != nil {
 		log.Printf("Error marshalling topicSub: %v", err)
 		return
 	}
 
-	for _, r := range op.Broadcast(ctx, data) {
+	broadcastMsg := BroadCastInput{
+		Type: topicsub,
+		Msg:  msgData,
+	}
+
+	// Marshal BroadCastInput
+	broadcastData, err := json.Marshal(broadcastMsg)
+	if err != nil {
+		log.Printf("Error marshalling BroadCastInput: %v", err)
+		return
+	}
+
+	// broadcast message
+	for _, r := range op.Broadcast(ctx, broadcastData) {
 		if r.Error != nil {
 			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
 		}
 	}
-	log.Println("[Leader] Topic-sub structure broadcast completed.")
+	log.Println("Leader: Topic-subscription structure broadcast completed.")
 }
 
 // StartDistributor initializes the distributor that periodically checks for updates.
