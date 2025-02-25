@@ -60,7 +60,7 @@ func main() {
 func createTopicHandler(ctx context.Context, client pb.PubSubServiceClient, name string) {
 	resp, err := client.CreateTopic(ctx, &pb.CreateTopicRequest{Name: name})
 	if err != nil {
-		log.Fatalf("Create failed: %v", err)
+		log.Fatalf("Create failed!: %v", err)
 	}
 
 	fmt.Printf("Created topic:\nID: %s\nName: %s\n", resp.Id, resp.Name)
