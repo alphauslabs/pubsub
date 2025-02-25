@@ -20,12 +20,14 @@ type SubscriberHandler struct {
 
 	mu          sync.Mutex
 	subscribers map[string]chan *pb.Message // Map of subscription IDs to message channels
+	connTimers  map[string]time.Time        // Map of subscription IDs to connection start times
 }
 
 // NewSubscriberHandler initializes a new SubscriberHandler.
 func NewSubscriberHandler() *SubscriberHandler {
 	return &SubscriberHandler{
 		subscribers: make(map[string]chan *pb.Message),
+		connTimers:  make(map[string]time.Time),
 	}
 }
 
@@ -33,6 +35,11 @@ func NewSubscriberHandler() *SubscriberHandler {
 func (s *SubscriberHandler) Subscribe(req *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	subscriptionID := req.SubscriptionId
 	log.Printf("New subscriber connected for subscription: %s", subscriptionID)
+
+	// Record the connection start time
+	s.mu.Lock()
+	s.connTimers[subscriptionID] = time.Now()
+	s.mu.Unlock()
 
 	// Create a message channel for this subscription
 	msgChan := make(chan *pb.Message, 100)
@@ -43,6 +50,7 @@ func (s *SubscriberHandler) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub
 	defer func() {
 		s.mu.Lock()
 		delete(s.subscribers, subscriptionID)
+		delete(s.connTimers, subscriptionID) // Remove the timer when the client disconnects
 		close(msgChan)
 		s.mu.Unlock()
 		log.Printf("Subscriber disconnected for subscription: %s", subscriptionID)
@@ -73,9 +81,25 @@ func (s *SubscriberHandler) Acknowledge(ctx context.Context, req *pb.Acknowledge
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
+// logConnectionTimers periodically logs the elapsed time for each active connection
+func (s *SubscriberHandler) logConnectionTimers() {
+	for {
+		time.Sleep(10 * time.Second) // Log every 10 seconds
+		s.mu.Lock()
+		for subscriptionID, startTime := range s.connTimers {
+			elapsedTime := time.Since(startTime)
+			log.Printf("CONNECT CLIENT: %s [Elapsed Time: %v]", subscriptionID, elapsedTime)
+		}
+		s.mu.Unlock()
+	}
+}
+
 func main() {
 	// Initialize the subscriber handler
 	handler := NewSubscriberHandler()
+
+	// Start a goroutine to log connection timers periodically
+	go handler.logConnectionTimers()
 
 	// Start the gRPC server with verbose keep-alive logging
 	grpcServer := grpc.NewServer(
