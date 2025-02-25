@@ -7,12 +7,6 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 )
 
-type QueuedMessage struct {
-	Id      string `json:"id"`
-	Topic   string `json:"topic"`
-	Payload string `json:"payload"`
-}
-
 type Storage struct {
 	mu            sync.RWMutex
 	messages      map[string]*pb.Message

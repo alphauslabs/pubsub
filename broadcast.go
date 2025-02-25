@@ -20,7 +20,7 @@ type broadCastInput struct {
 
 func NewPubSub() *PubSub {
 	return &PubSub{
-		storage: storage.NewStorage(),
+		Storage: storage.NewStorage(),
 	}
 }
 
@@ -45,7 +45,7 @@ func handleBroadcastedMsg(app *PubSub, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 
-	if err := app.storage.StoreMessage(&message); err != nil {
+	if err := app.Storage.StoreMessage(&message); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}
 
@@ -53,7 +53,7 @@ func handleBroadcastedMsg(app *PubSub, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedTopicsub(app *PubSub, msg []byte) ([]byte, error) {
-	if err := app.storage.StoreTopicSubscriptions(msg); err != nil {
+	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
 	return nil, nil
