@@ -201,6 +201,9 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 	}
+	if err := s.notifyLeader(ctx, 3); err != nil {
+		log.Printf("DeleteTopic notification failed: %v", err)
+	}
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
 
@@ -268,17 +271,21 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 // not sure with this ---
 func (s *server) notifyLeader(ctx context.Context, flag int) error {
 	data := map[string]interface{}{
-		"flag": flag,
+		"operation": flag, // 1=create, 2=update, 3=delete
 	}
+
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	resp := s.Op.Broadcast(ctx, jsonData)
-	for _, r := range resp {
-		if r.Error != nil {
-			return fmt.Errorf("failed to broadcast to %s: %w", r.Id, r.Error)
+	// Only send notification if we're not the leader
+	if isLeader, _ := s.Op.HasLock(); !isLeader {
+		resp := s.Op.Broadcast(ctx, jsonData)
+		for _, r := range resp {
+			if r.Error != nil {
+				log.Printf("Failed to notify node %s: %v", r.Id, r.Error)
+			}
 		}
 	}
 	return nil
