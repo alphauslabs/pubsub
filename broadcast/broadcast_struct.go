@@ -114,9 +114,9 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 		log.Println("Leader: Distributor ticker stopped.")
 	}()
 
-	// Perform an initial broadcast of all topic-subscription structures only if this instance is the leader
+	// Perform an initial broadcast of all topic-subscription structures
 	if hasLock, _ := op.HasLock(); hasLock {
-		log.Println("Leader: Startup detected. Broadcasting full topic-subscription data.")
+		log.Println("Leader: Startup, broadcasting topic-subscription structure.")
 		fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, true) // run during startup
 	} else {
 		log.Println("Follower: Skipping startup broadcast.")
