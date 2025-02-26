@@ -1,4 +1,3 @@
-//broadcast.go
 package broadcast
 
 import (
@@ -58,7 +57,7 @@ var in BroadCastInput
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("[BROADCAST]: Received message:\n", string(msg))
+	log.Println("Received message:\n", string(msg))
 	var message pb.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -73,7 +72,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	// Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("[BROADCAST]: Received topic-subscriptions:\n", string(msg))
+	log.Println("Received topic-subscriptions:\n", string(msg))
 	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
@@ -143,8 +142,9 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 			return nil, fmt.Errorf("message already locked by another node")
 		}
 	}
-		
-		// Create new lock
+
+	 // Each node maintains its own timer
+	// Create new lock
 	lockInfo := MessageLockInfo{
 		Locked:       true,
 		Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),

@@ -82,78 +82,109 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 }
 
 // Subscribe to receive messages for a subscription
+// Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	// Validate subscription in memory first
-	subscription, err := s.validateTopicSubscription(in.SubscriptionId)
-	if err != nil {
-		return err
-	}
-	log.Printf("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
-	for {
-		select {
-		case <-stream.Context().Done():
-			return nil
-		default:
-			// Request message from the leader instead of querying directly
-			message, err := s.requestMessageFromLeader(subscription.TopicId)
-			if err != nil {
-				log.Printf("[Subscribe] No available messages for subscription: %s", in.SubscriptionId)
-				time.Sleep(time.Second) // Prevent CPU overuse
-				continue
-			}
-			// Ensure it's not already locked by another node
-			if _, exists := s.messageLocks.Load(message.Id); exists {
-				continue // Skip locked messages
-			}
-			// Try to acquire distributed lock
-			if err := s.broadcastLock(stream.Context(), message.Id, in.SubscriptionId, 30*time.Second); err != nil {
-				continue
-			}
-			// Send message to subscriber
-			if err := stream.Send(message); err != nil {
-				s.broadcastUnlock(stream.Context(), message.Id)
-				return err
-			}
-		}
-	}
+    // Validate subscription using storage
+    subs, err := s.Storage.GetSubscribtionsForTopic(in.TopicId)
+    if err != nil {
+        return status.Errorf(codes.NotFound, "Topic %s not found", in.TopicId)
+    }
+
+    found := false
+    for _, sub := range subs {
+        if sub == in.SubscriptionId {
+            found = true
+            break
+        }
+    }
+
+    if !found {
+        return status.Errorf(codes.NotFound, "Subscription %s not found", in.SubscriptionId)
+    }
+
+    log.Printf("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
+    
+    for {
+        select {
+        case <-stream.Context().Done():
+            return nil
+        default:
+            // Get messages from storage
+            messages, err := s.Storage.GetMessagesByTopic(in.TopicId)
+            if err != nil {
+                log.Printf("[Subscribe] Error getting messages: %v", err)
+                time.Sleep(time.Second)
+                continue
+            }
+
+            if len(messages) == 0 {
+                time.Sleep(time.Second)
+                continue
+            }
+
+            for _, message := range messages {
+                // Check if message is locked
+                if _, exists := s.messageLocks.Load(message.Id); exists {
+                    continue
+                }
+
+                // Try to acquire lock
+                if err := s.broadcastLock(stream.Context(), message.Id, in.SubscriptionId, 30*time.Second); err != nil {
+                    continue
+                }
+
+                // Send message
+                if err := stream.Send(message); err != nil {
+                    s.broadcastUnlock(stream.Context(), message.Id)
+                    return err
+                }
+            }
+        }
+    }
 }
 
 // Acknowledge a processed message
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
-	// Verify lock exists and is valid
-	lockInfo, ok := s.messageLocks.Load(in.Id)
-	if !ok {
-		return nil, status.Error(codes.NotFound, "message lock not found")
-	}
-	info := lockInfo.(broadcast.MessageLockInfo)
-	if !info.Locked || time.Now().After(info.Timeout) {
-		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
-	}
-	// Update Spanner
-	mutation := spanner.Update(
-		MessagesTable,
-		[]string{"id", "processed", "updatedAt"},
-		[]interface{}{in.Id, true, spanner.CommitTimestamp},
-	)
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	if err != nil {
-		return nil, err
-	}
-	// Broadcast delete to all nodes - format matching handleBroadcastedMsg
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
-	}
+    // Verify lock exists and is valid
+    lockInfo, ok := s.messageLocks.Load(in.Id)
+    if !ok {
+        return nil, status.Error(codes.NotFound, "message lock not found")
+    }
 
-	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
-	// Clean up local state
-	s.messageLocks.Delete(in.Id)
-	if timer, ok := s.timeoutTimers.Load(in.Id); ok {
-		timer.(*time.Timer).Stop()
-		s.timeoutTimers.Delete(in.Id)
-	}
-	return &pb.AcknowledgeResponse{Success: true}, nil
+    info := lockInfo.(broadcast.MessageLockInfo)
+    if !info.Locked || time.Now().After(info.Timeout) {
+        return nil, status.Error(codes.FailedPrecondition, "message lock expired")
+    }
+
+    // Get message from storage
+    msg, err := s.Storage.GetMessage(in.Id)
+    if err != nil {
+        return nil, status.Error(codes.NotFound, "message not found")
+    }
+
+    // Mark message as processed in storage
+    msg.Processed = true
+    if err := s.Storage.StoreMessage(msg); err != nil {
+        return nil, status.Error(codes.Internal, "failed to update message")
+    }
+
+    // Broadcast acknowledgment
+    broadcastData := broadcast.BroadCastInput{
+        Type: broadcast.msgEvent,
+        Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
+    }
+
+    bin, _ := json.Marshal(broadcastData)
+    s.Op.Broadcast(ctx, bin)
+
+    // Clean up local state
+    s.messageLocks.Delete(in.Id)
+    if timer, ok := s.timeoutTimers.Load(in.Id); ok {
+        timer.(*time.Timer).Stop()
+        s.timeoutTimers.Delete(in.Id)
+    }
+
+    return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
 // ModifyVisibilityTimeout extends message lock timeout
