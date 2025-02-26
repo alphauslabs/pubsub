@@ -270,7 +270,7 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 	return timestamppb.New(t.Time)
 }
 
-// not sure with this ---
+// not yet tested ----
 func (s *server) notifyLeader(ctx context.Context, flag int) error {
 	data := map[string]interface{}{
 		"operation": flag,
