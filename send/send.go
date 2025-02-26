@@ -2,6 +2,7 @@ package send
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/alphauslabs/pubsub/app"
 )
@@ -28,6 +29,7 @@ func Send(data any, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
+	log.Println("[SEND]: Received message: ", string(msg))
 	return ctrlsend[in.Type](app, in.Msg)
 }
 
