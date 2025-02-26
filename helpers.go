@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
+	// pb "github.com/alphauslabs/pubsub-proto/v1" // removed
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	// "github.com/alphauslabs/pubsub/app"
+	// "github.com/alphauslabs/pubsub/app" // removed
 	"github.com/alphauslabs/pubsub/broadcast"
 )
 
@@ -45,7 +45,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	lockInfo := broadcast.MessageLockInfo{
 		Timeout:      time.Now().Add(timeout),
 		Locked:       true,
-		NodeID:       "default-node",
+		NodeID:       s.Op.HostPort(),
 		SubscriberID: subscriberID,
 		LockHolders:  make(map[string]bool),
 	}
@@ -57,13 +57,13 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	}
 
 	// Store lock information
-	lockInfo.LockHolders[s.Op.ID()] = true
-	s.messageLocks.Store(messageID, lockInfo)
+	lockInfo.LockHolders[s.Op.HostPort()] = true
+	s.MessageLocks.Store(messageID, lockInfo)
 
 	// Broadcast lock request
 	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.ID())),
+		Type: broadcast.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
 	}
 
 	bin, _ := json.Marshal(broadcastData)
@@ -79,7 +79,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 
 	// Need majority for consensus
 	if successCount < (len(out)/2 + 1) {
-		s.messageLocks.Delete(messageID)
+		s.MessageLocks.Delete(messageID)
 		return fmt.Errorf("failed to acquire lock across majority of nodes")
 	}
 
@@ -96,9 +96,9 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 }
 
 func (s *server) handleMessageTimeout(messageID string) {
-	if lockInfo, ok := s.messageLocks.Load(messageID); ok {
+	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
 		info := lockInfo.(broadcast.MessageLockInfo)
-		if info.NodeID == s.Op.ID() && info.Locked && time.Now().After(info.Timeout) {
+		if info.NodeID == s.Op.HostPort() && info.Locked && time.Now().After(info.Timeout) {
 			s.broadcastUnlock(context.Background(), messageID)
 		}
 	}
@@ -109,49 +109,76 @@ func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 
 	// Any node can broadcast an unlock
 	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, s.Op.ID())),
+		Type: broadcast.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, s.Op.HostPort())),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	s.Op.Broadcast(ctx, bin)
 	// Clean up local state
-	s.messageLocks.Delete(messageID)
+	s.MessageLocks.Delete(messageID)
 	if timer, ok := s.timeoutTimers.Load(messageID); ok {
 		timer.(*time.Timer).Stop()
 		s.timeoutTimers.Delete(messageID)
 	}
-	log.Printf("[Unlock] Node %s unlocked message: %s", s.Op.ID(), messageID)
+	log.Printf("[Unlock] Node %s unlocked message: %s", s.Op.HostPort(), messageID)
 }
 
-// requestMessageFromLeader asks the leader node for messages
-func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
-	// Use the message type with proper format for requesting a message
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("getmessage:%s", topicID)),
-	}
+// REQUEST MESSAGE USING BROADCAST METHOD
+// func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
+//     broadcastData := broadcast.BroadCastInput{
+//         Type: broadcast.MsgEvent,
+//         Msg:  []byte(fmt.Sprintf("getmessage:%s", topicID)),
+//     }
 
-	bin, _ := json.Marshal(broadcastData)
-	resp, err := s.Op.Request(context.Background(), bin)
-	if err != nil {
-		return nil, err
-	}
+//     bin, _ := json.Marshal(broadcastData)
+//     outputs := s.Op.Broadcast(context.Background(), bin)
 
-	if len(resp) == 0 {
-		return nil, status.Error(codes.NotFound, "no messages available")
-	}
+//     // Process broadcast responses
+//     for _, output := range outputs {
+//         if output.Error != nil {
+//             continue
+//         }
+//         if len(output.Reply) > 0 {
+//             var message pb.Message
+//             if err := json.Unmarshal(output.Reply, &message); err != nil {
+//                 continue
+//             }
+//             return &message, nil
+//         }
+//     }
 
-	var message pb.Message
-	if err := json.Unmarshal(resp, &message); err != nil {
-		return nil, err
-	}
+//     return nil, status.Error(codes.NotFound, "no messages available")
+// }
 
-	return &message, nil
-}
+//REQUEST MESSAGE USING REQUEST METHOD
+// func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
+// 	// Use the message type with proper format for requesting a message
+// 	broadcastData := broadcast.BroadCastInput{
+// 		Type: broadcast.MsgEvent,
+// 		Msg:  []byte(fmt.Sprintf("getmessage:%s", topicID)),
+// 	}
+
+// 	bin, _ := json.Marshal(broadcastData)
+// 	resp, err := s.Op.Request(context.Background(), bin)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	if len(resp) == 0 {
+// 		return nil, status.Error(codes.NotFound, "no messages available")
+// 	}
+
+// 	var message pb.Message
+// 	if err := json.Unmarshal(resp, &message); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return &message, nil
+// }
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
 func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) error {
-	value, exists := s.messageLocks.Load(messageID)
+	value, exists := s.MessageLocks.Load(messageID)
 	if !exists {
 		return status.Error(codes.NotFound, "message not locked")
 	}
@@ -162,7 +189,7 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	}
 
 	// Check if this node owns the lock
-	if info.NodeID != s.Op.ID() {
+	if info.NodeID != s.Op.HostPort() {
 		return status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
 	}
 
@@ -174,18 +201,18 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	// Extend visibility timeout
 	newExpiresAt := time.Now().Add(visibilityTimeout)
 	info.Timeout = newExpiresAt
-	s.messageLocks.Store(messageID, info)
+	s.MessageLocks.Store(messageID, info)
 
 	// Create broadcast message
 	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.ID())),
+		Type: broadcast.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.HostPort())),
 	}
 	msgBytes, _ := json.Marshal(broadcastData)
 
 	// Broadcast new timeout to all nodes
 	s.Op.Broadcast(context.TODO(), msgBytes)
-	log.Printf("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.ID(), messageID)
+	log.Printf("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.HostPort(), messageID)
 
 	return nil
 }
@@ -209,18 +236,18 @@ func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
 		}
 
 		// Store the lock locally
-		lockInfo := MessageLockInfo{
+		lockInfo := broadcast.MessageLockInfo{
 			Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
 			Locked:       true,
-			NodeID:       s.Op.ID(), // This is the current node
+			NodeID:       s.Op.HostPort(), // This is the current node
 			SubscriberID: subscriberID,
 			LockHolders:  make(map[string]bool),
 		}
-		s.messageLocks.Store(messageID, lockInfo)
+		s.MessageLocks.Store(messageID, lockInfo)
 
 	case "unlock":
 		messageID := string(msgData)
-		s.messageLocks.Delete(messageID)
+		s.MessageLocks.Delete(messageID)
 
 	}
 

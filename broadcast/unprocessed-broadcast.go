@@ -72,7 +72,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 
 				// Create broadcast input
 				broadcastInput := BroadCastInput{
-					Type: message, // Using const from same package
+					Type: Message, // Using const from same package
 					Msg:  data,
 				}
 
