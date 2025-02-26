@@ -13,6 +13,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -31,7 +32,8 @@ func main() {
 	}
 
 	app := &app.PubSub{
-		Client: spannerClient,
+		Client:  spannerClient,
+		Storage: storage.NewStorage(),
 	}
 
 	op := hedge.New(
@@ -62,8 +64,7 @@ func main() {
 	go op.Run(ctx, done)
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
-	go broadcast.StartDistributor(op, spannerClient)
-
+	go broadcast.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.
 	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 

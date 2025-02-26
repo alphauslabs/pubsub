@@ -8,11 +8,11 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/flowerinthenight/hedge/v2"
+	"google.golang.org/api/iterator"
 )
 
 // fetchAndBroadcast fetches updated topic-subscription data and broadcasts it if there are updates.
-func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string) {
-	ctx := context.Background()
+func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string) {
 	stmt := spanner.Statement{
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions
               FROM Subscriptions
@@ -27,7 +27,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 	topicSub := make(map[string][]string)
 	for {
 		row, err := iter.Next()
-		if err == spanner.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
@@ -42,7 +42,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 			continue
 		}
 
-		// ensure subscriptions is not nil
+		// Ensure subscriptions is not nil
 		if subscriptions == nil {
 			subscriptions = []string{}
 		}
@@ -50,7 +50,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 		topicSub[topic] = subscriptions
 	}
 
-		// if there are no new updates, log and return
+	// if there are no new updates, it will log
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
 		if len(*lastBroadcasted) > 0 {
@@ -78,8 +78,7 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 
 	log.Println("Leader: Fetched topic subscriptions:", topicSub)
 
-
-	// marshal topic subscription data
+	// marshal topic-subscription data
 	msgData, err := json.Marshal(topicSub)
 	if err != nil {
 		log.Printf("Error marshalling topicSub: %v", err)
@@ -105,28 +104,35 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 		}
 	}
 
+	// update last checked time and last broadcasted structure
 	*lastChecked = time.Now()
 	*lastBroadcasted = topicSub
 	log.Println("Leader: Topic-subscription structure broadcast completed.")
 }
 
-/ StartDistributor initializes the distributor that periodically checks for updates.
-func StartDistributor(op *hedge.Op, client *spanner.Client) {
+// StartDistributor initializes the distributor that periodically checks for updates.
+func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
 	lastChecked := time.Now().Add(-10 * time.Second)
-	lastBroadcasted := make(map[string][]string) // Stores the last known structure
+	lastBroadcasted := make(map[string][]string) // this will store the last known structure
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	for range ticker.C {
-		if hasLock, _ := op.HasLock(); hasLock {
-			log.Println("Leader: Processing updates...")
-			fetchAndBroadcast(op, client, &lastChecked, &lastBroadcasted)
-		} else {
-			log.Println("Follower: No action needed.")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if hasLock, _ := op.HasLock(); hasLock {
+				log.Println("Leader: Processing updates...")
+				fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted)
+			} else {
+				log.Println("Follower: No action needed.")
+			}
 		}
 	}
 }
 
-// helper function to compare two string slices (ignoring order)
+// used to compare two string slices 
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -143,14 +149,16 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-/* leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
+// Leader broadcasts topic-subscription to all nodes (even if no changes/updates happened)
+/*
 func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
-data, err := json.Marshal(topicSub)
-if err != nil {
-log.Printf("Error marshalling topic-subscription: %v", err)
-return
-}
-op.Broadcast(context.Background(), data)
-log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
+	data, err := json.Marshal(topicSub)
+	if err != nil {
+		log.Printf("Error marshalling topic-subscription: %v", err)
+		return
+	}
+	op.Broadcast(context.Background(), data)
+	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
 }
 */
+
