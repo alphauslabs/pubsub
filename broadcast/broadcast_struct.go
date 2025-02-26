@@ -12,8 +12,7 @@ import (
 )
 
 // fetchAndBroadcast fetches updated topic-subscription data and broadcasts it if there are updates.
-func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.Time) {
-	ctx := context.Background()
+func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time) {
 	stmt := spanner.Statement{
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions
               FROM Subscriptions
@@ -89,16 +88,22 @@ func fetchAndBroadcast(op *hedge.Op, client *spanner.Client, lastChecked *time.T
 }
 
 // StartDistributor initializes the distributor that periodically checks for updates.
-func StartDistributor(op *hedge.Op, client *spanner.Client) {
+func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
 	lastChecked := time.Now().Add(-10 * time.Second)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	for range ticker.C {
-		if hasLock, _ := op.HasLock(); hasLock {
-			log.Println("Leader: Processing updates...")
-			fetchAndBroadcast(op, client, &lastChecked)
-		} else {
-			log.Println("Follower: No action needed.")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if hasLock, _ := op.HasLock(); hasLock {
+				log.Println("Leader: Processing updates...")
+				fetchAndBroadcast(ctx, op, client, &lastChecked)
+			} else {
+				log.Println("Follower: No action needed.")
+			}
 		}
 	}
 }
