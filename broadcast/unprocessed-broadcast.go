@@ -13,7 +13,7 @@ import (
 )
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -84,12 +84,19 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				}
 
 				// Broadcast
-				if err := op.Broadcast(ctx, broadcastData); err != nil {
-					log.Printf("Error broadcasting message: %v", err)
+				if responses := op.Broadcast(ctx, broadcastData); responses != nil {
+					// get response from each vm
+					for _, response := range responses {
+						log.Printf("[Broadcast] VM %s response for message %s: %v",
+							response.Id,    // vm IP
+							msg.Id,         // Message ID eg. msg1, msg2, etc.
+							response.Error, // <nil> = success, text = error
+						)
+					}
 					continue
 				}
-
-				log.Printf("Successfully broadcast message: %s", msg.Id)
+				//response from all VMs
+				log.Printf("[Broadcast] Error: No responses received for message %s", msg.Id)
 			}
 		}
 	}
