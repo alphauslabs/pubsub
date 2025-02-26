@@ -49,8 +49,6 @@ func fetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 
 // fetches updated topic-subscription data and broadcasts it
 func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string, isStartup bool) {
-	stmt := spanner.Statement{}
-
 	if isStartup {
 		// On startup, fetch all topic-subscription structure
 		*lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
