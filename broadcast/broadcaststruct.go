@@ -11,41 +11,13 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// fetches updated topic-subscription data and broadcasts it
-func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string, isStartup bool) {
-	stmt := spanner.Statement{}
-
-	if isStartup {
-		// on startup, fetch all topic-subscription structure
-		stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
-		log.Println("Leader: Startup detected. Broadcasting full topic-subscription data.")
-	} else {
-		// check if any topic has been updated since lastChecked
-		updateCheckStmt := spanner.Statement{
-			SQL:    `SELECT COUNT(*) FROM Subscriptions WHERE updatedAt > @last_checked_time`,
-			Params: map[string]interface{}{"last_checked_time": *lastChecked},
-		}
-
-		iter := client.Single().Query(ctx, updateCheckStmt)
-		defer iter.Stop()
-
-		var updateCount int64 = 0
-		if row, err := iter.Next(); err == nil {
-			if err := row.Columns(&updateCount); err != nil {
-				log.Printf("Error checking for updates: %v", err)
-			}
-		}
-
-		// if updates exist, fetch the topic-subscription structure
-		if updateCount > 0 {
-			log.Println("Leader: Changes detected! Fetching full topic-subscription structure.")
-			stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
-		} else {
-			return
-		}
+// fetchAllTopicSubscriptions fetches all topic-subscription mappings when lastBroadcasted is empty.
+func fetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string][]string {
+	stmt := spanner.Statement{
+		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
 
-	log.Println("Debug: Executing Spanner query...")
+	log.Println("STRUCT-Leader: Running full topic-subscription query as lastBroadcasted is empty.")
 
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
@@ -58,46 +30,84 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 			break
 		}
 		if err != nil {
-			log.Fatalf("Fatal error iterating Spanner rows: %v", err)
+			log.Fatalf("STRUCT-Fatal error iterating Spanner rows: %v", err)
 		}
 
 		var topic string
 		var subscriptions []string
 		if err := row.Columns(&topic, &subscriptions); err != nil {
-			log.Printf("Error reading row: %v", err)
+			log.Printf("STRUCT-Error reading row: %v", err)
 			continue
 		}
 
-		// ensure subscriptions is a valid empty slice if nil
 		subscriptions = append([]string{}, subscriptions...)
-
 		topicSub[topic] = subscriptions
 	}
 
-	// debug log to check retrieved data
-	log.Println("Debug: Retrieved topic-subscription structure from Spanner:", topicSub)
+	return topicSub
+}
 
-	// If no updates and it's not startup, check if lastBroadcasted is empty
-	if len(topicSub) == 0 {
-		log.Println("Leader: No updates, skipping broadcast.")
+// fetches updated topic-subscription data and broadcasts it
+func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string, isStartup bool) {
+	stmt := spanner.Statement{}
 
-		// If lastBroadcasted is empty, trigger a fresh query instead of recursion
-		if len(*lastBroadcasted) == 0 {
-			log.Println("Leader: lastBroadcasted is empty. Running a full query to re-fetch topic-subscription data.")
-			stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
+	if isStartup {
+		// On startup, fetch all topic-subscription structure
+		*lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+		log.Println("STRUCT-Leader: Startup detected. Broadcasting full topic-subscription data.")
+	} else {
+		// Check if any topic has been updated since lastChecked
+		updateCheckStmt := spanner.Statement{
+			SQL:    `SELECT COUNT(*) FROM Subscriptions WHERE updatedAt > @last_checked_time`,
+			Params: map[string]interface{}{"last_checked_time": *lastChecked},
 		}
 
-		// If lastBroadcasted is still populated, log the existing structure
-		log.Println("Leader: Subscription topic structure is still:", *lastBroadcasted)
+		iter := client.Single().Query(ctx, updateCheckStmt)
+		defer iter.Stop()
+
+		var updateCount int64
+		for {
+			row, err := iter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				log.Printf("STRUCT-Error checking for updates: %v", err)
+				return
+			}
+			if err := row.Columns(&updateCount); err != nil {
+				log.Printf("STRUCT-Error reading update count: %v", err)
+				return
+			}
+		}
+
+		// If updates exist, fetch the topic-subscription structure
+		if updateCount > 0 {
+			log.Println("STRUCT-Leader: Changes detected! Fetching full topic-subscription structure.")
+			*lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+		} else {
+			return
+		}
+	}
+
+	// If lastBroadcasted is empty, re-fetch all topic-subscription data
+	if len(*lastBroadcasted) == 0 {
+		log.Println("STRUCT-Leader: lastBroadcasted is empty! Running a full query to re-fetch topic-subscription data.")
+		*lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+	}
+
+	// If no updates, log and return
+	if len(*lastBroadcasted) == 0 {
+		log.Println("STRUCT-Leader: No topic-subscription data found, skipping broadcast.")
 		return
 	}
 
-	log.Println("Leader: Fetched topic subscriptions:", topicSub)
+	log.Println("STRUCT-Leader: Fetched topic subscriptions:", *lastBroadcasted)
 
 	// Marshal topic-subscription data
-	msgData, err := json.Marshal(topicSub)
+	msgData, err := json.Marshal(*lastBroadcasted)
 	if err != nil {
-		log.Printf("Error marshalling topicSub: %v", err)
+		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
 		return
 	}
 
@@ -109,26 +119,20 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	// Marshal BroadCastInput
 	broadcastData, err := json.Marshal(broadcastMsg)
 	if err != nil {
-		log.Printf("Error marshalling BroadCastInput: %v", err)
+		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
 		return
 	}
 
-	// broadcast message
+	// Broadcast message
 	for _, r := range op.Broadcast(ctx, broadcastData) {
 		if r.Error != nil {
-			log.Printf("Error broadcasting to %s: %v", r.Id, r.Error)
+			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 		}
 	}
 
 	*lastChecked = time.Now()
-	if isStartup {
-		*lastBroadcasted = topicSub // Ensure first broadcasted structure is saved
-		log.Println("Debug: Storing first broadcasted topic-subscription structure.")
-	}
-
-	*lastBroadcasted = topicSub
-	log.Println("Debug: Updated lastBroadcasted with:", *lastBroadcasted)
-	log.Println("Leader: Topic-subscription structure broadcast completed.")
+	log.Println("STRUCT-Debug: Updated lastBroadcasted with:", *lastBroadcasted)
+	log.Println("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
 // initializes the distributor that periodically checks for updates.
@@ -139,30 +143,30 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 
 	defer func() {
 		ticker.Stop()
-		log.Println("Leader: Distributor ticker stopped.")
+		log.Println("STRUCT-Leader: Distributor ticker stopped.")
 	}()
 
 	// perform an initial broadcast of all topic-subscription structures if it's the leader
 	if hasLock, _ := op.HasLock(); hasLock {
-		log.Println("Leader: Running initial startup query and broadcasting structure.")
+		log.Println("STRUCT-Leader: Running initial startup query and broadcasting structure.")
 		fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, true) // run startup broadcast
 	} else {
-		log.Println("Follower: Skipping startup query.")
+		log.Println("STRUCT-Follower: Skipping startup query.")
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Leader: Context canceled, stopping distributor.")
+			log.Println("STRUCT-Leader: Context canceled, stopping distributor.")
 			return
 		case <-ticker.C:
 			hasLock, _ := op.HasLock()
 
 			if hasLock {
-				log.Println("Leader: Processing updates...")
+				log.Println("STRUCT-Leader: Processing updates...")
 				fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, false)
 			} else {
-				log.Println("Follower: No action needed. Skipping fetchAndBroadcast.")
+				log.Println("STRUCT-Follower: No action needed. Skipping fetchAndBroadcast.")
 			}
 		}
 	}
