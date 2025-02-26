@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -72,8 +73,11 @@ func main() {
 	for {
 		ok, _ := utils.EnsureLeaderActive(op, ctx)
 		if ok {
+			log.Println("Leader is active. proceed")
 			break
 		}
+		log.Println("Waiting for leader to be active...")
+		time.Sleep(time.Second)
 	}
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
