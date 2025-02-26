@@ -110,7 +110,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	broadcastMsg := BroadCastInput{
-		Type: topicsub,
+		Type: Topicsub,
 		Msg:  msgData,
 	}
 
