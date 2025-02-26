@@ -64,8 +64,7 @@ func main() {
 	go op.Run(ctx, done)
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
-	go broadcast.StartDistributor(op, spannerClient)
-
+	go broadcast.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.
 	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
