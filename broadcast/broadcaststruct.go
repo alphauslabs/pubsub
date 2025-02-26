@@ -42,7 +42,6 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 			log.Println("Leader: Changes detected! Fetching full topic-subscription structure.")
 			stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
 		} else {
-			log.Println("Leader: No new updates, skipping broadcast.")
 			return
 		}
 	}
