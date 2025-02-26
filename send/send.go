@@ -29,7 +29,7 @@ func Send(data any, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
-	log.Println("[SEND]: Received message: ", string(msg))
+	log.Println("[SEND]: Received message: ", string(in.Msg))
 	return ctrlsend[in.Type](app, in.Msg)
 }
 
@@ -41,6 +41,7 @@ func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
 	var in SendInput
 	if err := json.Unmarshal(msg, &in); err != nil {
+		log.Println("[ERROR]: Failed to unmarshal message")
 		return nil, err
 	}
 	log.Println("Received message: ", string(in.Msg))
