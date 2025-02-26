@@ -1,3 +1,4 @@
+//broadcast.go
 package broadcast
 
 import (
@@ -22,6 +23,7 @@ const (
 	unlockMsg = "unlock"
 	deleteMsg = "delete"
 	extendMsg = "extend"
+	retryMsg =  "retry"
 )
 
 type BroadCastInput struct {
@@ -29,6 +31,8 @@ type BroadCastInput struct {
 	Msg  []byte
 }
 
+// MessageLockInfo defines lock information structure
+// Note: This should be consistent with the structure in helpers.go
 type MessageLockInfo struct {
 	Locked  bool
 	Timeout time.Time
@@ -108,47 +112,82 @@ func handleMessageEvent(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	// Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
-	if len(params) < 2 {
-	  return nil, fmt.Errorf("invalid lock parameters")
+	if len(params) < 3 {
+		return nil, fmt.Errorf("invalid lock parameters")
 	}
-	  
+		
 	timeoutSeconds, err := strconv.Atoi(params[0])
 	if err != nil {
-	  return nil, err
+		return nil, err
 	}
 	subscriberID := params[1]
-  
+	requestingNodeID := params[2]
+		
 	app.Mutex.Lock()
 	defer app.Mutex.Unlock()
-  
-	if _, exists := app.MessageLocks.Load(messageID); exists {
-	  return nil, nil // Already locked
+		
+	// Check if already locked
+	if existingLock, exists := app.MessageLocks.Load(messageID); exists {
+		info := existingLock.(MessageLockInfo)
+		
+		// If lock is expired, allow new lock
+		if time.Now().After(info.Timeout) {
+			// Continue with new lock
+		} else if info.NodeID == requestingNodeID {
+			// Same node is refreshing its lock, allow it
+			info.LockHolders[app.NodeID] = true
+			app.MessageLocks.Store(messageID, info)
+			return nil, nil
+		} else {
+			// Different node has a valid lock, reject
+			return nil, fmt.Errorf("message already locked by another node")
+		}
 	}
-	  
+		
+		// Create new lock
 	lockInfo := MessageLockInfo{
-	  Locked:       true,
-	  Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
-	  NodeID:       app.NodeID,
-	  SubscriberID: subscriberID,
-	  LockHolders:  make(map[string]bool),
+		Locked:       true,
+		Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
+		NodeID:       requestingNodeID,
+		SubscriberID: subscriberID,
+		LockHolders:  make(map[string]bool),
 	}
+		
+		// Mark this node as acknowledging the lock
+	lockInfo.LockHolders[app.NodeID] = true
+		
 	app.MessageLocks.Store(messageID, lockInfo)
-	  
+	
 	return nil, nil
-  }
+}
 	  
 
-  func handleUnlockMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
-	if !app.IsLeader() {
-	  return nil, nil // Only leader should handle unlocks
-	}
-	  
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
-	  
-	app.MessageLocks.Delete(messageID)
-	return nil, nil
-  }
+func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
+    if len(params) < 1 {
+        return nil, fmt.Errorf("invalid unlock parameters")
+    }
+    
+    unlockingNodeID := params[0]
+    
+    app.Mutex.Lock()
+    defer app.Mutex.Unlock()
+    
+    // Check if the message is locked
+    if lockInfo, exists := app.MessageLocks.Load(messageID); exists {
+        info := lockInfo.(MessageLockInfo)
+        
+        // Only the lock owner can unlock
+        if info.NodeID == unlockingNodeID {
+            app.MessageLocks.Delete(messageID)
+            log.Printf("[Unlock] Node %s acknowledged unlock for message: %s", app.NodeID, messageID)
+        } else {
+            log.Printf("[Unlock] Rejected unlock from non-owner node %s for message: %s", unlockingNodeID, messageID)
+            return nil, fmt.Errorf("only lock owner can unlock")
+        }
+    }
+    
+    return nil, nil
+}
 
 func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
 	app.Mutex.Lock()
@@ -160,29 +199,50 @@ func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, err
 }
 
 func handleExtendMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
-	if len(params) < 1 {
-		return nil, fmt.Errorf("missing timeout parameter for extend message")
-	}
+    if len(params) < 2 {
+        return nil, fmt.Errorf("missing parameters for extend message")
+    }
 
-	timeoutSeconds, err := strconv.Atoi(params[0])
-	if err != nil {
-		return nil, err
-	}
+    timeoutSeconds, err := strconv.Atoi(params[0])
+    if err != nil {
+        return nil, err
+    }
+    
+    extendingNodeID := params[1]
 
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
+    app.Mutex.Lock()
+    defer app.Mutex.Unlock()
 
-	if lockInfo, ok := app.MessageLocks.Load(messageID); ok {
-		// Update timeout
-		info := lockInfo.(app.MessageLockInfo)
-		info.Timeout = time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
-		app.MessageLocks.Store(messageID, info)
-	}
+    if lockInfo, ok := app.MessageLocks.Load(messageID); ok {
+        info := lockInfo.(MessageLockInfo)
+        
+        // Only update if the request comes from the lock owner
+        if info.NodeID == extendingNodeID {
+            info.Timeout = time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+            app.MessageLocks.Store(messageID, info)
+            log.Printf("[Extend] Message %s timeout extended by node %s", messageID, extendingNodeID)
+        } else {
+            log.Printf("[Extend] Rejected extend from non-owner node %s for message: %s", extendingNodeID, messageID)
+            return nil, fmt.Errorf("only lock owner can extend timeout")
+        }
+    }
 
-	return nil, nil
-} 
+    return nil, nil
+}
 
-func handleRetryMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
-	log.Printf("[Retry] Message %s is now available again", messageID)
-	return nil, nil
-  }
+func handleRetryMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
+    if len(params) < 1 {
+        return nil, fmt.Errorf("invalid retry parameters")
+    }
+    
+    retryNodeID := params[0]
+    
+    // Make the message available again for processing
+    app.Mutex.Lock()
+    defer app.Mutex.Unlock()
+    
+    app.MessageLocks.Delete(messageID)
+    log.Printf("[Retry] Message %s is now available again (unlocked by node %s)", messageID, retryNodeID)
+    
+    return nil, nil
+}

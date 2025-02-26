@@ -1,3 +1,4 @@
+//server.go
 package main
 
 import (
@@ -124,7 +125,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	if !ok {
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
-	info := lockInfo.(MessageLockInfo)
+	info := lockInfo.(broadcast.MessageLockInfo)
 	if !info.Locked || time.Now().After(info.Timeout) {
 		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
 	}
@@ -157,37 +158,43 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 // ModifyVisibilityTimeout extends message lock timeout
 func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
-	lockInfo, ok := s.messageLocks.Load(in.Id)
-	if !ok {
-		return nil, status.Error(codes.NotFound, "message lock not found")
-	}
-	info := lockInfo.(broadcast.MessageLockInfo)
-	if !info.Locked {
-		return nil, status.Error(codes.FailedPrecondition, "message not locked")
-	}
-	// Ensure the same node is extending the lock
-	if info.NodeID != s.Op.ID() {
-		return nil, status.Error(codes.PermissionDenied, "only the original lock holder can extend timeout")
-	}
-	// Broadcast new timeout - format matching handleBroadcastedMsg
-	broadcastData := BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("extend:%s:%d", in.Id, in.NewTimeout)),
-	}
-	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
-	// Update local timer
-	if timer, ok := s.timeoutTimers.Load(in.Id); ok {
-		timer.(*time.Timer).Stop()
-	}
-	newTimer := time.NewTimer(time.Duration(in.NewTimeout) * time.Second)
-	s.timeoutTimers.Store(in.Id, newTimer)
-	// Update lock info
-	info.Timeout = time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
-	s.messageLocks.Store(in.Id, info)
-	go func() {
-		<-newTimer.C
-		s.handleMessageTimeout(in.Id)
-	}()
-	return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
+    lockInfo, ok := s.messageLocks.Load(in.Id)
+    if !ok {
+        return nil, status.Error(codes.NotFound, "message lock not found")
+    }
+    info := lockInfo.(broadcast.MessageLockInfo)
+    if !info.Locked {
+        return nil, status.Error(codes.FailedPrecondition, "message not locked")
+    }
+    
+    // Check if this node owns the lock before extending
+    if info.NodeID != s.Op.ID() {
+        return nil, status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
+    }
+    
+    // Broadcast new timeout
+    broadcastData := broadcast.BroadCastInput{
+        Type: broadcast.msgEvent,
+        Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", in.Id, in.NewTimeout, s.Op.ID())),
+    }
+    bin, _ := json.Marshal(broadcastData)
+    s.Op.Broadcast(ctx, bin)
+    
+    // Update local timer
+    if timer, ok := s.timeoutTimers.Load(in.Id); ok {
+        timer.(*time.Timer).Stop()
+    }
+    newTimer := time.NewTimer(time.Duration(in.NewTimeout) * time.Second)
+    s.timeoutTimers.Store(in.Id, newTimer)
+    
+    // Update lock info
+    info.Timeout = time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
+    s.messageLocks.Store(in.Id, info)
+    
+    go func() {
+        <-newTimer.C
+        s.handleMessageTimeout(in.Id)
+    }()
+    
+    return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
 }

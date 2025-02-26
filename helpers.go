@@ -1,3 +1,4 @@
+//helpers.go
 package main
 
 import (
@@ -16,14 +17,6 @@ import (
 	"github.com/alphauslabs/pubsub/broadcast"
 )
 
-// // MessageLockInfo tracks lock state across nodes
-// type MessageLockInfo struct {
-// 	Timeout      time.Time
-// 	Locked       bool
-// 	NodeID       string
-// 	SubscriberID string            // Added to track which subscriber has the lock
-// 	LockHolders  map[string]bool   // Track which nodes have acknowledged the lock
-// }
 
 // validateTopicSubscription checks if subscription exists in memory
 func (s *server) validateTopicSubscription(subscriptionID string) (*pb.Subscription, error) {
@@ -57,81 +50,98 @@ func (s *server) validateTopicSubscription(subscriptionID string) (*pb.Subscript
 
 // broadcastLock sends lock request to all nodes and waits for acknowledgment
 func (s *server) broadcastLock(ctx context.Context, messageID string, subscriberID string, timeout time.Duration) error {
-	lockInfo := broadcast.MessageLockInfo{
-		Timeout:      time.Now().Add(timeout),
-		Locked:       true,
-		NodeID:       s.Op.ID(),
-		SubscriberID: subscriberID,
-		LockHolders:  make(map[string]bool),
-	}
-	// Store initial lock info before broadcasting
-	_, loaded := s.messageLocks.LoadOrStore(messageID, lockInfo)
-	if loaded {
-		return fmt.Errorf("message already locked by another node")
-	}
-	// Broadcast lock request - format matching handleBroadcastedMsg
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s", messageID, int(timeout.Seconds()), subscriberID)),
-	}
-
-	bin, _ := json.Marshal(broadcastData)
-	out := s.Op.Broadcast(ctx, bin)
-	// Ensure majority of nodes acknowledged
-	successCount := 0
-	for _, v := range out {
-		if v.Error == nil {
-			successCount++
-		}
-	}
-	if successCount < (len(out)/2 + 1) {
-		s.messageLocks.Delete(messageID)
-		return fmt.Errorf("failed to acquire lock across majority of nodes")
-	}
-	// Start local timeout timer
-	timer := time.NewTimer(timeout)
-	s.timeoutTimers.Store(messageID, timer)
-
-	go func() {
-		<-timer.C
-		s.handleMessageTimeout(messageID)
-	}()
-	return nil
+    lockInfo := broadcast.MessageLockInfo{
+        Timeout:      time.Now().Add(timeout),
+        Locked:       true,
+        NodeID:       s.Op.ID(),
+        SubscriberID: subscriberID,
+        LockHolders:  make(map[string]bool),
+    }
+    
+    // Add this node as a lock holder
+    lockInfo.LockHolders[s.Op.ID()] = true
+    
+    // Check if already locked by this node
+    if val, loaded := s.messageLocks.LoadOrStore(messageID, lockInfo); loaded {
+        existingInfo := val.(broadcast.MessageLockInfo)
+        if existingInfo.NodeID != s.Op.ID() {
+            return fmt.Errorf("message already locked by another node")
+        }
+        // Already locked by this node, just return success
+        return nil
+    }
+    
+    // Broadcast lock request to all nodes
+    broadcastData := broadcast.BroadCastInput{
+        Type: broadcast.msgEvent,
+        Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.ID())),
+    }
+    
+    bin, _ := json.Marshal(broadcastData)
+    out := s.Op.Broadcast(ctx, bin)
+    
+    // Track which nodes acknowledged the lock
+    successCount := 1 // Include self
+    for i, v := range out {
+        if v.Error == nil {
+            successCount++
+            // Track which node acknowledged
+            lockInfo.LockHolders[fmt.Sprintf("node-%d", i)] = true
+        }
+    }
+    
+    // Need majority for consensus
+    if successCount < (len(out)/2 + 1) {
+        s.messageLocks.Delete(messageID)
+        return fmt.Errorf("failed to acquire lock across majority of nodes")
+    }
+    
+    // Update lock info with acknowledgments
+    s.messageLocks.Store(messageID, lockInfo)
+    
+    // Start local timeout timer
+    timer := time.NewTimer(timeout)
+    s.timeoutTimers.Store(messageID, timer)
+    
+    go func() {
+        <-timer.C
+        s.handleMessageTimeout(messageID)
+    }()
+    
+    return nil
 }
 
 // handleMessageTimeout ensures that if a node crashes while holding a lock, 
 // other nodes can unlock the message and allow it to be processed again.
 func (s *server) handleMessageTimeout(messageID string) {
-	if lockInfo, ok := s.messageLocks.Load(messageID); ok {
-		info := lockInfo.(broadcast.MessageLockInfo)
-		if info.Locked && time.Now().After(info.Timeout) {
-			log.Printf("[Timeout] Unlocking expired message: %s", messageID)
-			// Broadcast unlock
-			s.broadcastUnlock(context.Background(), messageID)
-			// Remove lock entry
-			s.messageLocks.Delete(messageID)
-			// Notify all nodes to retry processing this message
-			broadcastData := broadcast.BroadCastInput{
-				Type: broadcast.msgEvent,
-				Msg:  []byte(fmt.Sprintf("retry:%s", messageID)),
-			}
-			bin, _ := json.Marshal(broadcastData)
-			s.Op.Broadcast(context.Background(), bin)
-		}
-	}
+    if lockInfo, ok := s.messageLocks.Load(messageID); ok {
+        info := lockInfo.(broadcast.MessageLockInfo)
+        
+        // Only unlock if this node is the lock owner
+        if info.NodeID == s.Op.ID() && info.Locked && time.Now().After(info.Timeout) {
+            log.Printf("[Timeout] Node %s unlocking expired message: %s", s.Op.ID(), messageID)
+            
+            // Broadcast unlock
+            s.broadcastUnlock(context.Background(), messageID)
+            
+            // Notify all nodes to retry processing this message
+            broadcastData := broadcast.BroadCastInput{
+                Type: broadcast.msgEvent,
+                Msg:  []byte(fmt.Sprintf("retry:%s:%s", messageID, s.Op.ID())),
+            }
+            bin, _ := json.Marshal(broadcastData)
+            s.Op.Broadcast(context.Background(), bin)
+        }
+    }
 }
 
 // broadcastUnlock ensures that only the leader node is responsible for broadcasting unlock requests
 func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
-	// Ensure only the leader sends the unlock request
-	if !s.IsLeader() {
-		log.Printf("[Unlock] Skipping unlock broadcast. Only the leader handles unlocks.")
-		return
-	}
-	// Format matching handleBroadcastedMsg
+
+	// Any node can broadcast an unlock
 	broadcastData := broadcast.BroadCastInput{
 		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("unlock:%s", messageID)),
+		Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, s.Op.ID())),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	s.Op.Broadcast(ctx, bin)
@@ -141,13 +151,9 @@ func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 		timer.(*time.Timer).Stop()
 		s.timeoutTimers.Delete(messageID)
 	}
-	log.Printf("[Unlock] Leader node unlocked message: %s", messageID)
+	log.Printf("[Unlock] Node %s unlocked message: %s", s.Op.ID(), messageID)
 }
 
-// IsLeader checks if the current node is the leader node in the pub/sub system
-func (s *server) IsLeader() bool {
-	return s.Op.ID() == s.Op.GetLeaderID() // Compare current node ID with leader ID
-}
 
 // requestMessageFromLeader asks the leader node for messages
 func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
@@ -177,32 +183,43 @@ func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
 func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) error {
-	// Non-leader nodes should not modify state directly
-	if !s.IsLeader() {
-		return status.Error(codes.PermissionDenied, "only the leader can extend visibility timeout")
-	}
-	value, exists := s.messageLocks.Load(messageID)
-	if !exists {
-		return status.Error(codes.NotFound, "message not locked")
-	}
-	info, ok := value.(broadcast.MessageLockInfo)
-	if !ok || info.SubscriberID != subscriberID {
-		return status.Error(codes.PermissionDenied, "message locked by another subscriber")
-	}
-	// Leader extends visibility timeout
-	newExpiresAt := time.Now().Add(visibilityTimeout)
-	info.Timeout = newExpiresAt
-	s.messageLocks.Store(messageID, info)
-	// Create broadcast message - format matching handleBroadcastedMsg
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.msgEvent,
-		Msg:  []byte(fmt.Sprintf("extend:%s:%d", messageID, int(visibilityTimeout.Seconds()))),
-	}
-	msgBytes, _ := json.Marshal(broadcastData)
-	// Leader broadcasts the new timeout
-	s.Op.Broadcast(context.TODO(), msgBytes)
-	log.Printf("[ExtendTimeout] Leader approved timeout extension for message: %s", messageID)
-	return nil
+    value, exists := s.messageLocks.Load(messageID)
+    if !exists {
+        return status.Error(codes.NotFound, "message not locked")
+    }
+    
+    info, ok := value.(broadcast.MessageLockInfo)
+    if !ok {
+        return status.Error(codes.Internal, "invalid lock info")
+    }
+    
+    // Check if this node owns the lock
+    if info.NodeID != s.Op.ID() {
+        return status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
+    }
+    
+    // Check subscriber ID
+    if info.SubscriberID != subscriberID {
+        return status.Error(codes.PermissionDenied, "message locked by another subscriber")
+    }
+    
+    // Extend visibility timeout
+    newExpiresAt := time.Now().Add(visibilityTimeout)
+    info.Timeout = newExpiresAt
+    s.messageLocks.Store(messageID, info)
+    
+    // Create broadcast message
+    broadcastData := broadcast.BroadCastInput{
+        Type: broadcast.msgEvent,
+        Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.ID())),
+    }
+    msgBytes, _ := json.Marshal(broadcastData)
+    
+    // Broadcast new timeout to all nodes
+    s.Op.Broadcast(context.TODO(), msgBytes)
+    log.Printf("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.ID(), messageID)
+    
+    return nil
 }
 
 // HandleBroadcastMessage processes broadcast messages received from other nodes

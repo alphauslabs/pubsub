@@ -1,9 +1,11 @@
+//app.go
 package app
 
 import (
 	"cloud.google.com/go/spanner"
 	storage "github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
+	"sync"
 )
 
 type PubSub struct {
