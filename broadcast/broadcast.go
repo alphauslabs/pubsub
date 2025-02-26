@@ -35,7 +35,7 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("Received message:\n", string(msg))
+	log.Println("[BROADCAST]: Received message:\n", string(msg))
 	var message pb.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -49,7 +49,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("Received topic-subscriptions:\n", string(msg))
+	log.Println("[BROADCAST]: Received topic-subscriptions:\n", string(msg))
 	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}

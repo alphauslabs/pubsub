@@ -36,6 +36,8 @@ func main() {
 		Storage: storage.NewStorage(),
 	}
 
+	log.Println("[STORAGE]: Storage initialized")
+
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
