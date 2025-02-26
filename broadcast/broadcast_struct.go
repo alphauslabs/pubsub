@@ -62,6 +62,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	// compare topicSub with lastBroadcasted to check if they are exactly the same
+	//ex: subscription was updated but reverted back to its original state before the next check
 	same := true
 	for key, subs := range topicSub {
 		if lastSubs, exists := (*lastBroadcasted)[key]; !exists || !equalStringSlices(subs, lastSubs) {
@@ -132,7 +133,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	}
 }
 
-// used to compare two string slices 
+// used to compare two string slices
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -161,4 +162,3 @@ func broadcastTopicSubStruct(op *hedge.Op, topicSub map[string][]string) {
 	log.Println("Leader: Broadcasted topic-subscription structure to all nodes")
 }
 */
-
