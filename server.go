@@ -25,6 +25,7 @@ type server struct {
 const (
 	MessagesTable = "Messages"
 	TopicsTable   = "Topics"
+	SubsTable     = "Subscriptions"
 )
 
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
@@ -99,7 +100,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Id:   topicID,
 		Name: req.Name,
 	}
-	//-----for testing only-----------//
+	// -----for testing only-----------//
 	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("Failed to notify leader: %v", err)
 	}
@@ -165,13 +166,18 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	if err != nil {
 		return nil, err
 	}
-
-	m := spanner.Update(TopicsTable,
+	//topic update
+	topic := spanner.Update(TopicsTable,
 		[]string{"id", "name", "updatedAt"},
 		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
 	)
+	// Update all related subscriptions
+	subs := spanner.Update("Subscriptions",
+		[]string{"topic", "updatedAt"},
+		[]interface{}{req.NewName, spanner.CommitTimestamp},
+	)
 
-	_, err = s.Client.Apply(ctx, []*spanner.Mutation{m})
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{topic, subs})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
 	}
@@ -193,19 +199,45 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
-	// Verify topic exists before deletion
-	if _, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id}); err != nil {
+	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// Delete topic
+		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+
+		// Delete all related subscriptions
+		stmt := spanner.Statement{
+			SQL: `DELETE FROM Subscriptions WHERE topic = @topicId`,
+			Params: map[string]interface{}{
+				"topicId": req.Id,
+			},
+		}
+
+		// Execute delete operations
+		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
+			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+		}
+
+		// Execute subscription deletion
+		iter := txn.Query(ctx, stmt)
+		defer iter.Stop()
+
+		_, err := iter.Next()
+		if err != nil && err != iterator.Done {
+			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
 
-	m := spanner.Delete(TopicsTable, spanner.Key{req.Id})
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-	}
+	// Notify leader of the deletion
 	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("DeleteTopic notification failed: %v", err)
 	}
+
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
 
@@ -271,17 +303,61 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 }
 
 // not yet tested ----
-func (s *server) notifyLeader(ctx context.Context, flag int) error {
+func (s *server) notifyLeader(ctx context.Context, flag byte) error {
+	if s.Op == nil {
+		return fmt.Errorf("Hedged not initialized!")
+	}
 	data := map[string]interface{}{
 		"operation": flag,
 	}
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal data: %w", err)
+	bin, _ := json.Marshal(data)
+	out := s.Op.Broadcast(ctx, bin)
+	for _, v := range out {
+		if v.Error != nil {
+			log.Printf("CRUD-TOPIC Error broadcasting message: %v", v.Error)
+		}
 	}
-	if isLeader, _ := s.Op.HasLock(); !isLeader {
-		resp := s.Op.Broadcast(ctx, jsonData)
+
+	log.Printf("Leader notified with flag: %v", flag)
+	return nil
+}
+
+/*
+	bin, _ := json.Marshal(bcastin)
+		out := s.Op.Broadcast(ctx, bin)
+		for _, v := range out {
+			if v.Error != nil { // for us to know, then do necessary actions if frequent
+				log.Printf("[Publish] Error broadcasting message: %v", v.Error)
+			}
+		}
+
+		log.Printf("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
+		return &pb.PublishResponse{MessageId: messageID}, nil
+*/
+
+/* ---ERROR github.com/alphauslabs/pubsub/broadcast.Broadcast({0x10507ca00, 0x14000324210}, {0x1400070a5c0, 0xa, 0xc})
+func (s *server) notifyLeader(ctx context.Context, flag byte) error {
+	// Basic initialization check
+	if s.PubSub == nil || s.PubSub.Op == nil {
+		return fmt.Errorf("hedge operation not initialized")
+	}
+
+	// Check if we're not the leader
+	l, _ := s.PubSub.Op.HasLock()
+	if !l {
+		// Minimal message with just the flag
+		data := map[string]interface{}{
+			"flag": flag,
+		}
+
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("failed to marshal data: %w", err)
+		}
+
+		// Broadcast to leader
+		resp := s.PubSub.Op.Broadcast(ctx, jsonData)
 		for _, r := range resp {
 			if r.Error != nil {
 				log.Printf("Failed to notify node %s: %v", r.Id, r.Error)
@@ -289,6 +365,6 @@ func (s *server) notifyLeader(ctx context.Context, flag int) error {
 		}
 	}
 
-	log.Printf("Leader notified with flag: %v", flag)
 	return nil
 }
+*/
