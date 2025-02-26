@@ -85,7 +85,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 
 	topicID := uuid.New().String()
 	m := spanner.Insert(
-		"Topics",
+		TopicsTable,
 		[]string{"id", "name", "createdAt", "updatedAt"},
 		[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
@@ -99,7 +99,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Id:   topicID,
 		Name: req.Name,
 	}
-	//-----unfinished?-----------//
+	//-----for testing only-----------//
 	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("Failed to notify leader: %v", err)
 	}
@@ -166,7 +166,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, err
 	}
 
-	m := spanner.Update("Topics",
+	m := spanner.Update(TopicsTable,
 		[]string{"id", "name", "updatedAt"},
 		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
 	)
@@ -198,7 +198,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 
-	m := spanner.Delete("Topics", spanner.Key{req.Id})
+	m := spanner.Delete(TopicsTable, spanner.Key{req.Id})
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
@@ -288,5 +288,7 @@ func (s *server) notifyLeader(ctx context.Context, flag int) error {
 			}
 		}
 	}
+
+	log.Printf("Leader notified with flag: %v", flag)
 	return nil
 }
