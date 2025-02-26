@@ -13,7 +13,9 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/send"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -47,7 +49,7 @@ func main() {
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
-			send,
+			send.Send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			app,
@@ -65,6 +67,14 @@ func main() {
 
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
+
+	// Wait for leader availability
+	for {
+		ok, _ := utils.EnsureLeaderActive(op, ctx)
+		if ok {
+			break
+		}
+	}
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go broadcast.StartDistributor(ctx, op, spannerClient)
