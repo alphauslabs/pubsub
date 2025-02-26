@@ -107,21 +107,34 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	lastChecked := time.Now().Add(-10 * time.Second)
 	lastBroadcasted := make(map[string][]string) // Stores the last known structure
 	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
 
-	// Perform an initial broadcast of all topic-subscription structures
-	fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, true) // run during start up
+	// Ensure ticker is stopped when the function exits
+	defer func() {
+		ticker.Stop()
+		log.Println("Leader: Distributor ticker stopped.")
+	}()
+
+	// Perform an initial broadcast of all topic-subscription structures only if this instance is the leader
+	if hasLock, _ := op.HasLock(); hasLock {
+		log.Println("Leader: Startup detected. Broadcasting full topic-subscription data.")
+		fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, true) // run during startup
+	} else {
+		log.Println("Follower: Skipping startup broadcast.")
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("Leader: Context canceled, stopping distributor.")
 			return
 		case <-ticker.C:
-			if hasLock, _ := op.HasLock(); hasLock {
+			hasLock, _ := op.HasLock()
+
+			if hasLock {
 				log.Println("Leader: Processing updates...")
-				fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, false) //run if not startup
+				fetchAndBroadcast(ctx, op, client, &lastChecked, &lastBroadcasted, false) // Run only if leader
 			} else {
-				log.Println("Follower: No action needed.")
+				log.Println("Follower: No action needed. Skipping fetchAndBroadcast.")
 			}
 		}
 	}
