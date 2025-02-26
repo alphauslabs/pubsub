@@ -11,7 +11,7 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// fetchAndBroadcast fetches updated topic-subscription data and broadcasts it
+// fetches updated topic-subscription data and broadcasts it
 func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastChecked *time.Time, lastBroadcasted *map[string][]string, isStartup bool) {
 	stmt := spanner.Statement{}
 
@@ -29,9 +29,10 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 		iter := client.Single().Query(ctx, updateCheckStmt)
 		defer iter.Stop()
 
-		var updateCount int64
-		if err := iter.Next(); err == nil {
-			if err := iter.Row(&updateCount); err != nil {
+		var updateCount int64 = 0 // Ensure updateCount is initialized
+		row, err := iter.Next()
+		if err == nil {
+			if err := row.Columns(&updateCount); err != nil {
 				log.Printf("Error checking for updates: %v", err)
 				return
 			}
@@ -78,15 +79,53 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	// debug log to check retrieved data
 	log.Println("Debug: Retrieved topic-subscription structure from Spanner:", topicSub)
 
-	// if no updates and it's not startup, skip broadcasting
+	// If no updates and it's not startup, check if lastBroadcasted is empty
 	if len(topicSub) == 0 {
 		log.Println("Leader: No new updates, skipping broadcast.")
-		if len(*lastBroadcasted) > 0 {
-			log.Println("Leader: Subscription topic structure is still:", *lastBroadcasted)
-		} else {
-			log.Println("Leader: No previous topic-subscription structure available. Initializing empty lastBroadcasted.")
-			*lastBroadcasted = make(map[string][]string) // Ensure lastBroadcasted is initialized
+
+		// If lastBroadcasted is empty, force a re-query and broadcast
+		if len(*lastBroadcasted) == 0 {
+			log.Println("Leader: lastBroadcasted is empty! Running a full query to re-fetch topic-subscription data.")
+
+			// Stop previous iterator before reassigning a new query
+			iter.Stop()
+			stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
+			iter = client.Single().Query(ctx, stmt)
+			defer iter.Stop()
+
+			// Fetch all topics again
+			topicSub = make(map[string][]string)
+			for {
+				row, err := iter.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					log.Fatalf("Fatal error iterating Spanner rows: %v", err)
+				}
+
+				var topic string
+				var subscriptions []string
+				if err := row.Columns(&topic, &subscriptions); err != nil {
+					log.Printf("Error reading row: %v", err)
+					continue
+				}
+
+				subscriptions = append([]string{}, subscriptions...)
+				topicSub[topic] = subscriptions
+			}
+
+			// If it's still empty after the query, log an error to prevent infinite loops
+			if len(topicSub) == 0 {
+				log.Println("Leader: No topic-subscription data found, skipping broadcast.")
+				return
+			}
+
+			log.Println("Leader: Re-query successful. Broadcasting all topic-subscription data.")
 		}
+
+		// If lastBroadcasted is still populated, log the existing structure
+		log.Println("Leader: Subscription topic structure is still:", *lastBroadcasted)
 		return
 	}
 
