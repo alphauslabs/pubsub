@@ -133,7 +133,7 @@ func main() {
 		fmt.Println("Available methods:")
 		fmt.Println("  create  : --method=create --name=<topic_name>")
 		fmt.Println("  get     : --method=get --id=<topic_id>")
-		fmt.Println("  update  : --method=update --id=<topic_id> --new_name=<new_name>")
+		fmt.Println("  update  : --method=update --id=<topic_id> --newName=<new_name>")
 		fmt.Println("  delete  : --method=delete --id=<topic_id>")
 		fmt.Println("  list    : --method=list")
 		fmt.Println("  publish : --method=publish --id=<topic_id> --payload=<message>")
