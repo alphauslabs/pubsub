@@ -86,9 +86,9 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	// Validate if subscription exists for the given topic
-	subs, err := s.Storage.GetSubscribtionsForTopic(in.TopicId)
+	subs, err := s.Storage.GetSubscribtionsForTopic(in.TopicId) // SubscribeRequest definition in proto only has string subscription_id in proto
 	if err != nil {
-		return status.Errorf(codes.NotFound, "Topic %s not found", in.TopicId)
+		return status.Errorf(codes.NotFound, "Topic %s not found", in.TopicId) // SubscribeRequest definition in proto only has string subscription_id in proto
 	}
 
 	// Check if the provided subscription ID exists in the topic's subscriptions
@@ -114,7 +114,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// Get messages from local storage for the topic
-			messages, err := s.Storage.GetMessagesByTopic(in.TopicId)
+			messages, err := s.Storage.GetMessagesByTopic(in.TopicId) // SubscribeRequest definition in proto only has string subscription_id in proto
 			if err != nil {
 				log.Printf("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
