@@ -9,3 +9,4 @@ temp.txt
 *.dylib
 
 /pubsub
+testclient/testclient
