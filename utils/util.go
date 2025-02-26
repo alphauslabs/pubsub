@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/alphauslabs/pubsub/send"
-	"github.com/flowerinthenight/hedge/v2"
+	"github.com/flowerinthenight/hedge"
 )
 
 func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
@@ -15,7 +15,7 @@ func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 	}
 
 	b, _ := json.Marshal(msg)
-	r, err := op.Send(ctx, b)
+	r, err := hedge.SendToLeader(ctx, op, b)
 	if err != nil {
 		return false, err
 	}

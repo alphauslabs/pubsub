@@ -6,8 +6,8 @@ toolchain go1.24.0
 
 require (
 	cloud.google.com/go/spanner v1.75.0
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250224043151-d2fff9627a86
-	github.com/flowerinthenight/hedge/v2 v2.0.1
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250221062210-631fa96417c7
+	github.com/flowerinthenight/hedge/v2 v1.18.0
 	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.219.0
 	google.golang.org/grpc v1.70.0
@@ -31,7 +31,6 @@ require (
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/flowerinthenight/hedge-proto v0.1.0 // indirect
 	github.com/flowerinthenight/spindle/v2 v2.2.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -50,9 +49,11 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/memberlist v0.5.1 // indirect
+	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
+	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect

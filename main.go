@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -17,7 +18,7 @@ import (
 	"github.com/alphauslabs/pubsub/send"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
-	"github.com/flowerinthenight/hedge/v2"
+	"github.com/flowerinthenight/hedge"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -70,15 +71,20 @@ func main() {
 	go op.Run(ctx, done)
 
 	// Wait for leader availability
-	for {
-		ok, _ := utils.EnsureLeaderActive(op, ctx)
-		if ok {
-			log.Println("Leader is active. proceed")
-			break
-		}
+	func() {
+		var m string
+		defer func(l *string, t time.Time) {
+			log.Printf("%v: %v", l, time.Since(t))
+		}(&m, time.Now())
 		log.Println("Waiting for leader to be active...")
-		time.Sleep(time.Second)
-	}
+		ok, err := utils.EnsureLeaderActive(op, ctx)
+		switch {
+		case !ok:
+			m = fmt.Sprintf("failed: %v, no leader after ", err)
+		default:
+			m = "leader active after "
+		}
+	}()
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go broadcast.StartDistributor(ctx, op, spannerClient)
