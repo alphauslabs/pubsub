@@ -3,18 +3,22 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/send"
 	"github.com/alphauslabs/pubsub/storage"
-	"github.com/flowerinthenight/hedge/v2"
+	"github.com/alphauslabs/pubsub/utils"
+	"github.com/flowerinthenight/hedge"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -23,6 +27,7 @@ var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
 	flag.Parse()
+	log.SetOutput(os.Stderr)
 	go serveHealthChecks() // handle health checks from our LB
 
 	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
@@ -31,27 +36,12 @@ func main() {
 		return
 	}
 
-	  // Initialize storage with message tracking capabilities
-	  storageInstance := storage.NewStorage()
-  
-
-	 // Initialize app with all necessary components for distributed message handling
-	 app := &app.PubSub{
-        Client:        spannerClient,
-        Storage:       storageInstance,
-        MessageLocks:  sync.Map{},    // For distributed message locking
-        MessageQueue:  sync.Map{},     // For message tracking
-        Mutex:         sync.Mutex{},   // For concurrency control
-        TimeoutTimers: sync.Map{},     // Add this for tracking message timeouts across nodes
-    }
+	app := &app.PubSub{
+		Client:  spannerClient,
+		Storage: storage.NewStorage(),
+	}
 
 	log.Println("[STORAGE]: Storage initialized")
-
-	// Configure timeout settings
-    const (
-        defaultVisibilityTimeout = 30 * time.Second
-        timeoutCheckInterval    = 5 * time.Second
-    )
 
 	op := hedge.New(
 		spannerClient,
@@ -61,7 +51,7 @@ func main() {
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
-			send,
+			send.Send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			app,
@@ -70,16 +60,7 @@ func main() {
 	)
 
 	app.Op = op
-	app.NodeID = op.ID() // Important for tracking which node handles which message
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start timeout monitor for all nodes
-    go monitorMessageTimeouts(ctx, app, defaultVisibilityTimeout)
-
-    // Start subscription validator
-    go validateSubscriptions(ctx, app)
-
 	go func() {
 		if err := run(ctx, &server{PubSub: app}); err != nil {
 			log.Fatalf("failed to run: %v", err)
@@ -88,6 +69,22 @@ func main() {
 
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
+
+	// Wait for leader availability
+	func() {
+		var m string
+		defer func(l *string, t time.Time) {
+			log.Printf("%v: %v", *l, time.Since(t))
+		}(&m, time.Now())
+		log.Println("Waiting for leader to be active...")
+		ok, err := utils.EnsureLeaderActive(op, ctx)
+		switch {
+		case !ok:
+			m = fmt.Sprintf("failed: %v, no leader after ", err)
+		default:
+			m = "leader active after "
+		}
+	}()
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go broadcast.StartDistributor(ctx, op, spannerClient)
@@ -136,64 +133,4 @@ func serveHealthChecks() {
 		}
 		conn.Close()
 	}
-}
-
-// Monitor timeouts across all nodes
-func monitorMessageTimeouts(ctx context.Context, app *app.PubSub, defaultTimeout time.Duration) {
-    ticker := time.NewTicker(time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            app.MessageLocks.Range(func(key, value interface{}) bool {
-                messageID := key.(string)
-                lockInfo := value.(broadcast.MessageLockInfo)
-
-                // Check if message lock has expired
-                if time.Now().After(lockInfo.Timeout) {
-                    // Broadcast unlock message to all nodes
-                    broadcastData := broadcast.BroadCastInput{
-                        Type: broadcast.msgEvent,
-                        Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, app.NodeID)),
-                    }
-                    bin, _ := json.Marshal(broadcastData)
-                    app.Op.Broadcast(ctx, bin)
-
-                    // Clean up local state
-                    app.MessageLocks.Delete(messageID)
-                    if timer, ok := app.TimeoutTimers.Load(messageID); ok {
-                        timer.(*time.Timer).Stop()
-                        app.TimeoutTimers.Delete(messageID)
-                    }
-                }
-                return true
-            })
-        }
-    }
-}
-
-// Validate subscriptions periodically
-func validateSubscriptions(ctx context.Context, app *app.PubSub) {
-    ticker := time.NewTicker(30 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            // Request latest subscription data from leader
-            broadcastData := broadcast.BroadCastInput{
-                Type: broadcast.topicsub,
-                Msg:  []byte("refresh"),
-            }
-            bin, _ := json.Marshal(broadcastData)
-            if _, err := app.Op.Request(ctx, bin); err != nil {
-                log.Printf("Error refreshing subscriptions: %v", err)
-            }
-        }
-    }
 }
