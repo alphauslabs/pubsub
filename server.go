@@ -24,18 +24,11 @@ const (
 )
 
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	if in.Topic == "" {
+	if in.TopicId == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
 	b, _ := json.Marshal(in)
-
-	l, _ := s.Op.HasLock()
-	if l {
-		log.Println("[Publish-leader] Received message:\n", string(b))
-	} else {
-		log.Printf("[Publish] Received message:\n%v", string(b))
-	}
 
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
@@ -43,7 +36,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt"},
 		[]interface{}{
 			messageID,
-			in.Topic,
+			in.TopicId,
 			in.Payload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
