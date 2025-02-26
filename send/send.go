@@ -43,8 +43,9 @@ func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
-
+	log.Println("Received message: ", string(in.Msg))
 	if string(in.Msg) == "PING" {
+		log.Println("returning PONG")
 		return []byte("PONG"), nil
 	}
 
