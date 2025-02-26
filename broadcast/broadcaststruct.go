@@ -16,7 +16,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	stmt := spanner.Statement{}
 
 	if isStartup {
-		// on startup, fetch all topic-subscription structure (ignore updatedAt)
+		// on startup, fetch all topic-subscription structure
 		stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
 		log.Println("Leader: Startup detected. Broadcasting full topic-subscription data.")
 	} else {
@@ -29,12 +29,10 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 		iter := client.Single().Query(ctx, updateCheckStmt)
 		defer iter.Stop()
 
-		var updateCount int64 = 0 // Ensure updateCount is initialized
-		row, err := iter.Next()
-		if err == nil {
+		var updateCount int64 = 0
+		if row, err := iter.Next(); err == nil {
 			if err := row.Columns(&updateCount); err != nil {
 				log.Printf("Error checking for updates: %v", err)
-				return
 			}
 		}
 
@@ -81,47 +79,12 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 	// If no updates and it's not startup, check if lastBroadcasted is empty
 	if len(topicSub) == 0 {
-		log.Println("Leader: No new updates, skipping broadcast.")
+		log.Println("Leader: No updates, skipping broadcast.")
 
-		// If lastBroadcasted is empty, force a re-query and broadcast
+		// If lastBroadcasted is empty, trigger a fresh query instead of recursion
 		if len(*lastBroadcasted) == 0 {
-			log.Println("Leader: lastBroadcasted is empty! Running a full query to re-fetch topic-subscription data.")
-
-			// Stop previous iterator before reassigning a new query
-			iter.Stop()
+			log.Println("Leader: lastBroadcasted is empty. Running a full query to re-fetch topic-subscription data.")
 			stmt.SQL = `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions GROUP BY topic`
-			iter = client.Single().Query(ctx, stmt)
-			defer iter.Stop()
-
-			// Fetch all topics again
-			topicSub = make(map[string][]string)
-			for {
-				row, err := iter.Next()
-				if err == iterator.Done {
-					break
-				}
-				if err != nil {
-					log.Fatalf("Fatal error iterating Spanner rows: %v", err)
-				}
-
-				var topic string
-				var subscriptions []string
-				if err := row.Columns(&topic, &subscriptions); err != nil {
-					log.Printf("Error reading row: %v", err)
-					continue
-				}
-
-				subscriptions = append([]string{}, subscriptions...)
-				topicSub[topic] = subscriptions
-			}
-
-			// If it's still empty after the query, log an error to prevent infinite loops
-			if len(topicSub) == 0 {
-				log.Println("Leader: No topic-subscription data found, skipping broadcast.")
-				return
-			}
-
-			log.Println("Leader: Re-query successful. Broadcasting all topic-subscription data.")
 		}
 
 		// If lastBroadcasted is still populated, log the existing structure
@@ -159,6 +122,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 	*lastChecked = time.Now()
 	if isStartup {
+		*lastBroadcasted = topicSub // Ensure first broadcasted structure is saved
 		log.Println("Debug: Storing first broadcasted topic-subscription structure.")
 	}
 
@@ -169,11 +133,10 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 // initializes the distributor that periodically checks for updates.
 func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-	lastChecked := time.Now().Add(-24 * time.Hour) // Ensure older updates are included
-	lastBroadcasted := make(map[string][]string)   // Ensure it's an initialized empty map
+	lastChecked := time.Now()
+	lastBroadcasted := make(map[string][]string)
 	ticker := time.NewTicker(10 * time.Second)
 
-	// ensure ticker is stopped when the function exits
 	defer func() {
 		ticker.Stop()
 		log.Println("Leader: Distributor ticker stopped.")
