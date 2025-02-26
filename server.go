@@ -152,7 +152,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
 	}
 
-	// Check if new name already exists
+	// 1. Check if the new name already exists
 	exist, err := s.topicExists(ctx, req.NewName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to check name availability: %v", err)
@@ -161,23 +161,37 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists", req.NewName)
 	}
 
-	// Get existing topic to verify existence
+	// 2. Fetch the current topic to get its old name
 	current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
 	if err != nil {
 		return nil, err
 	}
-	//topic update
-	topic := spanner.Update(TopicsTable,
-		[]string{"id", "name", "updatedAt"},
-		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
-	)
-	// Update all related subscriptions
-	subs := spanner.Update("Subscriptions",
-		[]string{"topic", "updatedAt"},
-		[]interface{}{req.NewName, spanner.CommitTimestamp},
-	)
 
-	_, err = s.Client.Apply(ctx, []*spanner.Mutation{topic, subs})
+	// 3. Perform both updates in a read-write transaction
+	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// 3a. Update the topic row
+		mutTopic := spanner.Update(TopicsTable,
+			[]string{"id", "name", "updatedAt"},
+			[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
+		)
+		if err := txn.BufferWrite([]*spanner.Mutation{mutTopic}); err != nil {
+			return err
+		}
+
+		// 3b. Update all subscriptions referencing the old topic name
+		stmtSubs := spanner.Statement{
+			SQL: `UPDATE Subscriptions
+                  SET topic = @newName,
+                      updatedAt = PENDING_COMMIT_TIMESTAMP()
+                  WHERE topic = @oldName`,
+			Params: map[string]interface{}{
+				"newName": req.NewName,
+				"oldName": current.Name,
+			},
+		}
+		_, err2 := txn.Update(ctx, stmtSubs)
+		return err2
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
 	}
@@ -187,6 +201,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		Name: req.NewName,
 	}
 
+	// optional: notify leader
 	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("Failed to notify leader: %v", err)
 	}
