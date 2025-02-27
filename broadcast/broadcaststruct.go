@@ -173,3 +173,45 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 		}
 	}
 }
+
+func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, lastBroadcasted *map[string][]string, lastChecked *time.Time) {
+	log.Println("STRUCT-Leader: Immediate broadcast triggered.")
+
+	// Fetch latest topic-subscription data
+	newBroadcasted := fetchAllTopicSubscriptions(ctx, client)
+	if len(newBroadcasted) == 0 {
+		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
+		return
+	}
+
+	*lastBroadcasted = newBroadcasted
+
+	// Marshal topic-subscription data
+	msgData, err := json.Marshal(*lastBroadcasted)
+	if err != nil {
+		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+		return
+	}
+
+	broadcastMsg := BroadCastInput{
+		Type: Topicsub,
+		Msg:  msgData,
+	}
+
+	// Marshal BroadCastInput
+	broadcastData, err := json.Marshal(broadcastMsg)
+	if err != nil {
+		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
+		return
+	}
+
+	// Broadcast the message
+	for _, r := range op.Broadcast(ctx, broadcastData) {
+		if r.Error != nil {
+			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+		}
+	}
+
+	*lastChecked = time.Now()
+	log.Println("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
+}
