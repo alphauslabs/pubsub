@@ -28,6 +28,7 @@ const (
 	MessagesTable = "Messages"
 	TopicsTable   = "Topics"
 	SubsTable     = "Subscriptions"
+	notifleader   = 1
 )
 
 // Publish a message to a topic
@@ -252,9 +253,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Name: req.Name,
 	}
 	// -----for testing only-----------//
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("Failed to notify leader: %v", err)
-	}
+	go s.notifyLeader(notifleader)
 	return topic, nil
 }
 
@@ -352,10 +351,11 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		Name: req.NewName,
 	}
 
-	// optional: notify leader
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("Failed to notify leader: %v", err)
-	}
+	// if err := s.notifyLeader(ctx, 1); err != nil {
+	// 	log.Printf("Failed to notify leader: %v", err)
+	// }
+
+	go s.notifyLeader(notifleader)
 
 	return updatedTopic, nil
 }
@@ -400,9 +400,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	// Notify leader of the deletion
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("DeleteTopic notification failed: %v", err)
-	}
+	// if err := s.notifyLeader(ctx, 1); err != nil {
+	// 	log.Printf("DeleteTopic notification failed: %v", err)
+	// }
+	go s.notifyLeader(notifleader)
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
@@ -468,21 +469,76 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 	return timestamppb.New(t.Time)
 }
 
-// not yet tested ----
-func (s *server) notifyLeader(ctx context.Context, flag byte) error {
-	//Send needs a slice byte
-	//flag = 1 (when updates on topics occurred)
+// not working ----
+// func (s *server) notifyLeader(_ context.Context, flag byte) error {
+// 	//create custom timer for leader notif
+// 	notifyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
+
+// 	//Send needs a slice byte
+// 	//flag = 1 (when updates on topics occurred)
+// 	flagged := map[string]interface{}{"flag": flag}
+// 	jsonData, err := json.Marshal(flagged)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal flag: %w", err)
+// 	}
+// 	reply, err := s.PubSub.Op.Send(notifyCtx, jsonData)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send to leader: %w", err)
+// 	}
+// 	//let see if there is a reply
+// 	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
+
+// 	return nil
+// }
+
+// try with retry
+
+func (s *server) notifyLeader(flag byte) {
+	// Skip if we're the leader
+	isLeader, _ := s.PubSub.Op.HasLock()
+	// if err != nil {
+	// 	log.Printf("Failed to check leader status: %v", err)
+	if isLeader {
+		log.Printf("Current node is leader, skipping notification")
+		return
+	}
+
+	// Retry logic with backoff
+	backoff := time.Second
+	maxAttempts := 3
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*backoff)
+		err := s.notifLeaderwithctx(ctx, flag)
+		cancel()
+
+		if err == nil {
+			return
+		}
+
+		log.Printf("Leader notification attempt %d failed: %v", attempt+1, err)
+
+		if attempt < maxAttempts-1 {
+			time.Sleep(backoff)
+			backoff *= 2 // Exponential backoff
+		}
+	}
+}
+
+func (s *server) notifLeaderwithctx(ctx context.Context, flag byte) error {
+
 	flagged := map[string]interface{}{"flag": flag}
 	jsonData, err := json.Marshal(flagged)
 	if err != nil {
 		return fmt.Errorf("failed to marshal flag: %w", err)
 	}
+
 	reply, err := s.PubSub.Op.Send(ctx, jsonData)
 	if err != nil {
 		return fmt.Errorf("failed to send to leader: %w", err)
 	}
-	//let see if there is a reply
-	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
 
+	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
 	return nil
 }
