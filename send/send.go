@@ -2,7 +2,6 @@ package send
 
 import (
 	"encoding/json"
-	"log"
 
 	"github.com/alphauslabs/pubsub/app"
 )
@@ -29,7 +28,7 @@ func Send(data any, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
-	log.Println("[SEND]: Received message: ", string(msg))
+
 	return ctrlsend[in.Type](app, in.Msg)
 }
 
@@ -39,12 +38,7 @@ func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 }
 
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
-	var in SendInput
-	if err := json.Unmarshal(msg, &in); err != nil {
-		return nil, err
-	}
-
-	if string(in.Msg) == "PING" {
+	if string(msg) == "PING" {
 		return []byte("PONG"), nil
 	}
 

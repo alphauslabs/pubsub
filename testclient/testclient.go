@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"os"
@@ -41,7 +42,8 @@ func main() {
 
 	switch *method {
 	case "publish":
-		/*r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: "topic1", Payload: "Hello World"})
+		/* --- making it dynamic ------
+		r, err := c.Publish(ctx, &pb.PublishRequest{Topic: "topic1", Payload: "Hello World"})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
@@ -129,6 +131,27 @@ func main() {
 		}
 		log.Printf("Created Sucessfully\n ID: %v\nName:%s",
 			r.Id, r.Name)
+	case "subscribe":
+		r, err := c.Subscribe(ctx, &pb.SubscribeRequest{TopicId: "topic1", SubscriptionId: "sub1"})
+		if err != nil {
+			log.Fatalf("Subscribe failed: %v", err)
+		}
+
+		for {
+			rec, err := r.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				log.Printf("Error: %v", err)
+				break
+			}
+
+			log.Printf("rec.Payload: %v\n", rec.Payload)
+			time.Sleep(20 * time.Second) // simulate processing
+		}
+
 	default:
 		fmt.Println("Available methods:")
 		fmt.Println("  create  : --method=create --name=<topic_name>")
@@ -137,6 +160,7 @@ func main() {
 		fmt.Println("  delete  : --method=delete --id=<topic_id>")
 		fmt.Println("  list    : --method=list")
 		fmt.Println("  publish : --method=publish --id=<topic_id> --payload=<message>")
+		fmt.Println("  subscribe : --method=subscribe")
 		os.Exit(1)
 	}
 }

@@ -74,7 +74,7 @@ func main() {
 	func() {
 		var m string
 		defer func(l *string, t time.Time) {
-			log.Printf("%v: %v", l, time.Since(t))
+			log.Printf("%v: %v", *l, time.Since(t))
 		}(&m, time.Now())
 		log.Println("Waiting for leader to be active...")
 		ok, err := utils.EnsureLeaderActive(op, ctx)

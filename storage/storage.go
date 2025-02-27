@@ -134,7 +134,5 @@ func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
 		return nil, ErrTopicNotFound
 	}
 
-	result := make([]string, len(subs))
-	copy(result, subs)
-	return result, nil
+	return subs, nil
 }
