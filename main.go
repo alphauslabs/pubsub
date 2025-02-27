@@ -35,6 +35,7 @@ func main() {
 		log.Fatalf("failed to create Spanner client: %v", err)
 		return
 	}
+	defer spannerClient.Close()
 
 	app := &app.PubSub{
 		Client:  spannerClient,
