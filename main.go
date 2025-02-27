@@ -28,7 +28,7 @@ var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
 	flag.Parse()
-	go serveHealthChecks() // handle health checks from our LB
+	go serveHealthChecks() // _handle health checks from our LB
 
 	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
 	if err != nil {
