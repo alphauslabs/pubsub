@@ -30,10 +30,7 @@ func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 	}
 }
 
-// NEW METHOD TO UPDATE MESSAGE PROCESSED STATUS IN SPANNER			//transferred to utils from storage
-func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string, processed bool) error {
-
-	// Check for valid ID
+func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) error {
 	if id == "" {
 		log.Println("[ERROR]: Received invalid message ID")
 		return nil
@@ -41,14 +38,13 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string, proc
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"Id", "Processed"}, []interface{}{id, processed}),
+		spanner.Update("Messages", []string{"Id", "Processed"}, []interface{}{id, true}),
 	})
 	if err != nil {
 		log.Printf("[ERROR]: Failed to update message processed status in Spanner: %v", err)
 		return err
 	}
 
-	log.Printf("[STORAGE]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, processed)
-
+	log.Printf("[STORAGE]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, true)
 	return nil
 }

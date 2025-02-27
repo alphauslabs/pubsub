@@ -169,7 +169,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
-
 	log.Printf("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
 	// Check if message lock exists and is still valid (within 1 minute)
 	lockInfo, ok := s.MessageLocks.Load(in.Id)
@@ -199,7 +198,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	msg.Processed = true
 
 	// Update the processed status in Spanner
-	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id, msg.Processed); err != nil {
+	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id); err != nil {
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 

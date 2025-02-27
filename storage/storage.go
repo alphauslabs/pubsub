@@ -60,15 +60,16 @@ func StoreTopicSubscriptions(data []byte) error {
 		return ErrInvalidTopicSub
 	}
 
-	var topicSubs map[string][]string
-	if err := json.Unmarshal(data, &topicSubs); err != nil {
+	var recv map[string][]string
+	if err := json.Unmarshal(data, &recv); err != nil {
 		return err
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	topicSubs = topicSubs
+	topicSubs = recv // always replace
+
 	lastActivity = time.Now()
 
 	topicCount := len(topicSubs)
