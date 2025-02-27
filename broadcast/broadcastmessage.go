@@ -13,6 +13,7 @@ import (
 )
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
+	isFirst := true
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 	var lastQueryTime time.Time
@@ -33,6 +34,15 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
                       WHERE processed = FALSE and createdAt > @lastquerytime`,
 				Params: map[string]interface{}{"lastquerytime": lastQueryTime},
 			}
+
+			if isFirst { // query all
+				stmt.SQL = `SELECT id, topic, payload 
+							FROM Messages
+							WHERE processed = FALSE`
+				stmt.Params = map[string]interface{}{}
+			}
+
+			isFirst = false
 
 			iter := spannerClient.Single().Query(ctx, stmt)
 			defer iter.Stop()
