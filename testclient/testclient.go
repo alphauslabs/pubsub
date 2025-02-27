@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"time"
@@ -13,13 +14,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var method = flag.String("method", "", "gRPC method to call")
+var (
+	method = flag.String("method", "", "gRPC method to call")
+	host   = flag.String("host", "localhost", "gRPC server host")
+)
 
 func main() {
 	flag.Parse()
 	log.Printf("[Test] method: %v", *method)
 
-	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
