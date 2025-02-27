@@ -1,11 +1,13 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"sync"
 	"time"
 
+	"cloud.google.com/go/spanner" //added spanner client
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 )
 
@@ -15,6 +17,7 @@ type Storage struct {
 	topicSubs     map[string][]string
 	topicMessages map[string]map[string]*pb.Message
 	lastActivity  time.Time
+	spannerClient *spanner.Client //included spanner client
 }
 
 func NewStorage() *Storage {
@@ -163,4 +166,33 @@ func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
 	}
 
 	return subs, nil
+}
+
+// NEW METHOD TO REMOVE MESSAGES IN QUEUE AFTER ACKNOWLEDGE
+func (s *Storage) RemoveMessage(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.messages, id)
+}
+
+// NEW METHOD TO UPDATE MESSAGE PROCESSED STATUS IN SPANNER
+func (s *Storage) UpdateMessageProcessedStatus(id string, processed bool) error {
+	// Check for valid ID
+	if id == "" {
+		log.Println("[ERROR]: Received invalid message ID")
+		return ErrInvalidMessage
+	}
+
+	// Update the message processed status in Spanner
+	_, err := s.spannerClient.Apply(context.Background(), []*spanner.Mutation{
+		spanner.Update("Messages", []string{"Id", "Processed"}, []interface{}{id, processed}),
+	})
+	if err != nil {
+		log.Printf("[ERROR]: Failed to update message processed status in Spanner: %v", err)
+		return err
+	}
+
+	log.Printf("[STORAGE]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, processed)
+
+	return nil
 }
