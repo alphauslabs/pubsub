@@ -18,18 +18,17 @@ import (
 var (
 	method = flag.String("method", "", "gRPC method to call")
 	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}")
+	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}|{newtopicname} , Please leave empty if not needed, don't remove | separator")
 )
 
 func main() {
-
 	flag.Parse()
 	log.Printf("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
-	if len(ins) != 3 {
+	if len(ins) != 4 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload := ins[0], ins[1], ins[2]
+	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -67,7 +66,7 @@ func main() {
 	case "updatetopic":
 		r, err := c.UpdateTopic(ctx, &pb.UpdateTopicRequest{
 			Id:      topic,
-			NewName: "newnamesample",
+			NewName: newtopicname,
 		})
 		if err != nil {
 			log.Fatalf("Update Failed: %v", err)
