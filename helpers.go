@@ -18,24 +18,31 @@ import (
 )
 
 // validateTopicSubscription checks if subscription exists in storage
-func (s *server) validateTopicSubscription(subscriptionID string) error {
-	subs, err := storage.GetSubscribtionsForTopic(subscriptionID)
+func (s *server) validateSubscription(topicID, subscriptionID string) error {
+	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", topicID)
+	subs, err := storage.GetSubscribtionsForTopic(topicID)
+
 	if err != nil {
-		return status.Errorf(codes.NotFound, "subscription not found")
+		log.Printf("[Subscribe] Topic %s not found in storage", topicID)
+		return status.Errorf(codes.NotFound, "Topic %s not found", topicID)
 	}
 
+	log.Printf("[Subscribe] Found subscriptions for topic %s: %v", topicID, subs)
+
+	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
 	for _, sub := range subs {
 		if sub == subscriptionID {
 			found = true
+			log.Printf("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
 			break
 		}
 	}
 
 	if !found {
-		return status.Errorf(codes.NotFound, "subscription not found")
+		log.Printf("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
+		return status.Errorf(codes.NotFound, "Subscription %s not found", subscriptionID)
 	}
-
 	return nil
 }
 
@@ -64,7 +71,6 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
 	}
-
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin)
 
@@ -78,10 +84,26 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 
 	// Need majority for consensus
 	// todo: Nice idea, but what if we have to be strict, like all nodes (instead of majority) must acknowledge the lock?
-	if successCount < (len(out)/2 + 1) {
-		s.MessageLocks.Delete(messageID)
-		return fmt.Errorf("failed to acquire lock across majority of nodes")
+	// Check consensus mode from configuration (could be stored in server struct)
+	consensusMode := s.ConsensusMode // Add this field to server struct: "majority" or "all"
+
+	// Determine required acknowledgments based on mode
+	requiredAcks := len(out)/2 + 1 // Default to majority
+	if consensusMode == "all" {
+		requiredAcks = len(out) // Require all nodes
 	}
+
+	// Check if we got enough acknowledgments
+	if successCount < requiredAcks {
+		s.MessageLocks.Delete(messageID)
+		log.Printf("[Lock] Failed to acquire lock for message %s: got %d/%d required acknowledgments",
+			messageID, successCount, requiredAcks)
+		return fmt.Errorf("failed to acquire lock across %s of nodes (got %d/%d)",
+			consensusMode, successCount, requiredAcks)
+	}
+
+	log.Printf("[Lock] Successfully acquired lock for message %s with %d/%d acknowledgments",
+		messageID, successCount, len(out))
 
 	// Start timeout timer
 	timer := time.NewTimer(timeout)
@@ -100,83 +122,46 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 func (s *server) handleMessageTimeout(messageID string) {
 	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
 		info := lockInfo.(handlers.MessageLockInfo)
-		if info.NodeID == s.Op.HostPort() && info.Locked && time.Now().After(info.Timeout) {
+		// Any node can unlock a message if its timeout has expired
+		if info.Locked && time.Now().After(info.Timeout) {
+			log.Printf("[Timeout] Node %s detected expired lock for message %s (owned by %s)",
+				s.Op.HostPort(), messageID, info.NodeID)
 			s.broadcastUnlock(context.Background(), messageID)
 		}
 	}
 }
 
-// broadcastUnlock ensures that only the leader node is responsible for broadcasting unlock requests
 func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
+	// Get lock info before unlocking
+	var originalOwner string
+	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
+		info := lockInfo.(handlers.MessageLockInfo)
+		originalOwner = info.NodeID
+	}
 
-	// Any node can broadcast an unlock
+	// Broadcast unlock with reason (timeout or explicit unlock)
+	reason := "timeout"
+	if originalOwner == s.Op.HostPort() {
+		reason = "owner"
+	}
+
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, s.Op.HostPort())),
+		Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", messageID, s.Op.HostPort(), reason)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	s.Op.Broadcast(ctx, bin)
+
 	// Clean up local state
 	s.MessageLocks.Delete(messageID)
-	if timer, ok := s.MessageLocks.Load(messageID); ok {
+	if timer, ok := s.MessageTimer.Load(messageID); ok {
 		timer.(*time.Timer).Stop()
 		s.MessageTimer.Delete(messageID)
 	}
-	log.Printf("[Unlock] Node %s unlocked message: %s", s.Op.HostPort(), messageID)
+
+	log.Printf("[Unlock] Node %s unlocked message: %s (original owner: %s, reason: %s)",
+		s.Op.HostPort(), messageID, originalOwner, reason)
 }
-
-// REQUEST MESSAGE USING BROADCAST METHOD
-// func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
-//     broadcastData := broadcast.BroadCastInput{
-//         Type: broadcast.MsgEvent,
-//         Msg:  []byte(fmt.Sprintf("getmessage:%s", topicID)),
-//     }
-
-//     bin, _ := json.Marshal(broadcastData)
-//     outputs := s.Op.Broadcast(context.Background(), bin)
-
-//     // Process broadcast responses
-//     for _, output := range outputs {
-//         if output.Error != nil {
-//             continue
-//         }
-//         if len(output.Reply) > 0 {
-//             var message pb.Message
-//             if err := json.Unmarshal(output.Reply, &message); err != nil {
-//                 continue
-//             }
-//             return &message, nil
-//         }
-//     }
-
-//     return nil, status.Error(codes.NotFound, "no messages available")
-// }
-
-//REQUEST MESSAGE USING REQUEST METHOD
-// func (s *server) requestMessageFromLeader(topicID string) (*pb.Message, error) {
-// 	// Use the message type with proper format for requesting a message
-// 	broadcastData := broadcast.BroadCastInput{
-// 		Type: broadcast.MsgEvent,
-// 		Msg:  []byte(fmt.Sprintf("getmessage:%s", topicID)),
-// 	}
-
-// 	bin, _ := json.Marshal(broadcastData)
-// 	resp, err := s.Op.Request(context.Background(), bin)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if len(resp) == 0 {
-// 		return nil, status.Error(codes.NotFound, "no messages available")
-// 	}
-
-// 	var message pb.Message
-// 	if err := json.Unmarshal(resp, &message); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &message, nil
-// }
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
 func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) error {

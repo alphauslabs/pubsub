@@ -37,7 +37,8 @@ func main() {
 	defer spannerClient.Close()
 
 	app := &app.PubSub{
-		Client: spannerClient,
+		Client:        spannerClient,
+		ConsensusMode: "all",
 	}
 
 	go storage.MonitorActivity()
