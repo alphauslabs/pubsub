@@ -710,10 +710,6 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/flowerinthenight/hedge v1.18.0 h1:di2ulwuDK2ZEusbuCOwnybVUxzArP8W+hhrmpx7btME=
 github.com/flowerinthenight/hedge v1.18.0/go.mod h1:H218VIScDaQxLQfUAweOT7f5qb/1AhDJE/aocDDMbtk=
-github.com/flowerinthenight/hedge-proto v0.1.0 h1:JnFbUGrTddE8wlxyzxzEa3ZVhZX8svJ3GAY1v5vmB1E=
-github.com/flowerinthenight/hedge-proto v0.1.0/go.mod h1:MX38DIqqM328L1TbbUcBmqEyo7eY7znOSdyKwakc6Rg=
-github.com/flowerinthenight/hedge/v2 v2.0.1 h1:RJ8ef5fmqGgum3rIyOZxSR7aL/rpE8p7VCv7EqHP29U=
-github.com/flowerinthenight/hedge/v2 v2.0.1/go.mod h1:9YoB8KoQdzAfGjZ3pQsVeupzOiJtHuHOQkNRptqlSK8=
 github.com/flowerinthenight/spindle/v2 v2.2.0 h1:kNuT1c7oRir0H8y0isSj4JJfo8JxPV7s1OyErsKXV8I=
 github.com/flowerinthenight/spindle/v2 v2.2.0/go.mod h1:Aqq145TsdqGeYeOCCoFtbPCJkpzbZvp69Ix62FtzVK0=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
