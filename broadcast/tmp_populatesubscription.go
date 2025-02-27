@@ -21,7 +21,7 @@ package broadcast
 // 	interval := flag.Int("interval", 5, "Interval (in seconds) between runs")
 // 	flag.Parse()
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	ctx, cancel := context.WithTimeout(context.Background(),  300000000*time.Second)
 // 	defer cancel()
 
 // 	client, err := spanner.NewClient(ctx, database)

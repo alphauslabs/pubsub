@@ -154,7 +154,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 		log.Println("STRUCT-Leader: Running initial startup query and broadcasting structure.")
 		fetchAndBroadcast(ctx, op, client, true) // run startup broadcast
 	} else {
-		log.Println("STRUCT-Follower: Skipping startup query.")
+		log.Println("S-Follower: Skipping startup query.")
 	}
 
 	for {
@@ -169,7 +169,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 				log.Println("STRUCT-Leader: Processing updates...")
 				fetchAndBroadcast(ctx, op, client, false)
 			} else {
-				log.Println("STRUCT-Follower: No action needed. Skipping fetchAndBroadcast.")
+				log.Println("S-Follower: No action needed. Skipping fetchAndBroadcast.")
 			}
 		}
 	}
