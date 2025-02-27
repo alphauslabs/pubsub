@@ -3,7 +3,6 @@ package send
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
@@ -39,13 +38,10 @@ func Send(data any, msg []byte) ([]byte, error) {
 func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 	client := app.Client // Spanner client
-	op := app.Op         // Hedge leader operation handler
-
-	var lastChecked time.Time
-	lastBroadcasted := make(map[string][]string)
+	op := app.Op
 
 	// Trigger immediate broadcast
-	broadcast.ImmediateBroadcast(ctx, op, client, &lastBroadcasted, &lastChecked)
+	broadcast.ImmediateBroadcast(ctx, op, client)
 
 	return nil, nil
 }
