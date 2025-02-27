@@ -133,8 +133,6 @@ func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
 	if !exists {
 		return nil, ErrTopicNotFound
 	}
-
-	result := make([]string, len(subs))
-	copy(result, subs)
-	return result, nil
+	// todo: check if subs is empty meaning no subscription for that topic and also check if a subscription is attaced to a topic
+	return subs, nil
 }
