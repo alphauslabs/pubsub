@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time" // Needed for duration constants
+	"time"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -21,13 +21,11 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-// Assuming your server type is defined as follows:
-
 var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
 	flag.Parse()
-	go serveHealthChecks() // handle health checks from our LB
+	go serveHealthChecks()
 
 	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
 	if err != nil {
