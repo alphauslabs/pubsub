@@ -38,7 +38,7 @@ func Send(data any, msg []byte) ([]byte, error) {
 }
 
 // Handle topic subscription updates.
-func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
+func handleCrashTopicSubFetch(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 	client := app.Client // Spanner client
 
@@ -56,7 +56,7 @@ func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 	return topicSubData, nil
 }
 
-func handleCrashTopicSubFetch(app *app.PubSub, msg []byte) ([]byte, error) {
+func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 	client := app.Client // Spanner client
 	op := app.Op
