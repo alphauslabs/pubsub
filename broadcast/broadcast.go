@@ -122,7 +122,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	subscriberID := params[1]
 	requestingNodeID := params[2]
 
-	app.Mutex.Lock()
+	app.Mutex.Lock() // todo: mutex lock and unlock, might remove this if no need
 	defer app.Mutex.Unlock()
 
 	// Check if already locked
@@ -193,7 +193,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, err
 	defer app.Mutex.Unlock()
 
 	app.MessageLocks.Delete(messageID)
-	app.MessageQueue.Delete(messageID)
+	app.MessageTimer.Delete(messageID)
 	return nil, nil
 }
 

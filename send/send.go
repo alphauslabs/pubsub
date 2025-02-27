@@ -1,4 +1,4 @@
-package main
+package send
 
 import (
 	"encoding/json"
@@ -8,28 +8,39 @@ import (
 
 const (
 	topicsubupdates = "topicsubupdates"
+	checkleader     = "checkleader"
 )
 
-type sendInput struct {
+type SendInput struct {
 	Type string
 	Msg  []byte
 }
 
 var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	topicsubupdates: handleTopicSubUpdates,
+	checkleader:     handleCheckLeader,
 }
 
 // Root handler for op.Send()
-func send(data any, msg []byte) ([]byte, error) {
-	var in sendInput
+func Send(data any, msg []byte) ([]byte, error) {
+	var in SendInput
 	app := data.(*app.PubSub)
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
+
 	return ctrlsend[in.Type](app, in.Msg)
 }
 
 // Handle topic subscription updates.
 func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
+	if string(msg) == "PING" {
+		return []byte("PONG"), nil
+	}
+
 	return nil, nil
 }

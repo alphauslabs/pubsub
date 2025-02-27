@@ -630,8 +630,8 @@ github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuy
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
-github.com/alphauslabs/pubsub-proto v0.0.0-20250224043151-d2fff9627a86 h1:W63Fb2ORG7Ym31iYh+KIP74E0i3yu/JFg4XfQz2re5A=
-github.com/alphauslabs/pubsub-proto v0.0.0-20250224043151-d2fff9627a86/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
+github.com/alphauslabs/pubsub-proto v0.0.0-20250226091851-35a0c5c2d445 h1:S2J3d6IY64v0cKzU6oHwoypDZRlBji71uanCxRnMerU=
+github.com/alphauslabs/pubsub-proto v0.0.0-20250226091851-35a0c5c2d445/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
 github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
 github.com/apache/arrow/go/v10 v10.0.1/go.mod h1:YvhnlEePVnBS4+0z3fhPfUy7W1Ikj0Ih0vcRo/gZ1M0=
@@ -708,10 +708,8 @@ github.com/envoyproxy/protoc-gen-validate v1.2.1 h1:DEo3O99U8j4hBFwbJfrz9VtgcDfU
 github.com/envoyproxy/protoc-gen-validate v1.2.1/go.mod h1:d/C80l/jxXLdfEIhX1W2TmLfsJ31lvEjwamM4DxlWXU=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/flowerinthenight/hedge-proto v0.1.0 h1:JnFbUGrTddE8wlxyzxzEa3ZVhZX8svJ3GAY1v5vmB1E=
-github.com/flowerinthenight/hedge-proto v0.1.0/go.mod h1:MX38DIqqM328L1TbbUcBmqEyo7eY7znOSdyKwakc6Rg=
-github.com/flowerinthenight/hedge/v2 v2.0.1 h1:RJ8ef5fmqGgum3rIyOZxSR7aL/rpE8p7VCv7EqHP29U=
-github.com/flowerinthenight/hedge/v2 v2.0.1/go.mod h1:9YoB8KoQdzAfGjZ3pQsVeupzOiJtHuHOQkNRptqlSK8=
+github.com/flowerinthenight/hedge v1.18.0 h1:di2ulwuDK2ZEusbuCOwnybVUxzArP8W+hhrmpx7btME=
+github.com/flowerinthenight/hedge v1.18.0/go.mod h1:H218VIScDaQxLQfUAweOT7f5qb/1AhDJE/aocDDMbtk=
 github.com/flowerinthenight/spindle/v2 v2.2.0 h1:kNuT1c7oRir0H8y0isSj4JJfo8JxPV7s1OyErsKXV8I=
 github.com/flowerinthenight/spindle/v2 v2.2.0/go.mod h1:Aqq145TsdqGeYeOCCoFtbPCJkpzbZvp69Ix62FtzVK0=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
