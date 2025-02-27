@@ -12,6 +12,9 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/utils"
+	"github.com/alphauslabs/pubsub/send"
+
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -22,12 +25,14 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
+	spannerClient *spanner.Client
 }
 
 const (
 	MessagesTable = "Messages"
 	TopicsTable   = "Topics"
 	SubsTable     = "Subscriptions"
+	notifleader   = 1
 )
 
 // Publish a message to a topic
@@ -116,7 +121,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// Get messages from local storage for the topic
-			log.Printf("[Subscribe] Checking for messages on topic: %s", in.TopicId)
 			messages, err := s.Storage.GetMessagesByTopic(in.TopicId)
 			if err != nil {
 				log.Printf("[Subscribe] Error getting messages: %v", err)
@@ -164,7 +168,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	}
 }
 
-// Acknowledge a processed message
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 
 	log.Printf("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
@@ -180,8 +183,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Check if lock is valid and not timed out
 	if !info.Locked || time.Now().After(info.Timeout) {
-		log.Printf("[Acknowledge] Error: Message lock expired for ID: %s, current time: %v", in.Id, time.Now())
-		// Message already timed out - handled by handleMessageTimeout
 		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
 	}
 
@@ -192,17 +193,20 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		log.Printf("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
+
 	// Mark as processed since subscriber acknowledged in time
 	log.Printf("[Acknowledge] Marking message %s as processed", in.Id)
 	msg.Processed = true
-	if err := s.Storage.StoreMessage(msg); err != nil {
-		log.Printf("[Acknowledge] Error updating message %s in storage: %v", in.Id, err)
-		return nil, status.Error(codes.Internal, "failed to update message")
-	}
-	log.Printf("[Acknowledge] Successfully marked message %s as processed", in.Id)
 
-	// Broadcast successful processing
-	log.Printf("[Acknowledge] Broadcasting deletion event for message %s", in.Id)
+	// Update the processed status in Spanner
+	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id, msg.Processed); err != nil {
+		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
+	}
+
+	// Log acknowledgment
+	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
+
+	// Broadcast successful processing		//RETURNED
 	broadcastData := broadcast.BroadCastInput{
 		Type: broadcast.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
@@ -218,6 +222,9 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		timer.(*time.Timer).Stop()
 		s.MessageTimer.Delete(in.Id)
 	}
+
+	// Remove the message from in-memory storage
+	s.Storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
 
 	log.Printf("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil
@@ -286,7 +293,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required(JT)")
+		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
 
 	topicID := uuid.New().String()
@@ -305,10 +312,12 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Id:   topicID,
 		Name: req.Name,
 	}
+
 	// -----for testing only-----------//
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("Failed to notify leader: %v", err)
-	}
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
+
 	return topic, nil
 }
 
@@ -318,8 +327,8 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE id = @id LIMIT 1`,
-		Params: map[string]interface{}{"id": req.Id},
+		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
+		Params: map[string]interface{}{"name": req.Id},
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
@@ -405,11 +414,9 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		Id:   current.Id,
 		Name: req.NewName,
 	}
-
-	// optional: notify leader
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("Failed to notify leader: %v", err)
-	}
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
 
 	return updatedTopic, nil
 }
@@ -452,11 +459,9 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		log.Printf("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
-
-	// Notify leader of the deletion
-	if err := s.notifyLeader(ctx, 1); err != nil {
-		log.Printf("DeleteTopic notification failed: %v", err)
-	}
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
@@ -522,21 +527,103 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 	return timestamppb.New(t.Time)
 }
 
-// not yet tested ----
-func (s *server) notifyLeader(ctx context.Context, flag byte) error {
-	//Send needs a slice byte
-	//flag = 1 (when updates on topics occurred)
-	flagged := map[string]interface{}{"flag": flag}
-	jsonData, err := json.Marshal(flagged)
-	if err != nil {
-		return fmt.Errorf("failed to marshal flag: %w", err)
-	}
-	reply, err := s.PubSub.Op.Send(ctx, jsonData)
-	if err != nil {
-		return fmt.Errorf("failed to send to leader: %w", err)
-	}
-	//let see if there is a reply
-	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
+func (s *server) notifyLeader(flag int) {
 
-	return nil
+	// Create a simple payload with just the flag
+	data := map[string]interface{}{
+		"flag": flag,
+	}
+
+	// Serialize the data
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshaling data: %v", err)
+		return
+	}
+
+	// Create SendInput with topicsubupdates type
+	input := send.SendInput{
+		Type: "topicsubupdates", // Use the constant defined in send.go
+		Msg:  jsonData,
+	}
+
+	// Serialize the SendInput
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		log.Printf("Error marshaling send input: %v", err)
+		return
+	}
+
+	// Send to leader with timeout
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	_, err = s.Op.Send(timeoutCtx, inputData)
+	if err != nil {
+		log.Printf("Failed to send to leader: %v", err)
+	} else {
+		log.Printf("Successfully notified leader with flag: %d", flag)
+	}
 }
+
+/*
+func (s *server) notifyLeader(flag int) {
+	// Check if we're already the leader (optimization)
+	hasLock, _ := s.Op.HasLock()
+	if hasLock {
+		log.Println("[Leader] This node is the leader, triggering broadcast directly")
+		// Use a background context for the broadcast
+		bgCtx := context.Background()
+		broadcast.ImmediateBroadcast(bgCtx, s.Op, s.Client)
+		return
+	}
+
+	// Run in a goroutine to avoid blocking the caller
+	go func() {
+		// retry backoff
+		backoffs := []time.Duration{
+			100 * time.Millisecond,
+			500 * time.Millisecond,
+			1 * time.Second,
+			2 * time.Second,
+		}
+
+		// Create a simple payload - content doesn't matter
+		input := send.topicsubupdates{
+			Type: "topicsubupdates", // Must match the handler registration
+			Msg:  []byte(fmt.Sprintf(`{"flag":%d}`, flag)),
+		}
+
+		data, err := json.Marshal(input)
+		if err != nil {
+			log.Printf("[NotifyLeader] Error marshaling input: %v", err)
+			return
+		}
+
+		// Try multiple times with increasing delays
+		for i, delay := range backoffs {
+			// Create a fresh context for each attempt
+			attemptCtx := context.Background()
+			timeoutCtx, cancel := context.WithTimeout(attemptCtx, 5*time.Second)
+
+			log.Printf("[NotifyLeader] Attempt %d to notify leader", i+1)
+			_, err := s.Op.Send(timeoutCtx, data)
+
+			// Always cancel the context when done with this attempt
+			cancel()
+
+			if err == nil {
+				log.Printf("[NotifyLeader] Successfully notified leader")
+				return // Success!
+			}
+
+			log.Printf("[NotifyLeader] Attempt %d failed: %v", i+1, err)
+
+			// Sleep before next attempt
+			time.Sleep(delay)
+		}
+
+		log.Printf("[NotifyLeader] Failed to notify leader after %d attempts", len(backoffs))
+	}()
+}
+*/
