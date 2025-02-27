@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	topicsubupdates = "topicsubupdates"
-	checkleader     = "checkleader"
+	topicsubupdates    = "topicsubupdates"
+	checkleader        = "checkleader"
+	crashTopicSubFetch = "crashtopicsubfetch"
 )
 
 type SendInput struct {
@@ -20,8 +21,9 @@ type SendInput struct {
 }
 
 var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
-	topicsubupdates: handleTopicSubUpdates,
-	checkleader:     handleCheckLeader,
+	topicsubupdates:    handleTopicSubUpdates,
+	crashTopicSubFetch: handleCrashTopicSubFetch,
+	checkleader:        handleCheckLeader,
 }
 
 // Root handler for op.Send()
@@ -52,6 +54,20 @@ func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	// Return the topic-subscription structure as a response
 	return topicSubData, nil
+}
+
+func handleCrashTopicSubFetch(app *app.PubSub, msg []byte) ([]byte, error) {
+	ctx := context.Background()
+	client := app.Client // Spanner client
+	op := app.Op
+
+	// Trigger immediate broadcast
+
+	log.Printf("[handleTopicSubUpdates] Starting ImmediateBroadcast") //debugging_jose
+	broadcast.ImmediateBroadcast(ctx, op, client)
+	log.Printf("[handleTopicSubUpdates] ImmediateBroadcast Completed")
+
+	return nil, nil
 }
 
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {

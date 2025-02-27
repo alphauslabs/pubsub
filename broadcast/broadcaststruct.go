@@ -176,52 +176,52 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 }
 
 // Immediate broadcast function to send topic-subscription updates instantly.
-// func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-// 	log.Println("STRUCT-Leader: Immediate broadcast triggered.")
+func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client) {
+	log.Println("STRUCT-Leader: Immediate broadcast triggered.")
 
-// 	// Ensure this node is the leader before broadcasting
-// 	hasLock, _ := op.HasLock()
-// 	if !hasLock {
-// 		log.Println("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
-// 		return
-// 	}
+	// Ensure this node is the leader before broadcasting
+	hasLock, _ := op.HasLock()
+	if !hasLock {
+		log.Println("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
+		return
+	}
 
-// 	// Fetch latest topic-subscription data
-// 	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
-// 	if len(newBroadcasted) == 0 {
-// 		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
-// 		return
-// 	}
+	// Fetch latest topic-subscription data
+	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
+	if len(newBroadcasted) == 0 {
+		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
+		return
+	}
 
-// 	// Update last broadcasted structure
-// 	lastBroadcasted = newBroadcasted
+	// Update last broadcasted structure
+	lastBroadcasted = newBroadcasted
 
-// 	// Marshal topic-subscription data
-// 	msgData, err := json.Marshal(lastBroadcasted)
-// 	if err != nil {
-// 		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
-// 		return
-// 	}
+	// Marshal topic-subscription data
+	msgData, err := json.Marshal(lastBroadcasted)
+	if err != nil {
+		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+		return
+	}
 
-// 	broadcastMsg := BroadCastInput{
-// 		Type: Topicsub,
-// 		Msg:  msgData,
-// 	}
+	broadcastMsg := BroadCastInput{
+		Type: Topicsub,
+		Msg:  msgData,
+	}
 
-// 	// Marshal BroadCastInput
-// 	broadcastData, err := json.Marshal(broadcastMsg)
-// 	if err != nil {
-// 		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
-// 		return
-// 	}
+	// Marshal BroadCastInput
+	broadcastData, err := json.Marshal(broadcastMsg)
+	if err != nil {
+		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
+		return
+	}
 
-// 	// Broadcast the message
-// 	for _, r := range op.Broadcast(ctx, broadcastData) {
-// 		if r.Error != nil {
-// 			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
-// 		}
-// 	}
+	// Broadcast the message
+	for _, r := range op.Broadcast(ctx, broadcastData) {
+		if r.Error != nil {
+			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+		}
+	}
 
-// 	lastChecked = time.Now()
-// 	log.Println("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
-// }
+	lastChecked = time.Now()
+	log.Println("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
+}
