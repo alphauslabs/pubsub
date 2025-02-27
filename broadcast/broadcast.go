@@ -59,7 +59,7 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("Received message:\n", string(msg))
+	log.Println("[Broadcast] Received message:\n", string(msg))
 	var message pb.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -75,7 +75,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("Received topic-subscriptions:\n", string(msg))
+	log.Println("[Broadcast] Received topic-subscriptions:\n", string(msg))
 	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
@@ -85,8 +85,10 @@ func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles lock/unlock/delete/extend operations separately
 func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
+	log.Println("[MessageEvent] Received message event:", string(msg))
 	parts := strings.Split(string(msg), ":")
 	if len(parts) < 2 {
+		log.Println("[Error] Invalid message event format:", msg)
 		return nil, fmt.Errorf("invalid message event format")
 	}
 
@@ -103,14 +105,17 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 
 	handler, exists := eventHandlers[messageType]
 	if !exists {
+		log.Println("[Error] Unknown message event type:", messageType)
 		return nil, fmt.Errorf("unknown message event: %s", messageType)
 	}
 
+	log.Println("[MessageEvent] Processing event:", messageType, "for message ID:", messageID)
 	return handler(appInstance, messageID, parts[2:])
 }
 
 // Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
+	log.Println("[Lock] Attempting to lock message:", messageID, "Params:", params)
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid lock parameters")
 	}
@@ -131,14 +136,17 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 
 		// If lock is expired, allow new lock
 		if time.Now().After(info.Timeout) {
+			log.Println("[Lock] Previous lock expired, allowing new lock.")
 			// Continue with new lock
 		} else if info.NodeID == requestingNodeID {
 			// Same node is refreshing its lock, allow it
 			info.LockHolders[app.NodeID] = true
 			app.MessageLocks.Store(messageID, info)
+			log.Println("[Lock] Lock refreshed by same node:", requestingNodeID)
 			return nil, nil
 		} else {
 			// Different node has a valid lock, reject
+			log.Println("[Lock] Message already locked by another node:", info.NodeID)
 			return nil, fmt.Errorf("message already locked by another node")
 		}
 	}
@@ -157,17 +165,17 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	lockInfo.LockHolders[app.NodeID] = true
 
 	app.MessageLocks.Store(messageID, lockInfo)
-
+	log.Println("[Lock] Message locked successfully by node:", requestingNodeID)
 	return nil, nil
 }
 
 func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
+	log.Println("[Unlock] Attempting to unlock message:", messageID)
 	if len(params) < 1 {
 		return nil, fmt.Errorf("invalid unlock parameters")
 	}
 
 	unlockingNodeID := params[0]
-
 	app.Mutex.Lock()
 	defer app.Mutex.Unlock()
 
@@ -189,11 +197,13 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 }
 
 func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
+	log.Println("[Delete] Removing message:", messageID)
 	app.Mutex.Lock()
 	defer app.Mutex.Unlock()
 
 	app.MessageLocks.Delete(messageID)
 	app.MessageTimer.Delete(messageID)
+	log.Println("[Delete] Message successfully removed:", messageID)
 	return nil, nil
 }
 
