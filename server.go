@@ -477,13 +477,19 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 
 // not yet tested ----
 func (s *server) notifyLeader(ctx context.Context, flag byte) error {
-	// Check if the current node is the leader
-	if hasLock, _ := s.Op.HasLock(); hasLock {
-		log.Printf("Leader node received: %v", flag)
-		//refresh querry to tables
-
-		return nil
+	//Send needs a slice byte
+	//flag = 1 (when updates on topics occurred)
+	flagged := map[string]interface{}{"flag": flag}
+	jsonData, err := json.Marshal(flagged)
+	if err != nil {
+		return fmt.Errorf("failed to marshal flag: %w", err)
 	}
-	//if not leader? how to receive the flag?
+	reply, err := s.PubSub.Op.Send(ctx, jsonData)
+	if err != nil {
+		return fmt.Errorf("failed to send to leader: %w", err)
+	}
+	//let see if there is a reply
+	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
+
 	return nil
 }
