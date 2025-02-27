@@ -38,8 +38,9 @@ func main() {
 	defer spannerClient.Close()
 
 	app := &app.PubSub{
-		Client:  spannerClient,
-		Storage: storage.NewStorage(),
+		Client:        spannerClient,
+		Storage:       storage.NewStorage(),
+		ConsensusMode: "majority",
 	}
 
 	log.Println("[STORAGE]: Storage initialized")
