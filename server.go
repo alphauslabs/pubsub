@@ -12,6 +12,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,6 +21,7 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
+	spannerClient *spanner.Client
 }
 
 const (
@@ -161,12 +163,20 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	msg.Processed = true
 
 	// Update the processed status in Spanner
-	if err := s.Storage.UpdateMessageProcessedStatus(in.Id, msg.Processed); err != nil {
+	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id, msg.Processed); err != nil {
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
 	// Log acknowledgment
 	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
+
+	// Broadcast successful processing		//RETURNED
+	broadcastData := broadcast.BroadCastInput{
+		Type: broadcast.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
+	}
+	bin, _ := json.Marshal(broadcastData)
+	s.Op.Broadcast(ctx, bin)
 
 	// Clean up message (processed)
 	s.MessageLocks.Delete(in.Id)
