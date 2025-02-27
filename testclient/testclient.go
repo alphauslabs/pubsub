@@ -37,24 +37,22 @@ func main() {
 	c := pb.NewPubSubServiceClient(conn)
 
 	// Contact the server and print out its response.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: topic, Payload: payload})
+		r, err := c.Publish(context.Background(), &pb.PublishRequest{TopicId: topic, Payload: payload})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		log.Printf("Message Published!\nID: %s", r.MessageId)
 	case "ListTopics":
-		r, err := c.ListTopics(ctx, &pb.Empty{})
+		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
 			log.Fatalf("Listing failed: %v", err)
 		}
 		fmt.Printf("r.Topics: %v\n", r.Topics)
 	case "deletetopic":
-		r, err := c.DeleteTopic(ctx, &pb.DeleteTopicRequest{Id: topic})
+		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Id: topic})
 		if err != nil {
 			log.Fatalf("Delete failed: %v", err)
 		}
@@ -64,7 +62,7 @@ func main() {
 			log.Printf("Topic ID: %s not found", topic)
 		}
 	case "updatetopic":
-		r, err := c.UpdateTopic(ctx, &pb.UpdateTopicRequest{
+		r, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
 			Id:      topic,
 			NewName: newtopicname,
 		})
@@ -73,19 +71,19 @@ func main() {
 		}
 		log.Printf("Updated!\nID: %s\nPrevious Name:\nNew Name:%s\n", r.Id, r.Name)
 	case "gettopic":
-		r, err := c.GetTopic(ctx, &pb.GetTopicRequest{Id: topic})
+		r, err := c.GetTopic(context.Background(), &pb.GetTopicRequest{Id: topic})
 		if err != nil {
 			log.Fatalf("Read Failed: %v", err)
 		}
 		log.Printf("Topic Found!\nID: %s\nName: %s\n", r.Id, r.Name)
 	case "createtopic":
-		r, err := c.CreateTopic(ctx, &pb.CreateTopicRequest{Name: topic})
+		r, err := c.CreateTopic(context.Background(), &pb.CreateTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Create Failed: %v", err)
 		}
 		log.Printf("Topic Created!\nID: %s\nName: %s\n", r.Id, r.Name)
 	case "subscribe":
-		r, err := c.Subscribe(ctx, &pb.SubscribeRequest{TopicId: topic, SubscriptionId: sub})
+		r, err := c.Subscribe(context.Background(), &pb.SubscribeRequest{TopicId: topic, SubscriptionId: sub})
 		if err != nil {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
@@ -103,7 +101,7 @@ func main() {
 
 			log.Printf("rec.Payload: %v\n", rec.Payload)
 			time.Sleep(20 * time.Second) // simulate processing
-			ackres, err := c.Acknowledge(ctx, &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: sub})
+			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
