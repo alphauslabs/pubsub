@@ -22,7 +22,7 @@ type SendInput struct {
 var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	topicsubupdates:      handleTopicSubUpdates,
 	checkleader:          handleCheckLeader,
-	initialTopicSubFetch: handleInitialize,
+	initialTopicSubFetch: handleInitializeTopicSub,
 }
 
 // Root handler for op.Send()
@@ -51,12 +51,19 @@ func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func handleInitialize(app *app.PubSub, msg []byte) ([]byte, error) {
+func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 	client := app.Client // Spanner client
 
-	FetchAllTopicSubscriptions(ctx, client) // trigger topic-subscription fetch
-	return nil, nil
+	topicsub := FetchAllTopicSubscriptions(ctx, client) // trigger topic-subscription fetch
+	// Marshal topic-subscription data
+	msgData, err := json.Marshal(topicsub)
+	if err != nil {
+		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+		return nil, err
+	}
+
+	return msgData, nil
 }
 
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
