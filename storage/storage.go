@@ -80,7 +80,7 @@ func (s *Storage) StoreTopicSubscriptions(data []byte) error {
 }
 
 func (s *Storage) monitorActivity() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -88,11 +88,39 @@ func (s *Storage) monitorActivity() {
 		elapsed := time.Since(s.lastActivity)
 		msgCount := len(s.messages)
 		topicCount := len(s.topicSubs)
+
+		topicMsgCounts := make(map[string]int)
+		for topic, msgs := range s.topicMessages {
+			topicMsgCounts[topic] = len(msgs)
+		}
+
+		topicSubDetails := make(map[string]int)
+		for topic, subs := range s.topicSubs {
+			topicSubDetails[topic] = len(subs)
+		}
+
 		s.mu.RUnlock()
 
-		log.Printf("[STORAGE] Status: %d messages, %d topics", msgCount, topicCount)
+		log.Printf("[STORAGE] Status: %d messages, %d topics, last activity: %v ago", msgCount, topicCount, elapsed.Round(time.Second))
+		log.Printf("[STORAGE] Topic-Subscription Structure:")
+		if len(topicSubDetails) == 0 {
+			log.Println("[STORAGE]    No topic-subscription data available")
+		} else {
+			for topic, subCount := range topicSubDetails {
+				log.Printf("[STORAGE]    Topic: %s - Subscriptions: %d", topic, subCount)
+			}
+		}
 
-		if elapsed > 1*time.Minute {
+		log.Println("[STORAGE] Message Distribution:")
+		if len(topicMsgCounts) == 0 {
+			log.Println("[STORAGE]    No messages available")
+		} else {
+			for topic, count := range topicMsgCounts {
+				log.Printf("[STORAGE]    Topic: %s - Messages: %d", topic, count)
+			}
+		}
+
+		if elapsed > 10*time.Minute {
 			log.Printf("[STORAGE] No activity detected in the last %v", elapsed.Round(time.Second))
 		}
 	}
