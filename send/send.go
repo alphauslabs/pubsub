@@ -3,6 +3,7 @@ package send
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
@@ -38,12 +39,19 @@ func Send(data any, msg []byte) ([]byte, error) {
 func handleTopicSubUpdates(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 	client := app.Client // Spanner client
-	op := app.Op
 
-	// Trigger immediate broadcast
-	broadcast.ImmediateBroadcast(ctx, op, client)
+	// query Spanner for the latest topic-subscription structure
+	topicSub := broadcast.FetchAllTopicSubscriptions(ctx, client)
 
-	return nil, nil
+	// marshal the result into JSON format
+	topicSubData, err := json.Marshal(topicSub)
+	if err != nil {
+		log.Printf("SEND-Error: Failed to marshal topic-subscription data: %v", err)
+		return nil, err
+	}
+
+	// Return the topic-subscription structure as a response
+	return topicSubData, nil
 }
 
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
