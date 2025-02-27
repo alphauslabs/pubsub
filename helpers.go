@@ -10,16 +10,11 @@ import (
 	"strings"
 	"time"
 
-	// pb "github.com/alphauslabs/pubsub-proto/v1" // removed
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	// "github.com/alphauslabs/pubsub/app" // removed
-
 	"github.com/alphauslabs/pubsub/broadcast"
 )
-
-// PubSubWrapper wraps app.PubSub to allow defining methods on it
 
 // validateTopicSubscription checks if subscription exists in storage
 func (s *server) validateTopicSubscription(subscriptionID string) error {
