@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -17,12 +18,17 @@ import (
 var (
 	method = flag.String("method", "", "gRPC method to call")
 	host   = flag.String("host", "localhost", "gRPC server host")
+	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}")
 )
 
 func main() {
 	flag.Parse()
 	log.Printf("[Test] method: %v", *method)
-
+	ins := strings.Split(*input, "|")
+	if len(ins) != 3 {
+		log.Fatalf("Invalid input: %v", *input)
+	}
+	topic, sub, payload := ins[0], ins[1], ins[2]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -36,13 +42,13 @@ func main() {
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: "topic1", Payload: "Hello World"})
+		r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: topic, Payload: payload})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		log.Println(r.MessageId)
 	case "subscribe":
-		r, err := c.Subscribe(ctx, &pb.SubscribeRequest{TopicId: "topic1", SubscriptionId: "sub1"})
+		r, err := c.Subscribe(ctx, &pb.SubscribeRequest{TopicId: topic, SubscriptionId: sub})
 		if err != nil {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
@@ -60,7 +66,7 @@ func main() {
 
 			log.Printf("rec.Payload: %v\n", rec.Payload)
 			time.Sleep(20 * time.Second) // simulate processing
-			ackres, err := c.Acknowledge(ctx, &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: "sub1"})
+			ackres, err := c.Acknowledge(ctx, &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
