@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -14,8 +15,10 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/send"
 	"github.com/alphauslabs/pubsub/storage"
-	"github.com/flowerinthenight/hedge/v2"
+	"github.com/alphauslabs/pubsub/utils"
+	"github.com/flowerinthenight/hedge"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
@@ -25,7 +28,7 @@ var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
 	flag.Parse()
-	go serveHealthChecks()
+	go serveHealthChecks() // handle health checks from our LB
 
 	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
 	if err != nil {
@@ -38,6 +41,8 @@ func main() {
 		Storage: storage.NewStorage(),
 	}
 
+	log.Println("[STORAGE]: Storage initialized")
+
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
@@ -46,7 +51,7 @@ func main() {
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
-			send,
+			send.Send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			app,
@@ -65,8 +70,24 @@ func main() {
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
+	// Wait for leader availability
+	func() {
+		var m string
+		defer func(l *string, t time.Time) {
+			log.Printf("%v: %v", *l, time.Since(t))
+		}(&m, time.Now())
+		log.Println("Waiting for leader to be active...")
+		ok, err := utils.EnsureLeaderActive(op, ctx)
+		switch {
+		case !ok:
+			m = fmt.Sprintf("failed: %v, no leader after ", err)
+		default:
+			m = "leader active after "
+		}
+	}()
+
 	// Start our fetching and broadcast routine for topic-subscription structure.
-	go broadcast.StartDistributor(op, spannerClient)
+	go broadcast.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.
 	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 

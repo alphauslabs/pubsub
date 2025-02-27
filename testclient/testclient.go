@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
 	"time"
 
@@ -31,11 +32,36 @@ func main() {
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(ctx, &pb.PublishRequest{Topic: "topic1", Payload: "Hello World"})
+		r, err := c.Publish(ctx, &pb.PublishRequest{TopicId: "topic1", Payload: "Hello World"})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		log.Println(r.MessageId)
+	case "subscribe":
+		r, err := c.Subscribe(ctx, &pb.SubscribeRequest{TopicId: "topic1", SubscriptionId: "sub1"})
+		if err != nil {
+			log.Fatalf("Subscribe failed: %v", err)
+		}
+
+		for {
+			rec, err := r.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				log.Printf("Error: %v", err)
+				break
+			}
+
+			log.Printf("rec.Payload: %v\n", rec.Payload)
+			time.Sleep(20 * time.Second) // simulate processing
+			ackres, err := c.Acknowledge(ctx, &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: "sub1"})
+			if err != nil {
+				log.Fatalf("Acknowledge failed: %v", err)
+			}
+			log.Printf("Acknowledge Response: %v\n", ackres)
+		}
 	default:
 		log.Printf("Unsupported method: %s", *method)
 	}

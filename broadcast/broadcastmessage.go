@@ -8,14 +8,14 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	"github.com/flowerinthenight/hedge/v2"
+	"github.com/flowerinthenight/hedge"
 	"google.golang.org/api/iterator"
 )
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
-
+	var lastQueryTime time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -23,32 +23,32 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 		case <-ticker.C:
 			l, _ := op.HasLock()
 			if !l {
-				log.Println("Not leader, skipping")
 				continue
 			}
 
+			lastQueryTime = time.Now().UTC()
 			stmt := spanner.Statement{
 				SQL: `SELECT id, topic, payload 
                       FROM Messages
-                      WHERE processed = FALSE`,
+                      WHERE processed = FALSE and createdAt > @lastquerytime`,
+				Params: map[string]interface{}{"lastquerytime": lastQueryTime},
 			}
 
 			iter := spannerClient.Single().Query(ctx, stmt)
 			defer iter.Stop()
-
+			count := 0
 			for {
 				row, err := iter.Next()
 				if err == iterator.Done {
 					break
 				}
 				if err != nil {
-					log.Printf("Error reading message: %v", err)
+					log.Printf("[BroadcastMessage] Error reading message: %v", err)
 					continue
 				}
-
+				count++
 				var msg pb.Message
 				if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
-					log.Printf("Error scanning message: %v", err)
 					continue
 				}
 
@@ -66,37 +66,33 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				// Marshal message info
 				data, err := json.Marshal(messageInfo)
 				if err != nil {
-					log.Printf("Error marshalling message: %v", err)
+					log.Printf("[BroadcastMessage] Error marshalling message: %v", err)
 					continue
 				}
 
 				// Create broadcast input
 				broadcastInput := BroadCastInput{
-					Type: message, // Using const from same package
+					Type: Message, // Using const from same package
 					Msg:  data,
 				}
 
 				// Marshal broadcast input
 				broadcastData, err := json.Marshal(broadcastInput)
 				if err != nil {
-					log.Printf("Error marshalling broadcast input: %v", err)
+					log.Printf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 					continue
 				}
 
 				// Broadcast
-				if responses := op.Broadcast(ctx, broadcastData); responses != nil {
-					// get response from each vm
-					for _, response := range responses {
-						log.Printf("[Broadcast] VM %s response for message %s: %v",
-							response.Id,    // vm IP
-							msg.Id,         // Message ID eg. msg1, msg2, etc.
-							response.Error, // <nil> = success, text = error
-						)
+				responses := op.Broadcast(ctx, broadcastData)
+				for _, response := range responses {
+					if response.Error != nil {
+						log.Printf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 					}
-					continue
 				}
-				//response from all VMs
-				log.Printf("[Broadcast] Error: No responses received for message %s", msg.Id)
+			}
+			if count == 0 {
+				log.Println("[BroadcastMessage] No new unprocessed messages found.")
 			}
 		}
 	}
