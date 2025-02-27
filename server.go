@@ -138,7 +138,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	}
 }
 
-// Acknowledge a processed message
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 	// Check if message lock exists and is still valid (within 1 minute)
 	lockInfo, ok := s.MessageLocks.Load(in.Id)
@@ -149,7 +148,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	info := lockInfo.(broadcast.MessageLockInfo)
 	// Check if lock is valid and not timed out
 	if !info.Locked || time.Now().After(info.Timeout) {
-		// Message already timed out - handled by handleMessageTimeout
 		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
 	}
 
@@ -158,19 +156,17 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
+
 	// Mark as processed since subscriber acknowledged in time
 	msg.Processed = true
-	if err := s.Storage.StoreMessage(msg); err != nil {
-		return nil, status.Error(codes.Internal, "failed to update message")
+
+	// Update the processed status in Spanner
+	if err := s.Storage.UpdateMessageProcessedStatus(in.Id, msg.Processed); err != nil {
+		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
-	// Broadcast successful processing
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
-	}
-	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
+	// Log acknowledgment
+	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
 
 	// Clean up message (processed)
 	s.MessageLocks.Delete(in.Id)
@@ -178,6 +174,9 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		timer.(*time.Timer).Stop()
 		s.MessageTimer.Delete(in.Id)
 	}
+
+	// Remove the message from in-memory storage
+	s.Storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
 
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
