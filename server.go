@@ -86,28 +86,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	// Validate if subscription exists for the given topic
 	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	subs, err := storage.GetSubscribtionsForTopic(in.TopicId)
-
+	err := s.validateSubscription(in.TopicId, in.SubscriptionId)
 	if err != nil {
-		log.Printf("[Subscribe] Topic %s not found in storage", in.TopicId)
-		return status.Errorf(codes.NotFound, "Topic %s not found", in.TopicId)
-	}
-
-	log.Printf("[Subscribe] Found subscriptions for topic %s: %v", in.TopicId, subs)
-
-	// Check if the provided subscription ID exists in the topic's subscriptions
-	found := false
-	for _, sub := range subs {
-		if sub == in.SubscriptionId {
-			found = true
-			log.Printf("[Subscribe] Subscription %s found in topic %s", in.SubscriptionId, in.TopicId)
-			break
-		}
-	}
-
-	if !found {
-		log.Printf("[Subscribe] Subscription %s not found in topic %s", in.SubscriptionId, in.TopicId)
-		return status.Errorf(codes.NotFound, "Subscription %s not found", in.SubscriptionId)
+		log.Printf("[Subscribe] Error validating subscription: %v", err)
+		return err
 	}
 
 	log.Printf("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
