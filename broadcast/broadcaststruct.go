@@ -18,7 +18,7 @@ var (
 )
 
 // fetchAllTopicSubscriptions fetches all topic-subscription mappings when lastBroadcasted is empty.
-func fetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string][]string {
+func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string][]string {
 	stmt := spanner.Statement{
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
@@ -57,7 +57,7 @@ func fetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
 	if isStartup {
 		// On startup, fetch all topic-subscription structure
-		lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+		lastBroadcasted = FetchAllTopicSubscriptions(ctx, client)
 		log.Println("STRUCT-Leader: Startup detected. Broadcasting full topic-subscription data.")
 	} else {
 		// Check if any topic has been updated since lastChecked
@@ -88,7 +88,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 		// If updates exist, fetch the topic-subscription structure
 		if updateCount > 0 {
 			log.Println("STRUCT-Leader: Changes detected. Fetching full topic-subscription structure.")
-			lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+			lastBroadcasted = FetchAllTopicSubscriptions(ctx, client)
 		} else {
 			return
 		}
@@ -97,7 +97,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	// If lastBroadcasted is empty, re-fetch all topic-subscription data
 	if len(lastBroadcasted) == 0 {
 		log.Println("STRUCT-Leader: lastBroadcasted is empty! Running a full query to re-fetch topic-subscription data.")
-		lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
+		lastBroadcasted = FetchAllTopicSubscriptions(ctx, client)
 	}
 
 	// If no updates, log and return
@@ -187,7 +187,7 @@ func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Clien
 	}
 
 	// Fetch latest topic-subscription data
-	newBroadcasted := fetchAllTopicSubscriptions(ctx, client)
+	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
 	if len(newBroadcasted) == 0 {
 		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
 		return
