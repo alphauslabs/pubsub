@@ -1,4 +1,4 @@
-package broadcast
+package handlers
 
 import (
 	"context"

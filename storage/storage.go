@@ -10,51 +10,51 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 )
 
-type Storage struct {
+var (
 	mu            sync.RWMutex
-	messages      map[string]*pb.Message
-	topicSubs     map[string][]string
-	topicMessages map[string]map[string]*pb.Message
-	lastActivity  time.Time
+	messages      = make(map[string]*pb.Message)
+	topicSubs     = make(map[string][]string)
+	topicMessages = make(map[string]map[string]*pb.Message)
+	lastActivity  = time.Now()
 	spannerClient *spanner.Client //included spanner client
-}
+)
 
-func NewStorage() *Storage {
-	s := &Storage{
-		messages:      make(map[string]*pb.Message),
-		topicSubs:     make(map[string][]string),
-		topicMessages: make(map[string]map[string]*pb.Message),
-		lastActivity:  time.Now(),
-	}
+// func NewStorage() *Storage {
+// 	s := &Storage{
+// 		messages:      make(map[string]*pb.Message),
+// 		topicSubs:     make(map[string][]string),
+// 		topicMessages: make(map[string]map[string]*pb.Message),
+// 		lastActivity:  time.Now(),
+// 	}
 
-	go s.monitorActivity()
+// 	go s.monitorActivity()
 
-	return s
-}
+// 	return s
+// }
 
-func (s *Storage) StoreMessage(msg *pb.Message) error {
+func StoreMessage(msg *pb.Message) error {
 	if msg == nil || msg.Id == "" {
 		log.Println("[ERROR]: Received invalid message")
 		return ErrInvalidMessage
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
-	s.messages[msg.Id] = msg
+	messages[msg.Id] = msg
 
-	if _, exists := s.topicMessages[msg.Topic]; !exists {
-		s.topicMessages[msg.Topic] = make(map[string]*pb.Message)
+	if _, exists := topicMessages[msg.Topic]; !exists {
+		topicMessages[msg.Topic] = make(map[string]*pb.Message)
 	}
-	s.topicMessages[msg.Topic][msg.Id] = msg
+	topicMessages[msg.Topic][msg.Id] = msg
 
-	s.lastActivity = time.Now()
+	lastActivity = time.Now()
 	log.Printf("[STORAGE]: Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
 
 	return nil
 }
 
-func (s *Storage) StoreTopicSubscriptions(data []byte) error {
+func StoreTopicSubscriptions(data []byte) error {
 	if len(data) == 0 {
 		log.Println("[ERROR]: Received empty topic-subscription data")
 		return ErrInvalidTopicSub
@@ -65,11 +65,11 @@ func (s *Storage) StoreTopicSubscriptions(data []byte) error {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
-	s.topicSubs = topicSubs
-	s.lastActivity = time.Now()
+	topicSubs = topicSubs
+	lastActivity = time.Now()
 
 	topicCount := len(topicSubs)
 	totalSubs := 0
@@ -81,27 +81,27 @@ func (s *Storage) StoreTopicSubscriptions(data []byte) error {
 	return nil
 }
 
-func (s *Storage) monitorActivity() {
+func MonitorActivity() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		s.mu.RLock()
-		elapsed := time.Since(s.lastActivity)
-		msgCount := len(s.messages)
-		topicCount := len(s.topicSubs)
+		mu.RLock()
+		elapsed := time.Since(lastActivity)
+		msgCount := len(messages)
+		topicCount := len(topicSubs)
 
 		topicMsgCounts := make(map[string]int)
-		for topic, msgs := range s.topicMessages {
+		for topic, msgs := range topicMessages {
 			topicMsgCounts[topic] = len(msgs)
 		}
 
 		topicSubDetails := make(map[string]int)
-		for topic, subs := range s.topicSubs {
+		for topic, subs := range topicSubs {
 			topicSubDetails[topic] = len(subs)
 		}
 
-		s.mu.RUnlock()
+		mu.RUnlock()
 
 		log.Printf("[STORAGE] Status: %d messages, %d topics, last activity: %v ago", msgCount, topicCount, elapsed.Round(time.Second))
 		log.Printf("[STORAGE] Topic-Subscription Structure:")
@@ -128,22 +128,22 @@ func (s *Storage) monitorActivity() {
 	}
 }
 
-func (s *Storage) GetMessage(id string) (*pb.Message, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func GetMessage(id string) (*pb.Message, error) {
+	mu.RLock()
+	defer mu.RUnlock()
 
-	msg, exists := s.messages[id]
+	msg, exists := messages[id]
 	if !exists {
 		return nil, ErrMessageNotFound
 	}
 	return msg, nil
 }
 
-func (s *Storage) GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
+	mu.RLock()
+	defer mu.RUnlock()
 
-	topicMsgs, exists := s.topicMessages[topicID]
+	topicMsgs, exists := topicMessages[topicID]
 	if !exists {
 		return nil, nil
 	}
@@ -155,11 +155,11 @@ func (s *Storage) GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
 	return messages, nil
 }
 
-func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func GetSubscribtionsForTopic(topicID string) ([]string, error) {
+	mu.RLock()
+	defer mu.RUnlock()
 
-	subs, exists := s.topicSubs[topicID]
+	subs, exists := topicSubs[topicID]
 	if !exists {
 		return nil, ErrTopicNotFound
 	}
@@ -168,8 +168,8 @@ func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
 }
 
 // NEW METHOD TO REMOVE MESSAGES IN QUEUE AFTER ACKNOWLEDGE
-func (s *Storage) RemoveMessage(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.messages, id)
+func RemoveMessage(id string) {
+	mu.Lock()
+	defer mu.Unlock()
+	delete(messages, id)
 }

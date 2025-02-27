@@ -11,9 +11,9 @@ import (
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
-	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/handlers"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
-	"github.com/alphauslabs/pubsub/send"
 
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
@@ -65,8 +65,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	// broadcast message
-	bcastin := broadcast.BroadCastInput{
-		Type: broadcast.Message,
+	bcastin := handlers.BroadCastInput{
+		Type: handlers.Message,
 		Msg:  b,
 	}
 	bin, _ := json.Marshal(bcastin)
@@ -86,7 +86,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	// Validate if subscription exists for the given topic
 	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	subs, err := s.Storage.GetSubscribtionsForTopic(in.TopicId)
+	subs, err := storage.GetSubscribtionsForTopic(in.TopicId)
 
 	if err != nil {
 		log.Printf("[Subscribe] Topic %s not found in storage", in.TopicId)
@@ -121,7 +121,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// Get messages from local storage for the topic
-			messages, err := s.Storage.GetMessagesByTopic(in.TopicId)
+			messages, err := storage.GetMessagesByTopic(in.TopicId)
 			if err != nil {
 				log.Printf("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
@@ -178,7 +178,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
 
-	info := lockInfo.(broadcast.MessageLockInfo)
+	info := lockInfo.(handlers.MessageLockInfo)
 	log.Printf("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
 
 	// Check if lock is valid and not timed out
@@ -188,7 +188,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Get message processed in time
 	log.Printf("[Acknowledge] Retrieving message %s from storage", in.Id)
-	msg, err := s.Storage.GetMessage(in.Id)
+	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
 		log.Printf("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "message not found")
@@ -207,8 +207,8 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
 
 	// Broadcast successful processing		//RETURNED
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 	bin, _ := json.Marshal(broadcastData)
@@ -224,7 +224,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	}
 
 	// Remove the message from in-memory storage
-	s.Storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
+	storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
 
 	log.Printf("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil
@@ -240,7 +240,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
 
-	info := lockInfo.(broadcast.MessageLockInfo)
+	info := lockInfo.(handlers.MessageLockInfo)
 	log.Printf("[ModifyVisibility] Current lock info - Locked: %v, Timeout: %v, NodeID: %s",
 		info.Locked, info.Timeout, info.NodeID)
 
@@ -258,8 +258,8 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 	// Broadcast new timeout
 	log.Printf("[ModifyVisibility] Broadcasting timeout extension for message %s", in.Id)
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", in.Id, in.NewTimeout, s.Op.HostPort())),
 	}
 	bin, _ := json.Marshal(broadcastData)
@@ -542,7 +542,7 @@ func (s *server) notifyLeader(flag int) {
 	}
 
 	// Create SendInput with topicsubupdates type
-	input := send.SendInput{
+	input := handlers.SendInput{
 		Type: "topicsubupdates", // Use the constant defined in send.go
 		Msg:  jsonData,
 	}

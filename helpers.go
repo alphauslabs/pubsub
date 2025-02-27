@@ -13,12 +13,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/handlers"
+	"github.com/alphauslabs/pubsub/storage"
 )
 
 // validateTopicSubscription checks if subscription exists in storage
 func (s *server) validateTopicSubscription(subscriptionID string) error {
-	subs, err := s.Storage.GetSubscribtionsForTopic(subscriptionID)
+	subs, err := storage.GetSubscribtionsForTopic(subscriptionID)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "subscription not found")
 	}
@@ -40,7 +41,7 @@ func (s *server) validateTopicSubscription(subscriptionID string) error {
 
 // / broadcastLock handles distributed locking
 func (s *server) broadcastLock(ctx context.Context, messageID string, subscriberID string, timeout time.Duration) error {
-	lockInfo := broadcast.MessageLockInfo{
+	lockInfo := handlers.MessageLockInfo{
 		Timeout:      time.Now().Add(timeout),
 		Locked:       true,
 		NodeID:       s.Op.HostPort(),
@@ -49,7 +50,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	}
 
 	// Check if message exists in storage
-	_, err := s.Storage.GetMessage(messageID)
+	_, err := storage.GetMessage(messageID)
 	if err != nil {
 		return err
 	}
@@ -59,8 +60,8 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	s.MessageLocks.Store(messageID, lockInfo)
 
 	// Broadcast lock request
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
 	}
 
@@ -98,7 +99,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 // todo: if the locker node will crash, no one will broadcast to unlock?
 func (s *server) handleMessageTimeout(messageID string) {
 	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
-		info := lockInfo.(broadcast.MessageLockInfo)
+		info := lockInfo.(handlers.MessageLockInfo)
 		if info.NodeID == s.Op.HostPort() && info.Locked && time.Now().After(info.Timeout) {
 			s.broadcastUnlock(context.Background(), messageID)
 		}
@@ -109,8 +110,8 @@ func (s *server) handleMessageTimeout(messageID string) {
 func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 
 	// Any node can broadcast an unlock
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("unlock:%s:%s", messageID, s.Op.HostPort())),
 	}
 	bin, _ := json.Marshal(broadcastData)
@@ -184,7 +185,7 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 		return status.Error(codes.NotFound, "message not locked")
 	}
 
-	info, ok := value.(broadcast.MessageLockInfo)
+	info, ok := value.(handlers.MessageLockInfo)
 	if !ok {
 		return status.Error(codes.Internal, "invalid lock info")
 	}
@@ -205,8 +206,8 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	s.MessageLocks.Store(messageID, info)
 
 	// Create broadcast message
-	broadcastData := broadcast.BroadCastInput{
-		Type: broadcast.MsgEvent,
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.HostPort())),
 	}
 	msgBytes, _ := json.Marshal(broadcastData)
@@ -237,7 +238,7 @@ func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
 		}
 
 		// Store the lock locally
-		lockInfo := broadcast.MessageLockInfo{
+		lockInfo := handlers.MessageLockInfo{
 			Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
 			Locked:       true,
 			NodeID:       s.Op.HostPort(), // This is the current node

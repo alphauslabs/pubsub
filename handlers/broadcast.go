@@ -1,4 +1,4 @@
-package broadcast
+package handlers
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/storage"
 )
 
 const (
@@ -66,7 +67,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 	}
 
 	// Store in node queue/memory (not marking as processed yet)
-	if err := app.Storage.StoreMessage(&message); err != nil {
+	if err := storage.StoreMessage(&message); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}
 
@@ -76,7 +77,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 // Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
 	log.Println("Received topic-subscriptions:\n", string(msg))
-	if err := app.Storage.StoreTopicSubscriptions(msg); err != nil {
+	if err := storage.StoreTopicSubscriptions(msg); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
 

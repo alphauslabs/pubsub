@@ -14,8 +14,7 @@ import (
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
-	"github.com/alphauslabs/pubsub/broadcast"
-	"github.com/alphauslabs/pubsub/send"
+	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
@@ -38,11 +37,10 @@ func main() {
 	defer spannerClient.Close()
 
 	app := &app.PubSub{
-		Client:  spannerClient,
-		Storage: storage.NewStorage(),
+		Client: spannerClient,
 	}
 
-	log.Println("[STORAGE]: Storage initialized")
+	go storage.MonitorActivity()
 
 	op := hedge.New(
 		spannerClient,
@@ -52,11 +50,11 @@ func main() {
 		"logtable",
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
-			send.Send,
+			handlers.Send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
 			app,
-			broadcast.Broadcast,
+			handlers.Broadcast,
 		),
 	)
 
@@ -88,9 +86,9 @@ func main() {
 	}()
 
 	// Start our fetching and broadcast routine for topic-subscription structure.
-	go broadcast.StartDistributor(ctx, op, spannerClient)
+	go handlers.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.
-	go broadcast.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
+	go handlers.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

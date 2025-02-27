@@ -6,12 +6,12 @@ import (
 	"log"
 
 	"cloud.google.com/go/spanner"
-	"github.com/alphauslabs/pubsub/send"
+	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/flowerinthenight/hedge"
 )
 
 func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
-	msg := send.SendInput{
+	msg := handlers.SendInput{
 		Type: "checkleader",
 		Msg:  []byte("PING"),
 	}
