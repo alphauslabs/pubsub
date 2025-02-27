@@ -38,13 +38,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	b, _ := json.Marshal(in)
 
-	l, _ := s.Op.HasLock()
-	if l {
-		log.Println("[Publish-leader] Received message:\n", string(b))
-	} else {
-		log.Printf("[Publish] Received message:\n%v", string(b))
-	}
-
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
