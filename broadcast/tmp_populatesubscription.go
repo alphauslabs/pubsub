@@ -1,63 +1,111 @@
-package broadcast
+package main
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"log"
-// 	"time"
+package main
 
-// 	"cloud.google.com/go/spanner"
-// )
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"time"
 
-// const (
-// 	database = "projects/labs-169405/instances/alphaus-dev/databases/main"
-// 	table    = "Subscriptions"
-// )
+	"cloud.google.com/go/spanner"
+)
 
-// func main() {
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+const (
+	database = "projects/labs-169405/instances/alphaus-dev/databases/main"
+	table    = "Subscriptions"
+)
 
-// 	client, err := spanner.NewClient(ctx, database)
-// 	if err != nil {
-// 		log.Fatalf("Failed to create Spanner client: %v", err)
-// 	}
-// 	defer client.Close()
+func main() {
+	
+	runs := flag.Int("runs", 1, "Number of times to write to Spanner")
+	interval := flag.Int("interval", 5, "Interval (in seconds) between runs")
+	flag.Parse()
 
-// 	log.Println("Connected to Spanner successfully.")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	insertData(ctx, client)
-// }
+	client, err := spanner.NewClient(ctx, database)
+	if err != nil {
+		log.Fatalf("Failed to create Spanner client: %v", err)
+	}
+	defer client.Close()
 
-// func insertData(ctx context.Context, client *spanner.Client) {
-// 	mutations := []*spanner.Mutation{}
-// 	topicCounter := make(map[string]int)
+	log.Println("Connected to Spanner successfully.")
 
-// 	for i := 1; i <= 100; {
-// 		for t := 1; t <= 10 && i <= 100; t++ {
-// 			topic := fmt.Sprintf("topic%d", t)
-// 			subCount := (t%3)*2 + 1 // Alternates between 1, 3, and 5 subscriptions per topic
-// 			for j := 0; j < subCount && i <= 100; j++ {
-// 				subscription := fmt.Sprintf("subscription%d", i)
-// 				mutations = append(mutations, spanner.Insert(table,
-// 					[]string{"id", "name", "topic", "createdAt", "updatedAt"},
-// 					[]interface{}{fmt.Sprintf("%d", i), subscription, topic, time.Now(), time.Now()}))
-// 				topicCounter[topic]++
-// 				i++
-// 			}
-// 		}
-// 	}
+	uniqueNames := make(map[string]bool)
 
-// 	log.Printf("Prepared %d mutations for insertion.", len(mutations))
 
-// 	_, err := client.Apply(ctx, mutations)
-// 	if err != nil {
-// 		log.Fatalf("Failed to insert data: %v", err)
-// 	}
+	lastID := getLastID(ctx, client) // Fetches the highest existing ID from Spanner
 
-// 	log.Println("Sample data inserted successfully into Subscriptions table.")
+	for run := 1; run <= *runs; run++ {
+		log.Printf("Run %d/%d: Inserting data...\n", run, *runs)
+		lastID = insertData(ctx, client, uniqueNames, lastID)
 
-// 	for topic, count := range topicCounter {
-// 		log.Printf("%s: %d subscriptions", topic, count)
-// 	}
-// }
+		
+		if run < *runs {
+			log.Printf("Waiting for %d seconds before next run...\n", *interval)
+			time.Sleep(time.Duration(*interval) * time.Second)
+		}
+	}
+
+	log.Println("All runs completed successfully.")
+}
+
+// Retrieves the highest ID from the database to continue sequential numbering
+func getLastID(ctx context.Context, client *spanner.Client) int {
+	stmt := spanner.Statement{
+		SQL: `SELECT MAX(id) FROM ` + table,
+	}
+
+	iter := client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var lastID int64
+	err := iter.Do(func(row *spanner.Row) error {
+		return row.Columns(&lastID)
+	})
+
+	if err != nil {
+		log.Printf("Error retrieving last ID, starting from 0: %v", err)
+		return 0
+	}
+
+	log.Printf("Last ID in database: %d", lastID)
+	return int(lastID)
+}
+
+func insertData(ctx context.Context, client *spanner.Client, uniqueNames map[string]bool, lastID int) int {
+	mutations := []*spanner.Mutation{}
+	topicCounter := make(map[string]int)
+
+	for t := 1; t <= 10; t++ {
+		topic := fmt.Sprintf("topic%d", t)
+		subCount := (t%3)*2 + 1 // Alternates between 1, 3, and 5 subscriptions per topic
+
+		for j := 0; j < subCount; j++ {
+			lastID++ // Increment ID sequentially
+			name := fmt.Sprintf("subscription%d", lastID)
+
+			// Ensure unique names
+			if uniqueNames[name] {
+				log.Printf("Skipping duplicate name: %s", name)
+				continue
+			}
+			uniqueNames[name] = true
+
+			mutations = append(mutations, spanner.Insert(table,
+				[]string{"id", "name", "topic", "createdAt", "updatedAt"},
+				[]interface{}{lastID, name, topic, time.Now(), time.Now()}))
+
+			topicCounter[topic]++
+		}
+	}
+
+	log.Printf("Prepared %d mutations for insertion.", len(mutations))
+
+
+	_, err := client.Apply(ctx, mutations)
+	if err != nil {
+		log.Fatalf("Failed to insert
