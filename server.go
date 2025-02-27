@@ -12,6 +12,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/send"
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -307,7 +308,10 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Name: req.Name,
 	}
 	// -----for testing only-----------//
-	go s.notifyLeader(notifleader)
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
+
 	return topic, nil
 }
 
@@ -404,12 +408,9 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		Id:   current.Id,
 		Name: req.NewName,
 	}
-
-	// if err := s.notifyLeader(ctx, 1); err != nil {
-	// 	log.Printf("Failed to notify leader: %v", err)
-	// }
-
-	go s.notifyLeader(notifleader)
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
 
 	return updatedTopic, nil
 }
@@ -452,12 +453,9 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		log.Printf("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
-
-	// Notify leader of the deletion
-	// if err := s.notifyLeader(ctx, 1); err != nil {
-	// 	log.Printf("DeleteTopic notification failed: %v", err)
-	// }
-	go s.notifyLeader(notifleader)
+	go func() {
+		s.notifyLeader(1) // Send flag=1 to indicate an update
+	}()
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
@@ -523,76 +521,103 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 	return timestamppb.New(t.Time)
 }
 
-// not working ----
-// func (s *server) notifyLeader(_ context.Context, flag byte) error {
-// 	//create custom timer for leader notif
-// 	notifyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func (s *server) notifyLeader(flag int) {
 
-// 	//Send needs a slice byte
-// 	//flag = 1 (when updates on topics occurred)
-// 	flagged := map[string]interface{}{"flag": flag}
-// 	jsonData, err := json.Marshal(flagged)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to marshal flag: %w", err)
-// 	}
-// 	reply, err := s.PubSub.Op.Send(notifyCtx, jsonData)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to send to leader: %w", err)
-// 	}
-// 	//let see if there is a reply
-// 	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
+	// Create a simple payload with just the flag
+	data := map[string]interface{}{
+		"flag": flag,
+	}
 
-// 	return nil
-// }
-
-// try with retry
-
-func (s *server) notifyLeader(flag byte) {
-	// Skip if we're the leader
-	isLeader, _ := s.PubSub.Op.HasLock()
-	// if err != nil {
-	// 	log.Printf("Failed to check leader status: %v", err)
-	if isLeader {
-		log.Printf("Current node is leader, skipping notification")
+	// Serialize the data
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshaling data: %v", err)
 		return
 	}
 
-	// Retry logic with backoff
-	backoff := time.Second
-	maxAttempts := 3
+	// Create SendInput with topicsubupdates type
+	input := send.SendInput{
+		Type: "topicsubupdates", // Use the constant defined in send.go
+		Msg:  jsonData,
+	}
 
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*backoff)
-		err := s.notifLeaderwithctx(ctx, flag)
-		cancel()
+	// Serialize the SendInput
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		log.Printf("Error marshaling send input: %v", err)
+		return
+	}
 
-		if err == nil {
+	// Send to leader with timeout
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	_, err = s.Op.Send(timeoutCtx, inputData)
+	if err != nil {
+		log.Printf("Failed to send to leader: %v", err)
+	} else {
+		log.Printf("Successfully notified leader with flag: %d", flag)
+	}
+}
+
+/*
+func (s *server) notifyLeader(flag int) {
+	// Check if we're already the leader (optimization)
+	hasLock, _ := s.Op.HasLock()
+	if hasLock {
+		log.Println("[Leader] This node is the leader, triggering broadcast directly")
+		// Use a background context for the broadcast
+		bgCtx := context.Background()
+		broadcast.ImmediateBroadcast(bgCtx, s.Op, s.Client)
+		return
+	}
+
+	// Run in a goroutine to avoid blocking the caller
+	go func() {
+		// retry backoff
+		backoffs := []time.Duration{
+			100 * time.Millisecond,
+			500 * time.Millisecond,
+			1 * time.Second,
+			2 * time.Second,
+		}
+
+		// Create a simple payload - content doesn't matter
+		input := send.topicsubupdates{
+			Type: "topicsubupdates", // Must match the handler registration
+			Msg:  []byte(fmt.Sprintf(`{"flag":%d}`, flag)),
+		}
+
+		data, err := json.Marshal(input)
+		if err != nil {
+			log.Printf("[NotifyLeader] Error marshaling input: %v", err)
 			return
 		}
 
-		log.Printf("Leader notification attempt %d failed: %v", attempt+1, err)
+		// Try multiple times with increasing delays
+		for i, delay := range backoffs {
+			// Create a fresh context for each attempt
+			attemptCtx := context.Background()
+			timeoutCtx, cancel := context.WithTimeout(attemptCtx, 5*time.Second)
 
-		if attempt < maxAttempts-1 {
-			time.Sleep(backoff)
-			backoff *= 2 // Exponential backoff
+			log.Printf("[NotifyLeader] Attempt %d to notify leader", i+1)
+			_, err := s.Op.Send(timeoutCtx, data)
+
+			// Always cancel the context when done with this attempt
+			cancel()
+
+			if err == nil {
+				log.Printf("[NotifyLeader] Successfully notified leader")
+				return // Success!
+			}
+
+			log.Printf("[NotifyLeader] Attempt %d failed: %v", i+1, err)
+
+			// Sleep before next attempt
+			time.Sleep(delay)
 		}
-	}
+
+		log.Printf("[NotifyLeader] Failed to notify leader after %d attempts", len(backoffs))
+	}()
 }
-
-func (s *server) notifLeaderwithctx(ctx context.Context, flag byte) error {
-
-	flagged := map[string]interface{}{"flag": flag}
-	jsonData, err := json.Marshal(flagged)
-	if err != nil {
-		return fmt.Errorf("failed to marshal flag: %w", err)
-	}
-
-	reply, err := s.PubSub.Op.Send(ctx, jsonData)
-	if err != nil {
-		return fmt.Errorf("failed to send to leader: %w", err)
-	}
-
-	log.Printf("Leader notified with flag: %v, reply: %s", flag, string(reply))
-	return nil
-}
+*/
