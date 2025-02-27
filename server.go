@@ -286,7 +286,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required(JT)")
+		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
 
 	topicID := uuid.New().String()
@@ -305,6 +305,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Id:   topicID,
 		Name: req.Name,
 	}
+
 	// -----for testing only-----------//
 	if err := s.notifyLeader(ctx, 1); err != nil {
 		log.Printf("Failed to notify leader: %v", err)
@@ -318,8 +319,8 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE id = @id LIMIT 1`,
-		Params: map[string]interface{}{"id": req.Id},
+		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
+		Params: map[string]interface{}{"name": req.Id},
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
