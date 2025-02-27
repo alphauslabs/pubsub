@@ -95,7 +95,11 @@ var (
 
 func StoreMessage(msg *Message) error {
 	if msg == nil || msg.Id == "" {
+<<<<<<< HEAD
 		glog.Info("[ERROR]: Received invalid message")
+=======
+		log.Println("[ERROR] Received invalid message")
+>>>>>>> aa8fdf48 (Added changes)
 		return ErrInvalidMessage
 	}
 
@@ -108,6 +112,7 @@ func StoreMessage(msg *Message) error {
 	}
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
+<<<<<<< HEAD
 	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
 	return nil
 }
@@ -119,12 +124,48 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 
 	topicSubs = d // replaces everytime
 	glog.Infof("[STORAGE] Stored topic-subscription data with len %d", len(topicSubs))
+=======
+	s.lastActivity = time.Now()
+	log.Printf("[STORAGE] Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
+>>>>>>> aa8fdf48 (Added changes)
 
 	return nil
 }
 
+<<<<<<< HEAD
 func MonitorActivity() {
 	ticker := time.NewTicker(2 * time.Minute)
+=======
+func (s *Storage) StoreTopicSubscriptions(data []byte) error {
+	if len(data) == 0 {
+		log.Println("[ERROR] Received empty topic-subscription data")
+		return ErrInvalidTopicSub
+	}
+
+	var topicSubs map[string][]string
+	if err := json.Unmarshal(data, &topicSubs); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.topicSubs = topicSubs
+	s.lastActivity = time.Now()
+
+	topicCount := len(topicSubs)
+	totalSubs := 0
+	for _, subs := range topicSubs {
+		totalSubs += len(subs)
+	}
+	log.Printf("[STORAGE] Stored topic-subscription data: %d topics, %d total subscriptions", topicCount, totalSubs)
+
+	return nil
+}
+
+func (s *Storage) monitorActivity() {
+	ticker := time.NewTicker(5 * time.Minute)
+>>>>>>> aa8fdf48 (Added changes)
 	defer ticker.Stop()
 
 	for range ticker.C {
