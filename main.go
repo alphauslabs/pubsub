@@ -40,7 +40,7 @@ func main() {
 	app := &app.PubSub{
 		Client:        spannerClient,
 		Storage:       storage.NewStorage(),
-		ConsensusMode: "majority",
+		ConsensusMode: "all",
 	}
 
 	log.Println("[STORAGE]: Storage initialized")

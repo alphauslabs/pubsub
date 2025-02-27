@@ -55,6 +55,7 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	log.Println("[Broadcast] Sending event type:", in.Type, "Data:", string(in.Msg))
 	return ctrlbroadcast[in.Type](appInstance, in.Msg)
 }
 

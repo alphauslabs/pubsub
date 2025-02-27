@@ -17,24 +17,31 @@ import (
 )
 
 // validateTopicSubscription checks if subscription exists in storage
-func (s *server) validateTopicSubscription(subscriptionID string) error {
-	subs, err := s.Storage.GetSubscribtionsForTopic(subscriptionID)
+func (s *server) validateSubscription(topicID, subscriptionID string) error {
+	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", topicID)
+	subs, err := s.Storage.GetSubscribtionsForTopic(topicID)
+
 	if err != nil {
-		return status.Errorf(codes.NotFound, "subscription not found")
+		log.Printf("[Subscribe] Topic %s not found in storage", topicID)
+		return status.Errorf(codes.NotFound, "Topic %s not found", topicID)
 	}
 
+	log.Printf("[Subscribe] Found subscriptions for topic %s: %v", topicID, subs)
+
+	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
 	for _, sub := range subs {
 		if sub == subscriptionID {
 			found = true
+			log.Printf("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
 			break
 		}
 	}
 
 	if !found {
-		return status.Errorf(codes.NotFound, "subscription not found")
+		log.Printf("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
+		return status.Errorf(codes.NotFound, "Subscription %s not found", subscriptionID)
 	}
-
 	return nil
 }
 
@@ -63,7 +70,6 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 		Type: broadcast.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
 	}
-
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin)
 
