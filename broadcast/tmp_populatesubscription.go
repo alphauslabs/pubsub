@@ -1,7 +1,5 @@
 package main
 
-package main
-
 import (
 	"context"
 	"flag"
@@ -18,8 +16,8 @@ const (
 )
 
 func main() {
-	
-	runs := flag.Int("runs", 1, "Number of times to write to Spanner")
+	// Define flags for number of runs and interval between runs
+	runs := flag.Int("runs", 1, "Number of times to insert unique subscriptions into Spanner")
 	interval := flag.Int("interval", 5, "Interval (in seconds) between runs")
 	flag.Parse()
 
@@ -34,16 +32,17 @@ func main() {
 
 	log.Println("Connected to Spanner successfully.")
 
+	// Track unique subscription names across multiple runs
 	uniqueNames := make(map[string]bool)
 
-
+	// Track the last used sequential ID
 	lastID := getLastID(ctx, client) // Fetches the highest existing ID from Spanner
 
 	for run := 1; run <= *runs; run++ {
 		log.Printf("Run %d/%d: Inserting data...\n", run, *runs)
 		lastID = insertData(ctx, client, uniqueNames, lastID)
 
-		
+		// Sleep between runs, except after the last run
 		if run < *runs {
 			log.Printf("Waiting for %d seconds before next run...\n", *interval)
 			time.Sleep(time.Duration(*interval) * time.Second)
@@ -56,7 +55,7 @@ func main() {
 // Retrieves the highest ID from the database to continue sequential numbering
 func getLastID(ctx context.Context, client *spanner.Client) int {
 	stmt := spanner.Statement{
-		SQL: `SELECT MAX(id) FROM ` + table,
+		SQL: "SELECT MAX(id) FROM " + table,
 	}
 
 	iter := client.Single().Query(ctx, stmt)
@@ -105,7 +104,17 @@ func insertData(ctx context.Context, client *spanner.Client, uniqueNames map[str
 
 	log.Printf("Prepared %d mutations for insertion.", len(mutations))
 
-
+	// Apply mutations in a single batch
 	_, err := client.Apply(ctx, mutations)
 	if err != nil {
-		log.Fatalf("Failed to insert
+		log.Fatalf("Failed to insert data: %v", err)
+	}
+
+	log.Println("Sample data inserted successfully into Subscriptions table.")
+
+	for topic, count := range topicCounter {
+		log.Printf("%s: %d subscriptions", topic, count)
+	}
+
+	return lastID // Return the updated last ID
+}
