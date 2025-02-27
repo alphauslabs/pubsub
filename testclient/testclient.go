@@ -56,6 +56,11 @@ func main() {
 
 			log.Printf("rec.Payload: %v\n", rec.Payload)
 			time.Sleep(20 * time.Second) // simulate processing
+			ackres, err := c.Acknowledge(ctx, &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: "sub1"})
+			if err != nil {
+				log.Fatalf("Acknowledge failed: %v", err)
+			}
+			log.Printf("Acknowledge Response: %v\n", ackres)
 		}
 	default:
 		log.Printf("Unsupported method: %s", *method)
