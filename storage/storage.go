@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/spanner" //added spanner client
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 )
 
@@ -15,6 +16,7 @@ type Storage struct {
 	topicSubs     map[string][]string
 	topicMessages map[string]map[string]*pb.Message
 	lastActivity  time.Time
+	spannerClient *spanner.Client //included spanner client
 }
 
 func NewStorage() *Storage {
@@ -163,4 +165,11 @@ func (s *Storage) GetSubscribtionsForTopic(topicID string) ([]string, error) {
 	}
 
 	return subs, nil
+}
+
+// NEW METHOD TO REMOVE MESSAGES IN QUEUE AFTER ACKNOWLEDGE
+func (s *Storage) RemoveMessage(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.messages, id)
 }

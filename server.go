@@ -12,7 +12,9 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/alphauslabs/pubsub/send"
+
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -23,6 +25,7 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
+	spannerClient *spanner.Client
 }
 
 const (
@@ -118,7 +121,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// Get messages from local storage for the topic
-			log.Printf("[Subscribe] Checking for messages on topic: %s", in.TopicId)
 			messages, err := s.Storage.GetMessagesByTopic(in.TopicId)
 			if err != nil {
 				log.Printf("[Subscribe] Error getting messages: %v", err)
@@ -166,7 +168,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	}
 }
 
-// Acknowledge a processed message
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 
 	log.Printf("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
@@ -182,8 +183,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Check if lock is valid and not timed out
 	if !info.Locked || time.Now().After(info.Timeout) {
-		log.Printf("[Acknowledge] Error: Message lock expired for ID: %s, current time: %v", in.Id, time.Now())
-		// Message already timed out - handled by handleMessageTimeout
 		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
 	}
 
@@ -194,17 +193,20 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		log.Printf("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
+
 	// Mark as processed since subscriber acknowledged in time
 	log.Printf("[Acknowledge] Marking message %s as processed", in.Id)
 	msg.Processed = true
-	if err := s.Storage.StoreMessage(msg); err != nil {
-		log.Printf("[Acknowledge] Error updating message %s in storage: %v", in.Id, err)
-		return nil, status.Error(codes.Internal, "failed to update message")
-	}
-	log.Printf("[Acknowledge] Successfully marked message %s as processed", in.Id)
 
-	// Broadcast successful processing
-	log.Printf("[Acknowledge] Broadcasting deletion event for message %s", in.Id)
+	// Update the processed status in Spanner
+	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id, msg.Processed); err != nil {
+		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
+	}
+
+	// Log acknowledgment
+	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
+
+	// Broadcast successful processing		//RETURNED
 	broadcastData := broadcast.BroadCastInput{
 		Type: broadcast.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
@@ -220,6 +222,9 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		timer.(*time.Timer).Stop()
 		s.MessageTimer.Delete(in.Id)
 	}
+
+	// Remove the message from in-memory storage
+	s.Storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
 
 	log.Printf("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil

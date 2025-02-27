@@ -45,6 +45,7 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		log.Printf("Message Published!\nID: %s", r.MessageId)
+
 	case "listtopics":
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
