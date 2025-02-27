@@ -81,7 +81,7 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 		// If updates exist, fetch the topic-subscription structure
 		if updateCount > 0 {
-			log.Println("STRUCT-Leader: Changes detected! Fetching full topic-subscription structure.")
+			log.Println("STRUCT-Leader: Changes detected. Fetching full topic-subscription structure.")
 			*lastBroadcasted = fetchAllTopicSubscriptions(ctx, client)
 		} else {
 			return
@@ -96,11 +96,12 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 	// If no updates, log and return
 	if len(*lastBroadcasted) == 0 {
-		log.Println("STRUCT-Leader: No topic-subscription data found, skipping broadcast.")
+		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping broadcast.")
 		return
 	}
 
-	log.Println("STRUCT-Leader: Fetched topic subscriptions:", *lastBroadcasted)
+	log.Println("STRUCT-Leader: Fetched topic subscriptions.")
+	//log.Println("STRUCT-Leader: Fetched topic subscriptions:", *lastBroadcasted)
 
 	// Marshal topic-subscription data
 	msgData, err := json.Marshal(*lastBroadcasted)
@@ -129,7 +130,10 @@ func fetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	*lastChecked = time.Now()
-	log.Println("STRUCT-Debug: Updated lastBroadcasted with:", *lastBroadcasted)
+
+	log.Println("STRUCT-Debug: Updated lastBroadcasted")
+	//log.Println("STRUCT-Debug: Updated lastBroadcasted with:", *lastBroadcasted)
+
 	log.Println("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
