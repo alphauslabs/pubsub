@@ -171,11 +171,13 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 
 func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
 	log.Println("[Unlock] Attempting to unlock message:", messageID)
-	if len(params) < 1 {
-		return nil, fmt.Errorf("invalid unlock parameters")
+	if len(params) < 2 {
+		return nil, fmt.Errorf("invalid unlock parameters, expected at least [nodeID, reason]")
 	}
 
 	unlockingNodeID := params[0]
+	unlockReason := params[1]
+
 	app.Mutex.Lock()
 	defer app.Mutex.Unlock()
 
@@ -183,13 +185,24 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 	if lockInfo, exists := app.MessageLocks.Load(messageID); exists {
 		info := lockInfo.(MessageLockInfo)
 
-		// Only the lock owner can unlock
-		if info.NodeID == unlockingNodeID {
+		// Allow unlock if:
+		// 1. It's from the lock owner
+		// 2. It's a timeout and lock has expired
+		if info.NodeID == unlockingNodeID ||
+			(unlockReason == "timeout" && time.Now().After(info.Timeout)) {
+
 			app.MessageLocks.Delete(messageID)
-			log.Printf("[Unlock] Node %s acknowledged unlock for message: %s", app.NodeID, messageID)
+			if timer, ok := app.MessageTimer.Load(messageID); ok {
+				timer.(*time.Timer).Stop()
+				app.MessageTimer.Delete(messageID)
+			}
+
+			log.Printf("[Unlock] Node %s acknowledged unlock for message: %s (reason: %s)",
+				app.NodeID, messageID, unlockReason)
 		} else {
-			log.Printf("[Unlock] Rejected unlock from non-owner node %s for message: %s", unlockingNodeID, messageID)
-			return nil, fmt.Errorf("only lock owner can unlock")
+			log.Printf("[Unlock] Rejected unlock from non-owner node %s for message: %s (reason: %s, valid timeout: %v)",
+				unlockingNodeID, messageID, unlockReason, time.Now().After(info.Timeout))
+			return nil, fmt.Errorf("only lock owner can unlock unless timeout expired")
 		}
 	}
 

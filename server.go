@@ -12,8 +12,8 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/broadcast"
-	"github.com/alphauslabs/pubsub/utils"
 	"github.com/alphauslabs/pubsub/send"
+	"github.com/alphauslabs/pubsub/utils"
 
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
