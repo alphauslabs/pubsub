@@ -45,7 +45,11 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		log.Printf("Message Published!\nID: %s", r.MessageId)
+<<<<<<< HEAD
 	case "ListTopics":
+=======
+	case "listtopics":
+>>>>>>> 8a7094db6fcd4c9a9a0e0b43f4e04182817cacfc
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
 			log.Fatalf("Listing failed: %v", err)
