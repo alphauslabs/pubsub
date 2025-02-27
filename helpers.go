@@ -15,8 +15,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	// "github.com/alphauslabs/pubsub/app" // removed
+
 	"github.com/alphauslabs/pubsub/broadcast"
 )
+
+// PubSubWrapper wraps app.PubSub to allow defining methods on it
 
 // validateTopicSubscription checks if subscription exists in storage
 func (s *server) validateTopicSubscription(subscriptionID string) error {
@@ -78,6 +81,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	}
 
 	// Need majority for consensus
+	// todo: Nice idea, but what if we have to be strict, like all nodes (instead of majority) must acknowledge the lock?
 	if successCount < (len(out)/2 + 1) {
 		s.MessageLocks.Delete(messageID)
 		return fmt.Errorf("failed to acquire lock across majority of nodes")
@@ -85,7 +89,7 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 
 	// Start timeout timer
 	timer := time.NewTimer(timeout)
-	s.timeoutTimers.Store(messageID, timer)
+	s.MessageTimer.Store(messageID, timer)
 
 	go func() {
 		<-timer.C
@@ -95,6 +99,8 @@ func (s *server) broadcastLock(ctx context.Context, messageID string, subscriber
 	return nil
 }
 
+// todo: not sure if we only allow the node that locked the message to unlock it, what if every node will just unlock it by themselves without broadcasting.
+// todo: if the locker node will crash, no one will broadcast to unlock?
 func (s *server) handleMessageTimeout(messageID string) {
 	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
 		info := lockInfo.(broadcast.MessageLockInfo)
@@ -116,9 +122,9 @@ func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 	s.Op.Broadcast(ctx, bin)
 	// Clean up local state
 	s.MessageLocks.Delete(messageID)
-	if timer, ok := s.timeoutTimers.Load(messageID); ok {
+	if timer, ok := s.MessageLocks.Load(messageID); ok {
 		timer.(*time.Timer).Stop()
-		s.timeoutTimers.Delete(messageID)
+		s.MessageTimer.Delete(messageID)
 	}
 	log.Printf("[Unlock] Node %s unlocked message: %s", s.Op.HostPort(), messageID)
 }
@@ -194,7 +200,7 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	}
 
 	// Check subscriber ID
-	if info.SubscriberID != subscriberID {
+	if info.SubscriberID != subscriberID { // todo: what does this mean?
 		return status.Error(codes.PermissionDenied, "message locked by another subscriber")
 	}
 

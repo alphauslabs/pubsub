@@ -13,7 +13,7 @@ type PubSub struct {
 	Client       *spanner.Client
 	Storage      *storage.Storage
 	NodeID       string
-	MessageLocks sync.Map
-	MessageQueue sync.Map
-	Mutex        sync.Mutex
+	MessageLocks sync.Map   // messageID -> MessageLockInfo
+	MessageTimer sync.Map   // messageID -> *time.Timer
+	Mutex        sync.Mutex // app level mutex
 }

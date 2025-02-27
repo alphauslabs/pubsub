@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync" // added sync package
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -21,15 +20,10 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
-	MessageLocks  sync.Map // Stores message lock information
-	timeoutTimers sync.Map // Stores message timeout timers
 }
 
-// Constant for table name and message types
 const (
 	MessagesTable = "Messages"
-	// message       = "message"  // Match the constants in broadcast.go
-	// topicsub      = "topicsub" // Match the constants in broadcast.go
 )
 
 // Publish a message to a topic
@@ -77,7 +71,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 }
 
 // Subscribe to receive messages for a subscription
-
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	// Validate if subscription exists for the given topic
 	subs, err := s.Storage.GetSubscribtionsForTopic(in.TopicId)
@@ -117,7 +110,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
-				time.Sleep(time.Second)
+				time.Sleep(time.Second) // todo: not sure if this is the best way
 				continue
 			}
 
@@ -181,9 +174,9 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Clean up message (processed)
 	s.MessageLocks.Delete(in.Id)
-	if timer, ok := s.timeoutTimers.Load(in.Id); ok {
+	if timer, ok := s.MessageTimer.Load(in.Id); ok {
 		timer.(*time.Timer).Stop()
-		s.timeoutTimers.Delete(in.Id)
+		s.MessageTimer.Delete(in.Id)
 	}
 
 	return &pb.AcknowledgeResponse{Success: true}, nil
@@ -214,11 +207,11 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 	s.Op.Broadcast(ctx, bin)
 
 	// Update local timer
-	if timer, ok := s.timeoutTimers.Load(in.Id); ok {
+	if timer, ok := s.MessageTimer.Load(in.Id); ok {
 		timer.(*time.Timer).Stop()
 	}
 	newTimer := time.NewTimer(time.Duration(in.NewTimeout) * time.Second)
-	s.timeoutTimers.Store(in.Id, newTimer)
+	s.MessageTimer.Store(in.Id, newTimer)
 
 	// Update lock info
 	info.Timeout = time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
