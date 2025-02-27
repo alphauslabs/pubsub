@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/spanner"
-	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/api/iterator"
 )
 

@@ -8,7 +8,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/hedge/v2"
 	"google.golang.org/api/iterator"
 )
 
