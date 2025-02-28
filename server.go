@@ -84,7 +84,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	log.Printf("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.TopicId, in.SubscriptionId)
 
 	// Validate if subscription exists for the given topic
-	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
 	err := s.validateSubscription(in.TopicId, in.SubscriptionId)
 	if err != nil {
 		log.Printf("[Subscribe] Error validating subscription: %v", err)
@@ -93,12 +92,17 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	log.Printf("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
 
+	timeout := time.After(30 * time.Second) // Adjust as needed
+
 	// Continuous loop to stream messages
 	for {
 		select {
 		// Check if client has disconnected
 		case <-stream.Context().Done():
 			log.Printf("[Subscribe] Client disconnected, closing stream for subscription %s", in.SubscriptionId)
+			return nil
+		case <-timeout:
+			log.Printf("[Subscribe] Timeout reached for subscription %s, exiting...", in.SubscriptionId)
 			return nil
 		default:
 			// Get messages from local storage for the topic
@@ -115,6 +119,9 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				time.Sleep(time.Second) // todo: not sure if this is the best way
 				continue
 			}
+
+			// Reset timeout if messages arrive
+			timeout = time.After(30 * time.Second)
 
 			log.Printf("[Subscribe] Found %d messages for topic %s", len(messages), in.TopicId)
 
