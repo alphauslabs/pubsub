@@ -38,7 +38,7 @@ func main() {
 			glog.Infof("[Panic] Recovered in main: %v", r)
 		}
 	}()
-
+	flag.Set("logtostderr", "true")
 	flag.Parse()
 	defer glog.Flush()
 
