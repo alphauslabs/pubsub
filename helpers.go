@@ -132,18 +132,17 @@ func (s *server) handleMessageTimeout(messageID string) {
 }
 
 func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
-	// Get lock info before unlocking
-	var originalOwner string
-	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
-		info := lockInfo.(handlers.MessageLockInfo)
-		originalOwner = info.NodeID
+	// Remove from local storage first
+	s.MessageLocks.Delete(messageID)
+
+	// Stop and remove timer
+	if timer, ok := s.MessageTimer.Load(messageID); ok {
+		timer.(*time.Timer).Stop()
+		s.MessageTimer.Delete(messageID)
 	}
 
-	// Broadcast unlock with reason (timeout or explicit unlock)
-	reason := "timeout"
-	if originalOwner == s.Op.HostPort() {
-		reason = "owner"
-	}
+	// Broadcast unlock request to all nodes
+	reason := "request"
 
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
@@ -159,8 +158,7 @@ func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 		s.MessageTimer.Delete(messageID)
 	}
 
-	log.Printf("[Unlock] Node %s unlocked message: %s (original owner: %s, reason: %s)",
-		s.Op.HostPort(), messageID, originalOwner, reason)
+	log.Printf("[Unlock] Node %s broadcasted unlock for message %s ", s.Op.HostPort(), messageID)
 }
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message

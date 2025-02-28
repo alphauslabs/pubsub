@@ -188,23 +188,21 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 		info := lockInfo.(MessageLockInfo)
 
 		// Allow unlock if:
-		// 1. It's from the lock owner
-		// 2. It's a timeout and lock has expired
-		if info.NodeID == unlockingNodeID ||
-			(unlockReason == "timeout" && time.Now().After(info.Timeout)) {
-
+		// 1. Lock has expired (any node can unlock)
+		// 2. Unlock is requested (any node can request unlock)
+		if time.Now().After(info.Timeout) || unlockReason == "request" {
 			app.MessageLocks.Delete(messageID)
-			if timer, ok := app.MessageTimer.Load(messageID); ok {
-				timer.(*time.Timer).Stop()
-				app.MessageTimer.Delete(messageID)
-			}
-
-			log.Printf("[Unlock] Node %s acknowledged unlock for message: %s (reason: %s)",
-				app.NodeID, messageID, unlockReason)
+			// if timer, ok := app.MessageTimer.Load(messageID); ok {
+			// 	timer.(*time.Timer).Stop()
+			// 	app.MessageTimer.Delete(messageID)
+			// }
+			log.Printf("[Unlock] Node %s acknowledged unlock for message: %s (reason: %s, node: %s)",
+				app.NodeID, messageID, unlockReason, unlockingNodeID)
 		} else {
-			log.Printf("[Unlock] Rejected unlock from non-owner node %s for message: %s (reason: %s, valid timeout: %v)",
-				unlockingNodeID, messageID, unlockReason, time.Now().After(info.Timeout))
-			return nil, fmt.Errorf("only lock owner can unlock unless timeout expired")
+			log.Printf("[Unlock] Rejected unlock from node %s for message: %s - lock not expired yet (expires at: %v)",
+				unlockingNodeID, messageID, info.Timeout)
+			return nil, fmt.Errorf("lock not expired yet, current time: %v, expires at: %v",
+				time.Now(), info.Timeout)
 		}
 	}
 
