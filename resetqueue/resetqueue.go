@@ -1,12 +1,13 @@
 package main
 
-import (
-	"log"
+//disregard
+// import (
+// 	"log"
 
-	"github.com/alphauslabs/pubsub/storage" // Replace with your actual module path
-)
+// 	"github.com/alphauslabs/pubsub/storage" //
+// )
 
-func main() {
-	log.Println("Resetting message queue...")
-	storage.ClearAllMessages() // Call the reset function
-}
+// func main() {
+// 	log.Println("Resetting message queue...")
+// 	storage.ClearAllMessages() // Call function
+// }

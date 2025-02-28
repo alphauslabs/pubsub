@@ -206,7 +206,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	}
 
 	// Remove the message from in-memory storage
-	storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
+	storage.RemoveMessage(in.Id, msg.Topic) // Pass topic along with ID
 
 	log.Printf("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil

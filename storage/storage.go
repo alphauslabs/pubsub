@@ -169,10 +169,22 @@ func GetSubscribtionsForTopic(topicID string) ([]string, error) {
 }
 
 // NEW METHOD TO REMOVE MESSAGES IN QUEUE AFTER ACKNOWLEDGE
-func RemoveMessage(id string) {
+func RemoveMessage(id string, topic string) {
 	mu.Lock()
 	defer mu.Unlock()
+
+	// Remove from messages map
 	delete(messages, id)
+
+	// Remove from topicMessages map if it exists
+	if topicMsgs, exists := topicMessages[topic]; exists {
+		delete(topicMsgs, id)
+
+		// Optional, remove the topic if empty:
+		// if len(topicMsgs) == 0 {
+		// 	delete(topicMessages, topic)
+		// }
+	}
 }
 
 // NEW METHOD TO CLEAR ALL MESSAGES IN QUEUE
