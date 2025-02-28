@@ -131,17 +131,23 @@ func (s *server) handleMessageTimeout(messageID string) {
 		}
 	}
 }
+
 func (s *server) localUnlock(messageID string) {
-	// Remove from local storage
-	s.MessageLocks.Delete(messageID)
+	if lockInfo, ok := s.MessageLocks.Load(messageID); ok {
+		info := lockInfo.(handlers.MessageLockInfo)
 
-	// Stop and remove timer
-	if timer, ok := s.MessageTimer.Load(messageID); ok {
-		timer.(*time.Timer).Stop()
-		s.MessageTimer.Delete(messageID)
+		// Set lock status to false instead of deleting
+		info.Locked = false
+		s.MessageLocks.Store(messageID, info) // Update stored lock info
+
+		// Stop and remove the timer
+		if timer, ok := s.MessageTimer.Load(messageID); ok {
+			timer.(*time.Timer).Stop()
+			s.MessageTimer.Delete(messageID)
+		}
+
+		log.Printf("[Unlock] Node %s set lock=false for message %s", s.Op.HostPort(), messageID)
 	}
-
-	log.Printf("[Unlock] Node %s locally unlocked message %s", s.Op.HostPort(), messageID)
 }
 
 // func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
