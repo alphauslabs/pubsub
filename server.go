@@ -25,7 +25,6 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
-	spannerClient *spanner.Client
 }
 
 const (
@@ -183,14 +182,13 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	msg.Processed = true
 
 	// Update the processed status in Spanner
-	if err := utils.UpdateMessageProcessedStatus(s.spannerClient, in.Id); err != nil {
+	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
 	// Log acknowledgment
 	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
 
-	// Broadcast successful processing		//RETURNED
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
