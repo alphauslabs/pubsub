@@ -22,6 +22,7 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
+	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
@@ -34,19 +35,24 @@ var (
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[Panic] Recovered in main: %v", r)
+			glog.Infof("[Panic] Recovered in main: %v", r)
 		}
 	}()
+
 	flag.Parse()
+	defer glog.Flush()
+
 	go serveHealthChecks() // _handle health checks from our LB
 
-	spannerClient, err := spanner.NewClient(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main")
+	spconf := spanner.ClientConfig{
+		Logger: log.New(os.Stdout, "spanner-client: ", log.Lshortfile),
+	}
+	spannerClient, err := spanner.NewClientWithConfig(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main", spconf)
 	if err != nil {
 		log.Fatalf("failed to create Spanner client: %v", err)
 		return
 	}
 	defer spannerClient.Close()
-
 	app := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
@@ -62,7 +68,7 @@ func main() {
 		"logtable",
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
-			log.Printf("Leader callback: %v", string(msg))
+			glog.Infof("Leader callback: %v", string(msg))
 			s := strings.Split(string(msg), "")
 			v, err := strconv.Atoi(s[0])
 			if err != nil {
@@ -95,9 +101,9 @@ func main() {
 	func() {
 		var m string
 		defer func(l *string, t time.Time) {
-			log.Printf("%v: %v", *l, time.Since(t))
+			glog.Infof("%v: %v", *l, time.Since(t))
 		}(&m, time.Now())
-		log.Println("Waiting for leader to be active...")
+		glog.Info("Waiting for leader to be active...")
 		ok, err := utils.EnsureLeaderActive(op, ctx)
 		switch {
 		case !ok:
@@ -123,7 +129,7 @@ func main() {
 func run(ctx context.Context, serverconf *server) error {
 	lis, err := net.Listen("tcp", *port)
 	if err != nil {
-		log.Printf("failed to listen: %v", err)
+		glog.Infof("failed to listen: %v", err)
 		return err
 	}
 
@@ -145,7 +151,7 @@ func run(ctx context.Context, serverconf *server) error {
 	)
 	reflection.Register(s)
 	pb.RegisterPubSubServiceServer(s, serverconf)
-	log.Printf("gRPC Server listening on %s", *port)
+	glog.Infof("gRPC Server listening on %s", *port)
 
 	go func() {
 		<-ctx.Done()

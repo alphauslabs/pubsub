@@ -11,6 +11,7 @@ import (
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
+	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
 )
 
@@ -24,7 +25,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
 
-	log.Println("STRUCT-Leader: Running full topic-subscription query as lastBroadcasted is empty.")
+	glog.Info("STRUCT-Leader: Running full topic-subscription query as lastBroadcasted is empty.")
 
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
@@ -43,7 +44,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		var topic string
 		var subscriptions []string
 		if err := row.Columns(&topic, &subscriptions); err != nil {
-			log.Printf("STRUCT-Error reading row: %v", err)
+			glog.Infof("STRUCT-Error reading row: %v", err)
 			continue
 		}
 
@@ -63,14 +64,14 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 	latest = FetchAllTopicSubscriptions(ctx, client)
 	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
-		log.Println("STRUCT-Leader: No changes detected in topic-subscription structure.")
+		glog.Info("STRUCT-Leader: No changes detected in topic-subscription structure.")
 		return
 	}
 
 	// Marshal topic-subscription data
 	msgData, err := json.Marshal(latest)
 	if err != nil {
-		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
 		return
 	}
 
@@ -82,21 +83,21 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	// Marshal BroadCastInput
 	broadcastData, err := json.Marshal(broadcastMsg)
 	if err != nil {
-		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
+		glog.Infof("STRUCT-Error marshalling BroadCastInput: %v", err)
 		return
 	}
 
 	// Broadcast message
 	for _, r := range op.Broadcast(ctx, broadcastData) {
 		if r.Error != nil {
-			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 		} else {
 			lastBroadcasted = latest
 		}
 	}
 
-	log.Println("STRUCT-Debug: Updated lastBroadcasted")
-	log.Println("STRUCT-Leader: Topic-subscription structure broadcast completed.")
+	glog.Info("STRUCT-Debug: Updated lastBroadcasted")
+	glog.Info("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
 // initializes the distributor that periodically checks for updates.
@@ -104,17 +105,17 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	ticker := time.NewTicker(10 * time.Second)
 	defer func() {
 		ticker.Stop()
-		log.Println("STRUCT-Leader: Distributor ticker stopped.")
+		glog.Info("STRUCT-Leader: Distributor ticker stopped.")
 	}()
 
 	// perform an initial broadcast of all topic-subscription structures
-	log.Println("STRUCT: Running initial startup query and broadcasting structure.")
+	glog.Info("STRUCT: Running initial startup query and broadcasting structure.")
 	FetchAndBroadcast(ctx, op, client, true) // run startup broadcast
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("STRUCT-Leader: Context canceled, stopping distributor.")
+			glog.Info("STRUCT-Leader: Context canceled, stopping distributor.")
 			return
 		case <-ticker.C:
 			if atomic.LoadInt32(&leader.IsLeader) == 1 {
@@ -126,19 +127,19 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 
 // Immediate broadcast function to send topic-subscription updates instantly.
 // func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-// 	log.Println("STRUCT-Leader: Immediate broadcast triggered.")
+// 	glog.Info("STRUCT-Leader: Immediate broadcast triggered.")
 
 // 	// Ensure this node is the leader before broadcasting
 // 	hasLock, _ := op.HasLock()
 // 	if !hasLock {
-// 		log.Println("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
+// 		glog.Info("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
 // 		return
 // 	}
 
 // 	// Fetch latest topic-subscription data
 // 	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
 // 	if len(newBroadcasted) == 0 {
-// 		log.Println("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
+// 		glog.Info("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
 // 		return
 // 	}
 
@@ -148,7 +149,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 // 	// Marshal topic-subscription data
 // 	msgData, err := json.Marshal(lastBroadcasted)
 // 	if err != nil {
-// 		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+// 		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
 // 		return
 // 	}
 
@@ -160,18 +161,18 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 // 	// Marshal BroadCastInput
 // 	broadcastData, err := json.Marshal(broadcastMsg)
 // 	if err != nil {
-// 		log.Printf("STRUCT-Error marshalling BroadCastInput: %v", err)
+// 		glog.Infof("STRUCT-Error marshalling BroadCastInput: %v", err)
 // 		return
 // 	}
 
 // 	// Broadcast the message
 // 	for _, r := range op.Broadcast(ctx, broadcastData) {
 // 		if r.Error != nil {
-// 			log.Printf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+// 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 // 		}
 // 	}
 
-// 	log.Println("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
+// 	glog.Info("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
 // }
 
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
@@ -184,13 +185,13 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	bin, _ := json.Marshal(broadcastMsg)
 	out, err := op.Send(ctx, bin)
 	if err != nil {
-		log.Printf("STRUCT-Error sending request to leader: %v", err)
+		glog.Infof("STRUCT-Error sending request to leader: %v", err)
 		return
 	}
 
 	err = storage.StoreTopicSubscriptions(out)
 	if err != nil {
-		log.Printf("STRUCT-Error storing topic-subscription data: %v", err)
+		glog.Infof("STRUCT-Error storing topic-subscription data: %v", err)
 	}
 }
 

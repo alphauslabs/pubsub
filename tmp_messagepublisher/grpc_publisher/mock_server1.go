@@ -47,7 +47,7 @@ package main
 
 // 	pubsubproto.RegisterPubSubServiceServer(grpcServer, newServer())
 
-// 	log.Println("Mock server started on port 8080")
+// 	glog.Info("Mock server started on port 8080")
 // 	if err := grpcServer.Serve(lis); err != nil {
 // 		log.Fatalf("Failed to serve: %v", err)
 // 	}

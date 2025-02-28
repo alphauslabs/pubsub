@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -36,5 +37,5 @@ func main() {
 		log.Fatalf("Failed to publish message: %v", err)
 	}
 
-	log.Printf("Successfully published message. Message ID: %s", response.MessageId)
+	glog.Infof("Successfully published message. Message ID: %s", response.MessageId)
 }

@@ -34,7 +34,7 @@ package main
 //     topicServer := &TopicServer{spannerClient: client}
 //     proto.RegisterTopicServiceServer(grpcServer, topicServer)
 
-//     log.Printf("Server listening on :50051")
+//     glog.Infof("Server listening on :50051")
 //     // 4. Start serving
 //     return grpcServer.Serve(lis)
 // }

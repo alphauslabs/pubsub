@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 type Message struct {
@@ -57,17 +58,17 @@ func publishMessage(wg *sync.WaitGroup, id int, endpoint string) {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("%s Message %d failed: %v", time.Now().Format(time.RFC3339), id, err)
+		glog.Infof("%s Message %d failed: %v", time.Now().Format(time.RFC3339), id, err)
 		return
 	}
 
 	_, err = http.Post(endpoint, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		log.Printf("%s Message %d (ID: %s) failed: %v", time.Now().Format(time.RFC3339), id, msg.ID, err)
+		glog.Infof("%s Message %d (ID: %s) failed: %v", time.Now().Format(time.RFC3339), id, msg.ID, err)
 		return
 	}
 
-	log.Printf("%s Message %d (ID: %s) published successfully", time.Now().Format(time.RFC3339), id, msg.ID)
+	glog.Infof("%s Message %d (ID: %s) published successfully", time.Now().Format(time.RFC3339), id, msg.ID)
 }
 
 func main() {
@@ -75,13 +76,13 @@ func main() {
 
 	if *useMock {
 		activeEndpoints = mockEndpoints
-		log.Println("Using mock servers at localhost:8080, localhost:8081, localhost:8082")
+		glog.Info("Using mock servers at localhost:8080, localhost:8081, localhost:8082")
 	} else if *useBulkWrite {
 		activeEndpoints = bulkWriteEndpoints
-		log.Println("Using bulk write GCP endpoints (ports 8080)")
+		glog.Info("Using bulk write GCP endpoints (ports 8080)")
 	} else {
 		activeEndpoints = directWriteEndpoints
-		log.Println("Using direct write GCP endpoints (ports 8085)")
+		glog.Info("Using direct write GCP endpoints (ports 8085)")
 	}
 
 	var wg sync.WaitGroup
@@ -94,5 +95,5 @@ func main() {
 	}
 
 	wg.Wait()
-	log.Printf("All messages published. Total: %d, Time: %.2f s, Message per second: %.2f", *numMessages, time.Since(startTime).Seconds(), float64(*numMessages)/time.Since(startTime).Seconds())
+	glog.Infof("All messages published. Total: %d, Time: %.2f s, Message per second: %.2f", *numMessages, time.Since(startTime).Seconds(), float64(*numMessages)/time.Since(startTime).Seconds())
 }

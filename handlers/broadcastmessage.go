@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/flowerinthenight/hedge"
+	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
 )
 
@@ -54,7 +54,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 					break
 				}
 				if err != nil {
-					log.Printf("[BroadcastMessage] Error reading message: %v", err)
+					glog.Infof("[BroadcastMessage] Error reading message: %v", err)
 					continue
 				}
 				count++
@@ -77,7 +77,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				// Marshal message info
 				data, err := json.Marshal(messageInfo)
 				if err != nil {
-					log.Printf("[BroadcastMessage] Error marshalling message: %v", err)
+					glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 					continue
 				}
 
@@ -90,7 +90,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				// Marshal broadcast input
 				broadcastData, err := json.Marshal(broadcastInput)
 				if err != nil {
-					log.Printf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+					glog.Infof("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 					continue
 				}
 
@@ -98,12 +98,12 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				responses := op.Broadcast(ctx, broadcastData)
 				for _, response := range responses {
 					if response.Error != nil {
-						log.Printf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
+						glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 					}
 				}
 			}
 			if count == 0 {
-				log.Println("[BroadcastMessage] No new unprocessed messages found.")
+				glog.Info("[BroadcastMessage] No new unprocessed messages found.")
 			}
 		}
 	}

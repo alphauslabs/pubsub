@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	"github.com/alphauslabs/pubsub/app"
+	"github.com/golang/glog"
 )
 
 const (
@@ -30,10 +30,10 @@ func Send(data any, msg []byte) ([]byte, error) {
 	var in SendInput
 	app := data.(*app.PubSub)
 
-	log.Printf("[Send] Starting Send") //debugging_jose
+	glog.Infof("[Send] Starting Send") //debugging_jose
 	if err := json.Unmarshal(msg, &in); err != nil {
 
-		log.Printf("[Send] error Send") //debugging_jose
+		glog.Infof("[Send] error Send") //debugging_jose
 		return nil, err
 	}
 
@@ -59,7 +59,7 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	// Marshal topic-subscription data
 	msgData, err := json.Marshal(topicsub)
 	if err != nil {
-		log.Printf("STRUCT-Error marshalling topicSub: %v", err)
+		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
 		return nil, err
 	}
 

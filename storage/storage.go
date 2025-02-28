@@ -2,12 +2,12 @@ package storage
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/spanner" //added spanner client
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/golang/glog"
 )
 
 var (
@@ -34,7 +34,7 @@ var (
 
 func StoreMessage(msg *pb.Message) error {
 	if msg == nil || msg.Id == "" {
-		log.Println("[ERROR]: Received invalid message")
+		glog.Info("[ERROR]: Received invalid message")
 		return ErrInvalidMessage
 	}
 
@@ -49,14 +49,14 @@ func StoreMessage(msg *pb.Message) error {
 	topicMessages[msg.Topic][msg.Id] = msg
 
 	lastActivity = time.Now()
-	log.Printf("[STORAGE]: Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
+	glog.Infof("[STORAGE]: Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
 
 	return nil
 }
 
 func StoreTopicSubscriptions(data []byte) error {
 	if len(data) == 0 {
-		log.Println("[ERROR]: Received empty topic-subscription data")
+		glog.Info("[ERROR]: Received empty topic-subscription data")
 		return ErrInvalidTopicSub
 	}
 
@@ -77,7 +77,7 @@ func StoreTopicSubscriptions(data []byte) error {
 	for _, subs := range topicSubs {
 		totalSubs += len(subs)
 	}
-	log.Printf("[STORAGE]: Stored topic-subscription data: %d topics, %d total subscriptions", topicCount, totalSubs)
+	glog.Infof("[STORAGE]: Stored topic-subscription data: %d topics, %d total subscriptions", topicCount, totalSubs)
 
 	return nil
 }
@@ -104,27 +104,27 @@ func MonitorActivity() {
 
 		mu.RUnlock()
 
-		log.Printf("[STORAGE] Status: %d messages, %d topics, last activity: %v ago", msgCount, topicCount, elapsed.Round(time.Second))
-		log.Printf("[STORAGE] Topic-Subscription Structure:")
+		glog.Infof("[STORAGE] Status: %d messages, %d topics, last activity: %v ago", msgCount, topicCount, elapsed.Round(time.Second))
+		glog.Infof("[STORAGE] Topic-Subscription Structure:")
 		if len(topicSubDetails) == 0 {
-			log.Println("[STORAGE]    No topic-subscription data available")
+			glog.Info("[STORAGE]    No topic-subscription data available")
 		} else {
 			for topic, subCount := range topicSubDetails {
-				log.Printf("[STORAGE]    Topic: %s - Subscriptions: %d", topic, subCount)
+				glog.Infof("[STORAGE]    Topic: %s - Subscriptions: %d", topic, subCount)
 			}
 		}
 
-		log.Println("[STORAGE] Message Distribution:")
+		glog.Info("[STORAGE] Message Distribution:")
 		if len(topicMsgCounts) == 0 {
-			log.Println("[STORAGE]    No messages available")
+			glog.Info("[STORAGE]    No messages available")
 		} else {
 			for topic, count := range topicMsgCounts {
-				log.Printf("[STORAGE]    Topic: %s - Messages: %d", topic, count)
+				glog.Infof("[STORAGE]    Topic: %s - Messages: %d", topic, count)
 			}
 		}
 
 		if elapsed > 10*time.Minute {
-			log.Printf("[STORAGE] No activity detected in the last %v", elapsed.Round(time.Second))
+			glog.Infof("[STORAGE] No activity detected in the last %v", elapsed.Round(time.Second))
 		}
 	}
 }

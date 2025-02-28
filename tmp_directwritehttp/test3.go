@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"cloud.google.com/go/spanner"
+	"github.com/golang/glog"
 	"github.com/google/uuid"
 )
 
@@ -72,9 +73,9 @@ func insertMessage(ctx context.Context, msg Message) error {
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
-		log.Printf("Error writing to Spanner: %v", err)
+		glog.Infof("Error writing to Spanner: %v", err)
 	} else {
-		log.Printf("Successfully wrote message to Spanner")
+		glog.Infof("Successfully wrote message to Spanner")
 	}
 	return err
 }

@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
@@ -42,7 +43,7 @@ func main() {
 	}
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
-	log.Printf("gRPC server is running on port: %d", port)
+	glog.Infof("gRPC server is running on port: %d", port)
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
@@ -72,10 +73,10 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 
 	_, err := spannerClient.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
-		log.Printf("Error writing to Spanner: %v", err)
+		glog.Infof("Error writing to Spanner: %v", err)
 		return nil, err
 	}
 
-	log.Printf("Successfully wrote message to Spanner with ID: %s", messageID)
+	glog.Infof("Successfully wrote message to Spanner with ID: %s", messageID)
 	return &pb.PublishResponse{MessageId: messageID}, nil
 }

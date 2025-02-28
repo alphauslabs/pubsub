@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/golang/glog"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
@@ -44,7 +45,7 @@ func (s *server) Publish(ctx context.Context, msg *pb.Message) (*pb.PublishRespo
 
 	// Calculate delay
 	latency := commitTime.Sub(startTime)
-	log.Printf("✅ Message written to Spanner | ID: %s | Latency: %v ms | CommitTime: %s", 
+	glog.Infof("✅ Message written to Spanner | ID: %s | Latency: %v ms | CommitTime: %s",
 		msg.Id, latency.Milliseconds(), commitTime.Format(time.RFC3339Nano))
 
 	return &pb.PublishResponse{MessageId: msg.Id}, nil
@@ -106,7 +107,7 @@ func main() {
 	s := grpc.NewServer()
 	pb.RegisterPubSubServiceServer(s, &server{})
 
-	log.Printf("🚀 gRPC server listening on %s", port)
+	glog.Infof("🚀 gRPC server listening on %s", port)
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("❌ Failed to serve: %v", err)
 	}

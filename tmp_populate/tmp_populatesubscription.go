@@ -30,7 +30,7 @@ package common
 // 	}
 // 	defer client.Close()
 
-// 	log.Println("Connected to Spanner successfully.")
+// 	glog.Info("Connected to Spanner successfully.")
 
 // 	// Track unique subscription names across multiple runs
 // 	uniqueNames := make(map[string]bool)
@@ -39,17 +39,17 @@ package common
 // 	lastID := getLastID(ctx, client) // Fetches the highest existing ID from Spanner
 
 // 	for run := 1; run <= *runs; run++ {
-// 		log.Printf("Run %d/%d: Inserting data...\n", run, *runs)
+// 		glog.Infof("Run %d/%d: Inserting data...\n", run, *runs)
 // 		lastID = insertData(ctx, client, uniqueNames, lastID)
 
 // 		// Sleep between runs, except after the last run
 // 		if run < *runs {
-// 			log.Printf("Waiting for %d seconds before next run...\n", *interval)
+// 			glog.Infof("Waiting for %d seconds before next run...\n", *interval)
 // 			time.Sleep(time.Duration(*interval) * time.Second)
 // 		}
 // 	}
 
-// 	log.Println("All runs completed successfully.")
+// 	glog.Info("All runs completed successfully.")
 // }
 
 // // Retrieves the highest ID from the database to continue sequential numbering
@@ -67,11 +67,11 @@ package common
 // 	})
 
 // 	if err != nil {
-// 		log.Printf("Error retrieving last ID, starting from 0: %v", err)
+// 		glog.Infof("Error retrieving last ID, starting from 0: %v", err)
 // 		return 0
 // 	}
 
-// 	log.Printf("Last ID in database: %d", lastID)
+// 	glog.Infof("Last ID in database: %d", lastID)
 // 	return int(lastID)
 // }
 
@@ -89,7 +89,7 @@ package common
 
 // 			// Ensure unique names
 // 			if uniqueNames[name] {
-// 				log.Printf("Skipping duplicate name: %s", name)
+// 				glog.Infof("Skipping duplicate name: %s", name)
 // 				continue
 // 			}
 // 			uniqueNames[name] = true
@@ -102,7 +102,7 @@ package common
 // 		}
 // 	}
 
-// 	log.Printf("Prepared %d mutations for insertion.", len(mutations))
+// 	glog.Infof("Prepared %d mutations for insertion.", len(mutations))
 
 // 	// Apply mutations in a single batch
 // 	_, err := client.Apply(ctx, mutations)
@@ -110,10 +110,10 @@ package common
 // 		log.Fatalf("Failed to insert data: %v", err)
 // 	}
 
-// 	log.Println("Sample data inserted successfully into Subscriptions table.")
+// 	glog.Info("Sample data inserted successfully into Subscriptions table.")
 
 // 	for topic, count := range topicCounter {
-// 		log.Printf("%s: %d subscriptions", topic, count)
+// 		glog.Infof("%s: %d subscriptions", topic, count)
 // 	}
 
 // 	return lastID // Return the updated last ID

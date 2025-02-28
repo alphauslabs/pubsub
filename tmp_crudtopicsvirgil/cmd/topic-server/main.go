@@ -12,6 +12,7 @@ import (
 	"crud-api-topics/internal/topic"           // Your internal topic package
 
 	"cloud.google.com/go/spanner"
+	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -135,7 +136,7 @@ func main() {
 		s.GracefulStop()
 	}()
 
-	log.Printf("Server listening at %v", lis.Addr())
+	glog.Infof("Server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
