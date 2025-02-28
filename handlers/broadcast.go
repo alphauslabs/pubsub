@@ -167,6 +167,18 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	lockInfo.LockHolders[app.NodeID] = true
 
 	app.MessageLocks.Store(messageID, lockInfo)
+
+	// Set up a local timer to clear the lock when it expires
+	time.AfterFunc(time.Duration(timeoutSeconds)*time.Second, func() {
+		if lock, exists := app.MessageLocks.Load(messageID); exists {
+			info := lock.(MessageLockInfo)
+			if info.NodeID == requestingNodeID && time.Now().After(info.Timeout) {
+				app.MessageLocks.Delete(messageID)
+				log.Printf("[Lock] Timer expired, node %s automatically released local lock for message: %s",
+					app.NodeID, messageID)
+			}
+		}
+	})
 	log.Println("[Lock] Message locked successfully by node:", requestingNodeID)
 	return nil, nil
 }

@@ -126,13 +126,13 @@ func (s *server) handleMessageTimeout(messageID string) {
 		if info.Locked && time.Now().After(info.Timeout) {
 			log.Printf("[Timeout] Node %s detected expired lock for message %s (owned by %s)",
 				s.Op.HostPort(), messageID, info.NodeID)
-			s.broadcastUnlock(context.Background(), messageID)
+			//s.broadcastUnlock(context.Background(), messageID)
+			s.localUnlock(messageID)
 		}
 	}
 }
-
-func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
-	// Remove from local storage first
+func (s *server) localUnlock(messageID string) {
+	// Remove from local storage
 	s.MessageLocks.Delete(messageID)
 
 	// Stop and remove timer
@@ -141,25 +141,38 @@ func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
 		s.MessageTimer.Delete(messageID)
 	}
 
-	// Broadcast unlock request to all nodes
-	reason := "request"
-
-	broadcastData := handlers.BroadCastInput{
-		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", messageID, s.Op.HostPort(), reason)),
-	}
-	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
-
-	// Clean up local state
-	s.MessageLocks.Delete(messageID)
-	if timer, ok := s.MessageTimer.Load(messageID); ok {
-		timer.(*time.Timer).Stop()
-		s.MessageTimer.Delete(messageID)
-	}
-
-	log.Printf("[Unlock] Node %s broadcasted unlock for message %s ", s.Op.HostPort(), messageID)
+	log.Printf("[Unlock] Node %s locally unlocked message %s", s.Op.HostPort(), messageID)
 }
+
+// func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
+// 	// Remove from local storage first
+// 	s.MessageLocks.Delete(messageID)
+
+// 	// Stop and remove timer
+// 	if timer, ok := s.MessageTimer.Load(messageID); ok {
+// 		timer.(*time.Timer).Stop()
+// 		s.MessageTimer.Delete(messageID)
+// 	}
+
+// 	// Broadcast unlock request to all nodes
+// 	reason := "request"
+
+// 	broadcastData := handlers.BroadCastInput{
+// 		Type: handlers.MsgEvent,
+// 		Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", messageID, s.Op.HostPort(), reason)),
+// 	}
+// 	bin, _ := json.Marshal(broadcastData)
+// 	s.Op.Broadcast(ctx, bin)
+
+// 	// Clean up local state
+// 	s.MessageLocks.Delete(messageID)
+// 	if timer, ok := s.MessageTimer.Load(messageID); ok {
+// 		timer.(*time.Timer).Stop()
+// 		s.MessageTimer.Delete(messageID)
+// 	}
+
+// 	log.Printf("[Unlock] Node %s broadcasted unlock for message %s ", s.Op.HostPort(), messageID)
+// }
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
 func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) error {

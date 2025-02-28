@@ -143,7 +143,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				if err := stream.Send(message); err != nil {
 					// Release lock if sending fails
 					log.Printf("[Subscribe] Error sending message %s to subscriber: %v", message.Id, err)
-					s.broadcastUnlock(stream.Context(), message.Id)
+					s.localUnlock(message.Id)
 					log.Printf("[Subscribe] Lock released due to send error for message %s", message.Id)
 					return err // Return error to close stream
 				}
