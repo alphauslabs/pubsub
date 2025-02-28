@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
-	"github.com/flowerinthenight/timedoff"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
@@ -49,11 +47,11 @@ func main() {
 	app := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
-		IsLeaderTracker: timedoff.New(2*time.Second, &timedoff.CallbackT{
-			Callback: func(interface{}) {
-				atomic.StoreInt32(&isLeader, 0)
-			},
-		}),
+		// IsLeaderTracker: timedoff.New(2*time.Second, &timedoff.CallbackT{
+		// Callback: func(interface{}) {
+		// atomic.StoreInt32(&isLeader, 0)
+		// },
+		// }),
 	}
 
 	go storage.MonitorActivity()
@@ -66,7 +64,7 @@ func main() {
 		"logtable",
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
-			atomic.StoreInt32(&isLeader, 1)
+			log.Println("Leader callback, data:", data, "msg:", string(msg))
 		}),
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
