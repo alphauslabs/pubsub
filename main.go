@@ -45,6 +45,12 @@ func main() {
 	go serveHealthChecks() // _handle health checks from our LB
 
 	spconf := spanner.ClientConfig{
+		SessionPoolConfig: spanner.SessionPoolConfig{
+			TrackSessionHandles: true,
+			InactiveTransactionRemovalOptions: spanner.InactiveTransactionRemovalOptions{
+				ActionOnInactiveTransaction: spanner.WarnAndClose,
+			},
+		},
 		Logger: log.New(os.Stdout, "spanner-client: ", log.Lshortfile),
 	}
 	spannerClient, err := spanner.NewClientWithConfig(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main", spconf)
