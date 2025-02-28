@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"strings"
-	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 
@@ -101,7 +100,6 @@ func main() {
 			}
 
 			log.Printf("rec.Payload: %v\n", rec.Payload)
-			time.Sleep(20 * time.Second) // simulate processing
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
