@@ -174,3 +174,20 @@ func RemoveMessage(id string) {
 	defer mu.Unlock()
 	delete(messages, id)
 }
+
+// NEW METHOD TO CLEAR ALL MESSAGES IN QUEUE
+func ClearAllMessages() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Log the number of messages before clearing
+	log.Printf("[STORAGE]: Clearing %d messages from the queue.", len(messages))
+
+	// Clear all messages in the queue
+	for id := range messages {
+		delete(messages, id)
+	}
+
+	// Log the number of messages left in the queue (should be 0 now)
+	log.Printf("[STORAGE]: All messages have been removed from the queue. Messages left: %d", len(messages))
+}
