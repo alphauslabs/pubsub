@@ -122,9 +122,12 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Process each message
 			for _, message := range messages {
 				// Skip if message is already locked by another subscriber
-				if _, exists := s.MessageLocks.Load(message.Id); exists {
-					log.Printf("[Subscribe] Message %s already locked, skipping", message.Id)
-					continue
+				if info, exists := s.MessageLocks.Load(message.Id); exists {
+					inf := info.(handlers.MessageLockInfo)
+					if inf.Locked {
+						log.Printf("[Subscribe] Message %s is already locked, skipping...", message.Id)
+						continue
+					}
 				}
 
 				// Attempt to acquire distributed lock for the message
