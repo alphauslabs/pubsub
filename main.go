@@ -26,6 +26,11 @@ import (
 var port = flag.String("port", ":50051", "Main gRPC server port")
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Panic] Recovered in main: %v", r)
+		}
+	}()
 	flag.Parse()
 	go serveHealthChecks() // _handle health checks from our LB
 
