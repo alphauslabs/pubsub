@@ -38,7 +38,7 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"Id", "Processed"}, []interface{}{id, true}),
+		spanner.Update("Messages", []string{"id", "processed"}, []interface{}{id, true}),
 	})
 	if err != nil {
 		log.Printf("[ERROR]: Failed to update message processed status in Spanner: %v", err)
