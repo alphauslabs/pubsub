@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -18,12 +19,16 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/timedoff"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 )
 
-var port = flag.String("port", ":50051", "Main gRPC server port")
+var (
+	port     = flag.String("port", ":50051", "Main gRPC server port")
+	isLeader int32 // To check if leader, atomic.LoadInt32(&isLeader) must 1
+)
 
 func main() {
 	defer func() {
@@ -44,6 +49,11 @@ func main() {
 	app := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
+		IsLeaderTracker: timedoff.New(2*time.Second, &timedoff.CallbackT{
+			Callback: func(interface{}) {
+				atomic.StoreInt32(&isLeader, 0)
+			},
+		}),
 	}
 
 	go storage.MonitorActivity()
@@ -54,6 +64,10 @@ func main() {
 		"locktable",
 		"pubsublock",
 		"logtable",
+		hedge.WithGroupSyncInterval(2*time.Second),
+		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
+			atomic.StoreInt32(&isLeader, 1)
+		}),
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
 			handlers.Send,
