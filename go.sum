@@ -712,8 +712,6 @@ github.com/flowerinthenight/hedge v1.18.0 h1:di2ulwuDK2ZEusbuCOwnybVUxzArP8W+hhr
 github.com/flowerinthenight/hedge v1.18.0/go.mod h1:H218VIScDaQxLQfUAweOT7f5qb/1AhDJE/aocDDMbtk=
 github.com/flowerinthenight/spindle/v2 v2.2.0 h1:kNuT1c7oRir0H8y0isSj4JJfo8JxPV7s1OyErsKXV8I=
 github.com/flowerinthenight/spindle/v2 v2.2.0/go.mod h1:Aqq145TsdqGeYeOCCoFtbPCJkpzbZvp69Ix62FtzVK0=
-github.com/flowerinthenight/timedoff v1.0.2 h1:DVy87s1xVDOU/0J9Up6T8HufeHUrggGiXcMycOwN4ys=
-github.com/flowerinthenight/timedoff v1.0.2/go.mod h1:6fDTLfzZYfdj9ipdXd6jrZfOV7KWQeiCfxCnCvu7j+k=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=

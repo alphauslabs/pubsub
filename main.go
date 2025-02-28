@@ -8,6 +8,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/handlers"
+	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
@@ -24,8 +28,7 @@ import (
 )
 
 var (
-	port     = flag.String("port", ":50051", "Main gRPC server port")
-	isLeader int32 // To check if leader, atomic.LoadInt32(&isLeader) must 1
+	port = flag.String("port", ":50051", "Main gRPC server port")
 )
 
 func main() {
@@ -47,11 +50,6 @@ func main() {
 	app := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
-		// IsLeaderTracker: timedoff.New(2*time.Second, &timedoff.CallbackT{
-		// Callback: func(interface{}) {
-		// atomic.StoreInt32(&isLeader, 0)
-		// },
-		// }),
 	}
 
 	go storage.MonitorActivity()
@@ -64,7 +62,13 @@ func main() {
 		"logtable",
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
-			log.Println("Leader callback, data:", data, "msg:", string(msg))
+			log.Printf("Leader callback: %v", string(msg))
+			s := strings.Split(string(msg), "")
+			v, err := strconv.Atoi(s[0])
+			if err != nil {
+				log.Fatalf("failed to convert string to int: %v", err)
+			}
+			atomic.StoreInt32(&leader.IsLeader, int32(v))
 		}),
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,

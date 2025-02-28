@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
+	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
 	"google.golang.org/api/iterator"
@@ -115,8 +117,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 			log.Println("STRUCT-Leader: Context canceled, stopping distributor.")
 			return
 		case <-ticker.C:
-			hasLock, _ := op.HasLock()
-			if hasLock {
+			if atomic.LoadInt32(&leader.IsLeader) == 1 {
 				FetchAndBroadcast(ctx, op, client, false)
 			}
 		}

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/leader"
 	"github.com/flowerinthenight/hedge"
 	"google.golang.org/api/iterator"
 )
@@ -22,8 +24,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			l, _ := op.HasLock()
-			if !l {
+			if atomic.LoadInt32(&leader.IsLeader) != 1 {
 				continue
 			}
 
