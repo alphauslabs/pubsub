@@ -56,7 +56,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
 	var latest map[string][]string
 	if isStartup {
-		requestTopicSubFetch(ctx, op)
+		requestTopicSubFetch(ctx, op) // request to the current leader
 		return
 	}
 
@@ -100,20 +100,20 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 
 // initializes the distributor that periodically checks for updates.
 func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-	ticker := time.NewTicker(10 * time.Second)
+	glog.Info("[STRUCT] Starting distribution of topic-sub scription structure...")
+	ticker := time.NewTicker(10 * time.Second) // will adjust to lower interval later
 	defer func() {
 		ticker.Stop()
 		glog.Info("STRUCT-Leader: Distributor ticker stopped.")
 	}()
 
 	// perform an initial broadcast of all topic-subscription structures
-	glog.Info("STRUCT: Running initial startup query and broadcasting structure.")
 	FetchAndBroadcast(ctx, op, client, true) // run startup broadcast
 
 	for {
 		select {
 		case <-ctx.Done():
-			glog.Info("STRUCT-Leader: Context canceled, stopping distributor.")
+			glog.Info("STRUCT-Leader: Context canceled, stopping distributor...")
 			return
 		case <-ticker.C:
 			if atomic.LoadInt32(&leader.IsLeader) == 1 {
