@@ -16,7 +16,7 @@ import (
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
 	isFirst := true
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // will adjust to lower value later
 	defer ticker.Stop()
 	var lastQueryTime time.Time
 	for {
