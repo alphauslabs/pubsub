@@ -348,48 +348,47 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
 	}
 
-	// 1. Check if the new name already exists
+	// Check if the new name already exists
 	exist, err := s.topicExists(ctx, req.NewName)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to check name availability: %v", err)
-	}
 	if exist {
-		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists", req.NewName)
+		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists, err: %v", req.NewName, err)
 	}
 
-	// 2. Fetch the current topic to get its old name
+	// Fetch the current topic to get its old name
 	current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Perform both updates in a read-write transaction
-	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// 3a. Update the topic row
-		mutTopic := spanner.Update(TopicsTable,
-			[]string{"id", "name", "updatedAt"},
-			[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
-		)
-		if err := txn.BufferWrite([]*spanner.Mutation{mutTopic}); err != nil {
-			return err
-		}
-
-		// 3b. Update all subscriptions referencing the old topic name
-		stmtSubs := spanner.Statement{
-			SQL: `UPDATE Subscriptions
-                  SET topic = @newName,
-                      updatedAt = PENDING_COMMIT_TIMESTAMP()
-                  WHERE topic = @oldName`,
-			Params: map[string]interface{}{
-				"newName": req.NewName,
-				"oldName": current.Name,
-			},
-		}
-		_, err2 := txn.Update(ctx, stmtSubs)
-		return err2
-	})
+	mutTopic := spanner.Update(TopicsTable,
+		[]string{"id", "name", "updatedAt"},
+		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
+	)
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
+	}
+
+	// Update all subscriptions referencing the old topic name
+	stmt := spanner.Statement{
+		SQL: `UPDATE Subscriptions
+			  SET topic = @newName,
+			  updatedAt = PENDING_COMMIT_TIMESTAMP()
+			  WHERE topic = @oldName`,
+		Params: map[string]interface{}{
+			"newName": req.NewName,
+			"oldName": current.Name,
+		},
+	}
+	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		_, err := txn.Update(ctx, stmt)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update subscriptions: %v", err)
 	}
 
 	updatedTopic := &pb.Topic{
@@ -408,10 +407,14 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
-	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// Delete topic
-		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+	// Delete topic
+	topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{topicMutation})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+	}
 
+	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		// Delete all related subscriptions
 		stmt := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @topicId`,
@@ -419,18 +422,8 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 				"topicId": req.Id,
 			},
 		}
-
-		// Execute delete operations
-		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
-			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-		}
-
-		// Execute subscription deletion
-		iter := txn.Query(ctx, stmt)
-		defer iter.Stop()
-
-		_, err := iter.Next()
-		if err != nil && err != iterator.Done {
+		_, err = txn.Update(ctx, stmt)
+		if err != nil {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -497,7 +490,7 @@ func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("existence check failed: %w", err)
+		return true, fmt.Errorf("existence check failed: %w", err)
 	}
 	return true, nil
 }
@@ -510,7 +503,6 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 }
 
 func (s *server) notifyLeader(flag int) {
-
 	// Create a simple payload with just the flag
 	data := map[string]interface{}{
 		"flag": flag,
@@ -547,65 +539,3 @@ func (s *server) notifyLeader(flag int) {
 		glog.Infof("Successfully notified leader with flag: %d", flag)
 	}
 }
-
-/*
-func (s *server) notifyLeader(flag int) {
-	// Check if we're already the leader (optimization)
-	hasLock, _ := s.Op.HasLock()
-	if hasLock {
-		glog.Info("[Leader] This node is the leader, triggering broadcast directly")
-		// Use a background context for the broadcast
-		bgCtx := context.Background()
-		broadcast.ImmediateBroadcast(bgCtx, s.Op, s.Client)
-		return
-	}
-
-	// Run in a goroutine to avoid blocking the caller
-	go func() {
-		// retry backoff
-		backoffs := []time.Duration{
-			100 * time.Millisecond,
-			500 * time.Millisecond,
-			1 * time.Second,
-			2 * time.Second,
-		}
-
-		// Create a simple payload - content doesn't matter
-		input := send.topicsubupdates{
-			Type: "topicsubupdates", // Must match the handler registration
-			Msg:  []byte(fmt.Sprintf(`{"flag":%d}`, flag)),
-		}
-
-		data, err := json.Marshal(input)
-		if err != nil {
-			glog.Infof("[NotifyLeader] Error marshaling input: %v", err)
-			return
-		}
-
-		// Try multiple times with increasing delays
-		for i, delay := range backoffs {
-			// Create a fresh context for each attempt
-			attemptCtx := context.Background()
-			timeoutCtx, cancel := context.WithTimeout(attemptCtx, 5*time.Second)
-
-			glog.Infof("[NotifyLeader] Attempt %d to notify leader", i+1)
-			_, err := s.Op.Send(timeoutCtx, data)
-
-			// Always cancel the context when done with this attempt
-			cancel()
-
-			if err == nil {
-				glog.Infof("[NotifyLeader] Successfully notified leader")
-				return // Success!
-			}
-
-			glog.Infof("[NotifyLeader] Attempt %d failed: %v", i+1, err)
-
-			// Sleep before next attempt
-			time.Sleep(delay)
-		}
-
-		glog.Infof("[NotifyLeader] Failed to notify leader after %d attempts", len(backoffs))
-	}()
-}
-*/
