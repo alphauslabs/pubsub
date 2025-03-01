@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -90,6 +91,7 @@ func main() {
 			app,
 			handlers.Broadcast,
 		),
+		hedge.WithLogger(log.New(io.Discard, "", 0)), // silence
 	)
 
 	app.Op = op
