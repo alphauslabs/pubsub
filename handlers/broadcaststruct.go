@@ -25,8 +25,6 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
 
-	glog.Info("STRUCT-Leader: Running full topic-subscription query as lastBroadcasted is empty.")
-
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -88,7 +86,8 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	// Broadcast message
-	for _, r := range op.Broadcast(ctx, broadcastData) {
+	out := op.Broadcast(ctx, broadcastData)
+	for _, r := range out {
 		if r.Error != nil {
 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 		} else {
@@ -96,7 +95,6 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 		}
 	}
 
-	glog.Info("STRUCT-Debug: Updated lastBroadcasted")
 	glog.Info("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
