@@ -25,7 +25,7 @@ func Run() {
 					switch {
 					case time.Since(v1.Time) > 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
 						atomic.StoreInt32(&v1.Locked, 0) // release lock
-					default:
+					case time.Since(v1.Time) > 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 1:
 						v1.Time = time.Now().UTC() // extend lock
 					}
 				}
