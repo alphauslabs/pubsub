@@ -30,10 +30,7 @@ func Send(data any, msg []byte) ([]byte, error) {
 	var in SendInput
 	app := data.(*app.PubSub)
 
-	glog.Infof("[Send] Starting Send") //debugging_jose
 	if err := json.Unmarshal(msg, &in); err != nil {
-
-		glog.Infof("[Send] error Send") //debugging_jose
 		return nil, err
 	}
 

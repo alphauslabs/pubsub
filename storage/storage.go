@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
 	"sync"
 	"time"
 
@@ -15,7 +14,67 @@ type Message struct {
 	Locked     int32
 	AutoExtend int32
 	Age        time.Time
-	mu         sync.Mutex
+}
+
+type MessageMap struct {
+	Messages map[string]*Message
+	mu       sync.RWMutex
+}
+
+// NewMessageMap creates a new message map
+func NewMessageMap() *MessageMap {
+	return &MessageMap{
+		Messages: make(map[string]*Message),
+	}
+}
+
+// Get retrieves a message by ID
+func (mm *MessageMap) Get(id string) (*Message, bool) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	msg, exists := mm.Messages[id]
+	return msg, exists
+}
+
+// Put adds or updates a message
+func (mm *MessageMap) Put(id string, msg *Message) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	mm.Messages[id] = msg
+}
+
+// Delete removes a message
+func (mm *MessageMap) Delete(id string) bool {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	_, exists := mm.Messages[id]
+	if exists {
+		delete(mm.Messages, id)
+	}
+	return exists
+}
+
+// GetAll returns a copy of all Messages
+func (mm *MessageMap) GetAll() []*Message {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	result := make([]*Message, 0, len(mm.Messages))
+	for _, msg := range mm.Messages {
+		result = append(result, msg)
+	}
+	return result
+}
+
+// Count returns the number of Messages
+func (mm *MessageMap) Count() int {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	return len(mm.Messages)
 }
 
 type Subscriptions struct {
@@ -27,8 +86,8 @@ var (
 	topicSubs   = make(map[string]map[string]*Subscriptions)
 	topicSubsMu sync.RWMutex
 
-	// Map for topic messages
-	TopicMessages = make(map[string]map[string]*Message)
+	// Map for topic Messages
+	TopicMessages = make(map[string]*MessageMap)
 	topicMsgMu    sync.RWMutex
 )
 
@@ -38,36 +97,26 @@ func StoreMessage(msg *Message) error {
 		return ErrInvalidMessage
 	}
 
-	// Lock at message level first for internal operations
-	msg.mu.Lock()
-	defer msg.mu.Unlock()
-
-	// Lock the topic messages map for writing
+	// Lock the topic Messages map for writing
 	topicMsgMu.Lock()
 	defer topicMsgMu.Unlock()
 
 	if _, exists := TopicMessages[msg.Topic]; !exists {
-		TopicMessages[msg.Topic] = make(map[string]*Message)
+		TopicMessages[msg.Topic] = NewMessageMap()
 	}
-	TopicMessages[msg.Topic][msg.Id] = msg
+	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
-	glog.Infof("[STORAGE]: Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
-
+	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
 	return nil
 }
 
-func StoreTopicSubscriptions(data []byte) error {
+func StoreTopicSubscriptions(d map[string]map[string]*Subscriptions) error {
 	// Lock internal subscription data
 	topicSubsMu.Lock()
 	defer topicSubsMu.Unlock()
 
-	// Unmarshal the data into the topic subscriptions map
-	if err := json.Unmarshal(data, &topicSubs); err != nil {
-		glog.Errorf("[ERROR]: Failed to unmarshal topic subscriptions: %v", err)
-		return err
-	}
-
-	glog.Infof("[STORAGE]: Stored topic-subscription data: %d", len(topicSubs))
+	topicSubs = d // replaces everytime
+	glog.Infof("[STORAGE] Stored topic-subscription data with len %d", len(topicSubs))
 
 	return nil
 }
@@ -82,7 +131,7 @@ func MonitorActivity() {
 
 		topicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
-			topicMsgCounts[topic] = len(msgs)
+			topicMsgCounts[topic] = msgs.Count()
 		}
 		topicMsgMu.RUnlock()
 
@@ -101,7 +150,7 @@ func MonitorActivity() {
 		}
 
 		if len(topicMsgCounts) == 0 {
-			glog.Info("[Storage monitor] No messages available")
+			glog.Info("[Storage monitor] No Messages available")
 		} else {
 			for topic, count := range topicMsgCounts {
 				glog.Infof("[Storage monitor] Topic: %s - Messages: %d", topic, count)
@@ -117,7 +166,7 @@ func GetMessage(id string) (*Message, error) {
 	// Since we don't know which topic this message belongs to,
 	// we need to search all topics
 	for _, msgs := range TopicMessages {
-		if msg, exists := msgs[id]; exists {
+		if msg, exists := msgs.Get(id); exists {
 			return msg, nil
 		}
 	}
@@ -134,11 +183,7 @@ func GetMessagesByTopic(topicID string) ([]*Message, error) {
 		return nil, nil
 	}
 
-	messages := make([]*Message, 0, len(topicMsgs))
-	for _, msg := range topicMsgs {
-		messages = append(messages, msg)
-	}
-	return messages, nil
+	return topicMsgs.GetAll(), nil
 }
 
 func GetSubscribtionsForTopic(topicID string) ([]*Subscriptions, error) {
@@ -166,8 +211,7 @@ func RemoveMessage(id string, topicID string) error {
 	// If topicID is provided, we can directly check that topic
 	if topicID != "" {
 		if topicMsgs, exists := TopicMessages[topicID]; exists {
-			if _, found := topicMsgs[id]; found {
-				delete(topicMsgs, id)
+			if topicMsgs.Delete(id) {
 				return nil
 			}
 		}
@@ -176,8 +220,7 @@ func RemoveMessage(id string, topicID string) error {
 
 	// If topicID is not provided, search all topics
 	for _, msgs := range TopicMessages {
-		if _, exists := msgs[id]; exists {
-			delete(msgs, id)
+		if msgs.Delete(id) {
 			return nil
 		}
 	}

@@ -55,12 +55,10 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	glog.Info("[Broadcast] Sending event type:", in.Type, "Data:", string(in.Msg))
 	return ctrlbroadcast[in.Type](appInstance, in.Msg)
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	glog.Info("[Broadcast] Received message:\n", string(msg))
 	var message storage.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -76,8 +74,12 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	glog.Info("Received topic-subscriptions:\n", string(msg))
-	if err := storage.StoreTopicSubscriptions(msg); err != nil {
+	var topicSubs map[string]map[string]*storage.Subscriptions
+	if err := json.Unmarshal(msg, &topicSubs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal topic-subscriptions: %w", err)
+	}
+
+	if err := storage.StoreTopicSubscriptions(topicSubs); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
 

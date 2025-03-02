@@ -199,8 +199,14 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 		glog.Infof("STRUCT-Error sending request to leader: %v", err)
 		return
 	}
+	var d map[string]map[string]*storage.Subscriptions
+	err = json.Unmarshal(out, &d)
+	if err != nil {
+		glog.Infof("STRUCT-Error unmarshalling topic-subscription data: %v", err)
+		return
+	}
 
-	err = storage.StoreTopicSubscriptions(out)
+	err = storage.StoreTopicSubscriptions(d)
 	if err != nil {
 		glog.Infof("STRUCT-Error storing topic-subscription data: %v", err)
 	}

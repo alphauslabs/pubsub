@@ -11,7 +11,7 @@ import (
 func Run() {
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
-			for _, v1 := range v {
+			for _, v1 := range v.Messages {
 				if atomic.LoadInt32(&v1.Locked) == 1 {
 					switch {
 					case time.Since(v1.Age) > 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
