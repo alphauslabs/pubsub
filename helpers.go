@@ -32,7 +32,7 @@ func (s *server) validateSubscription(topicID, subscriptionID string) error {
 	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
 	for _, sub := range subs {
-		if sub == subscriptionID {
+		if sub.Id == subscriptionID {
 			found = true
 			glog.Infof("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
 			break

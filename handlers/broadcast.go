@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
@@ -62,7 +61,7 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 	glog.Info("[Broadcast] Received message:\n", string(msg))
-	var message pb.Message
+	var message storage.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}

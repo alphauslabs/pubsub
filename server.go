@@ -139,7 +139,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 				// Stream message to subscriber
 				glog.Infof("[Subscribe] Sending message %s to subscriber %s", message.Id, in.SubscriptionId)
-				if err := stream.Send(message); err != nil {
+				if err := stream.Send(message.Message); err != nil {
 					// Release lock if sending fails
 					glog.Infof("[Subscribe] Error sending message %s to subscriber: %v", message.Id, err)
 					s.localUnlock(message.Id)
@@ -206,7 +206,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	}
 
 	// Remove the message from in-memory storage
-	storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
+	storage.RemoveMessage(in.Id, "") // RemoveMessage method from Storage
 
 	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil
