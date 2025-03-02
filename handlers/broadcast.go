@@ -130,9 +130,6 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	subscriberID := params[1]
 	requestingNodeID := params[2]
 
-	app.Mutex.Lock() // todo: mutex lock and unlock, might remove this if no need
-	defer app.Mutex.Unlock()
-
 	// Check if already locked
 	if existingLock, exists := app.MessageLocks.Load(messageID); exists {
 		info := existingLock.(MessageLockInfo)
@@ -193,9 +190,6 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 	unlockingNodeID := params[0]
 	unlockReason := params[1]
 
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
-
 	// Check if the message is locked
 	if lockInfo, exists := app.MessageLocks.Load(messageID); exists {
 		info := lockInfo.(MessageLockInfo)
@@ -224,8 +218,6 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 
 func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
 	glog.Info("[Delete] Removing message:", messageID)
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
 
 	app.MessageLocks.Delete(messageID)
 	app.MessageTimer.Delete(messageID)
@@ -244,9 +236,6 @@ func handleExtendMsg(app *app.PubSub, messageID string, params []string) ([]byte
 	}
 
 	extendingNodeID := params[1]
-
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
 
 	if lockInfo, ok := app.MessageLocks.Load(messageID); ok {
 		info := lockInfo.(MessageLockInfo)
@@ -271,10 +260,6 @@ func handleRetryMsg(app *app.PubSub, messageID string, params []string) ([]byte,
 	}
 
 	retryNodeID := params[0]
-
-	// Make the message available again for processing
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
 
 	app.MessageLocks.Delete(messageID)
 	glog.Infof("[Retry] Message %s is now available again (unlocked by node %s)", messageID, retryNodeID)
