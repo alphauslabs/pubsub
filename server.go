@@ -41,8 +41,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
-	b, _ := json.Marshal(in)
-
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
@@ -63,6 +61,15 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		glog.Infof("Error writing to Spanner: %v", err)
 		return nil, err
 	}
+
+	m := storage.Message{
+		Message: &pb.Message{
+			Id:      messageID,
+			Topic:   in.TopicId,
+			Payload: in.Payload,
+		},
+	}
+	b, _ := json.Marshal(&m)
 
 	// broadcast message
 	bcastin := handlers.BroadCastInput{
