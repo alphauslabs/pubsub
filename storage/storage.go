@@ -77,13 +77,13 @@ func (mm *MessageMap) Count() int {
 	return len(mm.Messages)
 }
 
-type Subscriptions struct {
+type Subscription struct {
 	*pb.Subscription
 }
 
 var (
 	// Map for topic subscriptions
-	topicSubs   = make(map[string]map[string]*Subscriptions)
+	topicSubs   = make(map[string]map[string]*Subscription)
 	topicSubsMu sync.RWMutex
 
 	// Map for topic Messages
@@ -110,7 +110,7 @@ func StoreMessage(msg *Message) error {
 	return nil
 }
 
-func StoreTopicSubscriptions(d map[string]map[string]*Subscriptions) error {
+func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 	// Lock internal subscription data
 	topicSubsMu.Lock()
 	defer topicSubsMu.Unlock()
@@ -186,7 +186,7 @@ func GetMessagesByTopic(topicID string) ([]*Message, error) {
 	return topicMsgs.GetAll(), nil
 }
 
-func GetSubscribtionsForTopic(topicID string) ([]*Subscriptions, error) {
+func GetSubscribtionsForTopic(topicID string) ([]*Subscription, error) {
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
 
@@ -195,7 +195,7 @@ func GetSubscribtionsForTopic(topicID string) ([]*Subscriptions, error) {
 		return nil, ErrTopicNotFound
 	}
 	// Convert map to slice
-	subList := make([]*Subscriptions, 0, len(subs))
+	subList := make([]*Subscription, 0, len(subs))
 	for _, sub := range subs {
 		subList = append(subList, sub)
 	}

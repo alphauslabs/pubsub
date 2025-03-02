@@ -74,7 +74,7 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	var topicSubs map[string]map[string]*storage.Subscriptions
+	var topicSubs map[string]map[string]*storage.Subscription
 	if err := json.Unmarshal(msg, &topicSubs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal topic-subscriptions: %w", err)
 	}

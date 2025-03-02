@@ -18,10 +18,10 @@ import (
 
 // Global variables to track last broadcast state
 var (
-	lastBroadcasted = make(map[string]map[string]*storage.Subscriptions)
+	lastBroadcasted = make(map[string]map[string]*storage.Subscription)
 )
 
-func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string]map[string]*storage.Subscriptions {
+func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string]map[string]*storage.Subscription {
 	stmt := spanner.Statement{
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
@@ -29,7 +29,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
-	topicSub := make(map[string]map[string]*storage.Subscriptions)
+	topicSub := make(map[string]map[string]*storage.Subscription)
 
 	for {
 		row, err := iter.Next()
@@ -50,9 +50,9 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		subscriptions = append([]string{}, subscriptions...)
 
 		// Create a map for each topic's subscriptions
-		subMap := make(map[string]*storage.Subscriptions)
+		subMap := make(map[string]*storage.Subscription)
 		for _, subName := range subscriptions {
-			subMap[subName] = &storage.Subscriptions{
+			subMap[subName] = &storage.Subscription{
 				Subscription: &pb.Subscription{
 					Id:      subName,
 					TopicId: topic,
@@ -67,7 +67,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 }
 
 func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
-	var latest map[string]map[string]*storage.Subscriptions
+	var latest map[string]map[string]*storage.Subscription
 	if isStartup {
 		requestTopicSubFetch(ctx, op) // request to the current leader
 		return
@@ -199,7 +199,7 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 		glog.Infof("STRUCT-Error sending request to leader: %v", err)
 		return
 	}
-	var d map[string]map[string]*storage.Subscriptions
+	var d map[string]map[string]*storage.Subscription
 	err = json.Unmarshal(out, &d)
 	if err != nil {
 		glog.Infof("STRUCT-Error unmarshalling topic-subscription data: %v", err)
@@ -213,7 +213,7 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 }
 
 // Compare two topic-subscription maps for equality.
-func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Subscriptions) bool {
+func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Subscription) bool {
 	// First check if maps have the same number of keys
 	if len(current) != len(last) {
 		return false
