@@ -22,6 +22,7 @@ var (
 )
 
 func main() {
+	defer glog.Flush()
 	flag.Parse()
 	glog.Infof("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
