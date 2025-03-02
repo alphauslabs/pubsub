@@ -13,6 +13,7 @@ type Message struct {
 	*pb.Message
 	Locked     int32
 	AutoExtend int32
+	Deleted    int32
 	Age        time.Time
 }
 

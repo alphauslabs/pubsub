@@ -220,8 +220,17 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
 	glog.Info("[Delete] Removing message:", messageID)
 
-	app.MessageLocks.Delete(messageID)
-	app.MessageTimer.Delete(messageID)
+	m, err := storage.GetMessage(messageID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, fmt.Errorf("message not found")
+	}
+
+	// Delete from storage
+	atomic.StoreInt32(&m.Deleted, 1)
+
 	glog.Info("[Delete] Message successfully removed:", messageID)
 	return nil, nil
 }
