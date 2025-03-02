@@ -17,8 +17,8 @@ import (
 	"github.com/golang/glog"
 )
 
-// validateTopicSubscription checks if subscription exists in storage
-func (s *server) validateSubscription(topicID, subscriptionID string) error {
+// Checks if the topic subscription is correct, and exists in the memory
+func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscriptionID string) error {
 	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", topicID)
 	subs, err := storage.GetSubscribtionsForTopic(topicID)
 
@@ -43,6 +43,7 @@ func (s *server) validateSubscription(topicID, subscriptionID string) error {
 		glog.Infof("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
 		return status.Errorf(codes.NotFound, "Subscription %s not found", subscriptionID)
 	}
+
 	return nil
 }
 

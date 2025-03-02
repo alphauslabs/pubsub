@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -85,7 +86,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	// Validate if subscription exists for the given topic
 	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	err := s.validateSubscription(in.TopicId, in.SubscriptionId)
+	err := s.checkIfTopicSubscriptionIsCorrect(in.TopicId, in.SubscriptionId)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
@@ -121,12 +122,9 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Process each message
 			for _, message := range messages {
 				// Skip if message is already locked by another subscriber
-				if info, exists := s.MessageLocks.Load(message.Id); exists {
-					inf := info.(handlers.MessageLockInfo)
-					if inf.Locked {
-						glog.Infof("[Subscribe] Message %s is already locked, skipping...", message.Id)
-						continue
-					}
+				if atomic.LoadInt32(&message.Locked) == 1 {
+					glog.Infof("[Subscribe] Message %s is already locked, skipping...", message.Id)
+					continue
 				}
 
 				// Attempt to acquire distributed lock for the message
@@ -138,15 +136,12 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				glog.Infof("[Subscribe] Successfully acquired lock for message %s", message.Id)
 
 				// Stream message to subscriber
-				glog.Infof("[Subscribe] Sending message %s to subscriber %s", message.Id, in.SubscriptionId)
 				if err := stream.Send(message.Message); err != nil {
 					// Release lock if sending fails
-					glog.Infof("[Subscribe] Error sending message %s to subscriber: %v", message.Id, err)
-					s.localUnlock(message.Id)
-					glog.Infof("[Subscribe] Lock released due to send error for message %s", message.Id)
-					return err // Return error to close stream
+					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.SubscriptionId, err)
+				} else {
+					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 				}
-				glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 			}
 		}
 	}
