@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/spanner"
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
@@ -17,10 +18,10 @@ import (
 
 // Global variables to track last broadcast state
 var (
-	lastBroadcasted = make(map[string][]string)
+	lastBroadcasted = make(map[string]map[string]*storage.Subscriptions)
 )
 
-func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string][]string {
+func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string]map[string]*storage.Subscriptions {
 	stmt := spanner.Statement{
 		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
 	}
@@ -28,7 +29,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 	iter := client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
-	topicSub := make(map[string][]string)
+	topicSub := make(map[string]map[string]*storage.Subscriptions)
 
 	for {
 		row, err := iter.Next()
@@ -47,14 +48,26 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		}
 
 		subscriptions = append([]string{}, subscriptions...)
-		topicSub[topic] = subscriptions
+
+		// Create a map for each topic's subscriptions
+		subMap := make(map[string]*storage.Subscriptions)
+		for _, subName := range subscriptions {
+			subMap[subName] = &storage.Subscriptions{
+				Subscription: &pb.Subscription{
+					Id:      subName,
+					TopicId: topic,
+				},
+			}
+		}
+
+		topicSub[topic] = subMap
 	}
 
 	return topicSub
 }
 
 func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
-	var latest map[string][]string
+	var latest map[string]map[string]*storage.Subscriptions
 	if isStartup {
 		requestTopicSubFetch(ctx, op) // request to the current leader
 		return
@@ -194,7 +207,7 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 }
 
 // Compare two topic-subscription maps for equality.
-func AreTopicSubscriptionsEqual(current, last map[string][]string) bool {
+func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Subscriptions) bool {
 	// First check if maps have the same number of keys
 	if len(current) != len(last) {
 		return false
@@ -215,13 +228,13 @@ func AreTopicSubscriptionsEqual(current, last map[string][]string) bool {
 
 		// Create frequency maps to compare elements regardless of order
 		freq1 := make(map[string]int)
-		for _, sub := range subs1 {
-			freq1[sub]++
+		for subName := range subs1 {
+			freq1[subName]++
 		}
 
 		freq2 := make(map[string]int)
-		for _, sub := range subs2 {
-			freq2[sub]++
+		for subName := range subs2 {
+			freq2[subName]++
 		}
 
 		// Compare frequency maps
