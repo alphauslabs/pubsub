@@ -21,6 +21,7 @@ import (
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/sweep"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
 	"github.com/golang/glog"
@@ -120,7 +121,7 @@ func main() {
 			m = "leader active after "
 		}
 	}()
-
+	go sweep.Run() // Runs our sweeper goroutine to check if message is expired, if so, then it unlocks it.
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go handlers.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.

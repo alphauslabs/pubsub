@@ -48,72 +48,58 @@ func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscriptionID strin
 }
 
 // / broadcastLock handles distributed locking
-func (s *server) broadcastLock(ctx context.Context, messageID string, subscriberID string, timeout time.Duration) error {
-	lockInfo := handlers.MessageLockInfo{
-		Timeout:      time.Now().Add(timeout),
-		Locked:       true,
-		NodeID:       s.Op.HostPort(),
-		SubscriberID: subscriberID,
-		LockHolders:  make(map[string]bool),
-	}
-
+func (s *server) broadcastLock(ctx context.Context, messageId, topicId string) error {
 	// Check if message exists in storage
-	_, err := storage.GetMessage(messageID)
+	_, err := storage.GetMessage(messageId)
 	if err != nil {
 		return err
 	}
 
-	// Store lock information
-	lockInfo.LockHolders[s.Op.HostPort()] = true
-	s.MessageLocks.Store(messageID, lockInfo)
-
 	// Broadcast lock request
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
+		Msg:  []byte(fmt.Sprintf("lock:%s:%s", messageId, topicId)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin)
 
-	// Track acknowledgments
-	successCount := 1 // Include self
 	for _, v := range out {
-		if v.Error == nil {
-			successCount++
+		if v.Error != nil {
+			glog.Errorf("[Lock] Error broadcasting lock request: %v", v.Error)
 		}
 	}
 
 	// Need majority for consensus
 	// todo: Nice idea, but what if we have to be strict, like all nodes (instead of majority) must acknowledge the lock?
 	// Check consensus mode from configuration (could be stored in server struct)
-	consensusMode := s.ConsensusMode // Add this field to server struct: "majority" or "all"
+	// consensusMode := s.ConsensusMode // Add this field to server struct: "majority" or "all"
 
-	// Determine required acknowledgments based on mode
-	requiredAcks := len(out)/2 + 1 // Default to majority
-	if consensusMode == "all" {
-		requiredAcks = len(out) // Require all nodes
-	}
+	// // Determine required acknowledgments based on mode
+	// requiredAcks := len(out)/2 + 1 // Default to majority
+	// if consensusMode == "all" {
+	// 	requiredAcks = len(out) // Require all nodes
+	// }
 
-	// Check if we got enough acknowledgments
-	if successCount < requiredAcks {
-		s.MessageLocks.Delete(messageID)
-		glog.Infof("[Lock] Failed to acquire lock for message %s: got %d/%d required acknowledgments",
-			messageID, successCount, requiredAcks)
-		return fmt.Errorf("failed to acquire lock across %s of nodes (got %d/%d)",
-			consensusMode, successCount, requiredAcks)
-	}
+	// // Check if we got enough acknowledgments
+	// if successCount < requiredAcks {
+	// 	s.MessageLocks.Delete(messageID)
+	// 	glog.Infof("[Lock] Failed to acquire lock for message %s: got %d/%d required acknowledgments",
+	// 		messageID, successCount, requiredAcks)
+	// 	return fmt.Errorf("failed to acquire lock across %s of nodes (got %d/%d)",
+	// 		consensusMode, successCount, requiredAcks)
+	// }
 
-	glog.Infof("[Lock] Successfully acquired lock for message %s with %d/%d acknowledgments",
-		messageID, successCount, len(out))
+	// glog.Infof("[Lock] Successfully acquired lock for message %s with %d/%d acknowledgments",
+	// 	messageID, successCount, len(out))
 
-	// Start timeout timer
-	timer := time.NewTimer(timeout)
-	s.MessageTimer.Store(messageID, timer)
+	// // Start timeout timer
+	// timer := time.NewTimer(timeout)
+	// s.MessageTimer.Store(messageID, timer)
 
-	go func() {
-		<-timer.C
-		s.handleMessageTimeout(messageID)
-	}()
+	// go func() {
+	// 	<-timer.C
+	// 	s.handleMessageTimeout(messageID)
+	// }()
 
 	return nil
 }

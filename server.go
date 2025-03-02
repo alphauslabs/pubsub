@@ -129,7 +129,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 				// Attempt to acquire distributed lock for the message
 				// Default visibility timeout of 30 seconds
-				if err := s.broadcastLock(stream.Context(), message.Id, in.SubscriptionId, 30*time.Second); err != nil {
+				if err := s.broadcastLock(stream.Context(), message.Id, in.TopicId); err != nil {
 					glog.Infof("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
 					continue // Skip if unable to acquire lock
 				}

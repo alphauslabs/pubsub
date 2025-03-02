@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/alphauslabs/pubsub/app"
@@ -119,65 +120,65 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 // Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
 	glog.Info("[Lock] Attempting to lock message:", messageID, "Params:", params)
-	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid lock parameters")
-	}
+	// Check if already locked
+	// if existingLock, exists := app.MessageLocks.Load(messageID); exists {
+	// 	info := existingLock.(MessageLockInfo)
 
-	timeoutSeconds, err := strconv.Atoi(params[0])
+	// 	// If lock is expired, allow new lock
+	// 	if time.Now().After(info.Timeout) {
+	// 		glog.Info("[Lock] Previous lock expired, allowing new lock.")
+	// 		// Continue with new lock
+	// 	} else if info.NodeID == requestingNodeID {
+	// 		// Same node is refreshing its lock, allow it
+	// 		info.LockHolders[app.NodeID] = true
+	// 		app.MessageLocks.Store(messageID, info)
+	// 		glog.Info("[Lock] Lock refreshed by same node:", requestingNodeID)
+	// 		return nil, nil
+	// 	} else {
+	// 		// Different node has a valid lock, reject
+	// 		glog.Info("[Lock] Message already locked by another node:", info.NodeID)
+	// 		return nil, fmt.Errorf("message already locked by another node")
+	// 	}
+	// }
+
+	msg, err := storage.GetMessage(messageID)
 	if err != nil {
 		return nil, err
 	}
-	subscriberID := params[1]
-	requestingNodeID := params[2]
-
-	// Check if already locked
-	if existingLock, exists := app.MessageLocks.Load(messageID); exists {
-		info := existingLock.(MessageLockInfo)
-
-		// If lock is expired, allow new lock
-		if time.Now().After(info.Timeout) {
-			glog.Info("[Lock] Previous lock expired, allowing new lock.")
-			// Continue with new lock
-		} else if info.NodeID == requestingNodeID {
-			// Same node is refreshing its lock, allow it
-			info.LockHolders[app.NodeID] = true
-			app.MessageLocks.Store(messageID, info)
-			glog.Info("[Lock] Lock refreshed by same node:", requestingNodeID)
-			return nil, nil
-		} else {
-			// Different node has a valid lock, reject
-			glog.Info("[Lock] Message already locked by another node:", info.NodeID)
-			return nil, fmt.Errorf("message already locked by another node")
-		}
+	if msg == nil {
+		return nil, fmt.Errorf("message not found")
 	}
+
+	atomic.StoreInt32(&msg.Locked, 1) // Lock the message
+	// Todo: check if actually updated...
 
 	// Each node maintains its own timer
 	// Create new lock
-	lockInfo := MessageLockInfo{
-		Locked:       true,
-		Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
-		NodeID:       requestingNodeID,
-		SubscriberID: subscriberID,
-		LockHolders:  make(map[string]bool),
-	}
+	// lockInfo := MessageLockInfo{
+	// 	Locked:       true,
+	// 	Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
+	// 	NodeID:       requestingNodeID,
+	// 	SubscriberID: subscriberID,
+	// 	LockHolders:  make(map[string]bool),
+	// }
 
-	// Mark this node as acknowledging the lock
-	lockInfo.LockHolders[app.NodeID] = true
+	// // Mark this node as acknowledging the lock
+	// lockInfo.LockHolders[app.NodeID] = true
 
-	app.MessageLocks.Store(messageID, lockInfo)
+	// app.MessageLocks.Store(messageID, lockInfo)
 
-	// Set up a local timer to clear the lock when it expires
-	time.AfterFunc(time.Duration(timeoutSeconds)*time.Second, func() {
-		if lock, exists := app.MessageLocks.Load(messageID); exists {
-			info := lock.(MessageLockInfo)
-			if info.NodeID == requestingNodeID && time.Now().After(info.Timeout) {
-				app.MessageLocks.Delete(messageID)
-				glog.Infof("[Lock] Timer expired, node %s automatically released local lock for message: %s",
-					app.NodeID, messageID)
-			}
-		}
-	})
-	glog.Info("[Lock] Message locked successfully by node:", requestingNodeID)
+	// // Set up a local timer to clear the lock when it expires
+	// time.AfterFunc(time.Duration(timeoutSeconds)*time.Second, func() {
+	// 	if lock, exists := app.MessageLocks.Load(messageID); exists {
+	// 		info := lock.(MessageLockInfo)
+	// 		if info.NodeID == requestingNodeID && time.Now().After(info.Timeout) {
+	// 			app.MessageLocks.Delete(messageID)
+	// 			glog.Infof("[Lock] Timer expired, node %s automatically released local lock for message: %s",
+	// 				app.NodeID, messageID)
+	// 		}
+	// 	}
+	// })
+	// glog.Info("[Lock] Message locked successfully by node:", requestingNodeID)
 	return nil, nil
 }
 
