@@ -20,7 +20,7 @@ package main
 // 	grpcServer := grpc.NewServer()
 // 	pb.RegisterTopicServiceServer(grpcServer, server.NewTopicServer(client))
 
-// 	log.Printf("Server listening at %v", lis.Addr())
+// 	glog.Infof("Server listening at %v", lis.Addr())
 // 	if err := grpcServer.Serve(lis); err != nil {
 // 		log.Fatalf("Failed to serve: %v", err)
 // 	}

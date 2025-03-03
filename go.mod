@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go/spanner v1.75.0
 	github.com/alphauslabs/pubsub-proto v0.0.0-20250226091851-35a0c5c2d445
 	github.com/flowerinthenight/hedge v1.18.0
+	github.com/golang/glog v1.2.3
 	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.219.0
 	google.golang.org/grpc v1.70.0

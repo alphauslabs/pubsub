@@ -34,7 +34,7 @@ package main
 // // Subscribe implements the gRPC streaming API for subscriptions. (server)
 // func (s *SubscriberHandler) Subscribe(req *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 // 	subscriptionID := req.SubscriptionId
-// 	log.Printf("New subscriber connected for subscription: %s", subscriptionID)
+// 	glog.Infof("New subscriber connected for subscription: %s", subscriptionID)
 
 // 	// Record the connection start time
 // 	s.mu.Lock()
@@ -53,7 +53,7 @@ package main
 // 		delete(s.connTimers, subscriptionID) // Remove the timer when the client disconnects
 // 		close(msgChan)
 // 		s.mu.Unlock()
-// 		log.Printf("Subscriber disconnected for subscription: %s", subscriptionID)
+// 		glog.Infof("Subscriber disconnected for subscription: %s", subscriptionID)
 // 	}()
 
 // 	// Keep the connection alive and stream messages
@@ -62,13 +62,13 @@ package main
 // 		case msg := <-msgChan:
 // 			// Deliver message to subscriber
 // 			if err := stream.Send(msg); err != nil {
-// 				log.Printf("Failed to send message to subscriber %s: %v", subscriptionID, err)
+// 				glog.Infof("Failed to send message to subscriber %s: %v", subscriptionID, err)
 // 				return err
 // 			}
 
 // 		case <-stream.Context().Done():
 // 			// Handle disconnection
-// 			log.Printf("Subscriber for subscription %s disconnected", subscriptionID)
+// 			glog.Infof("Subscriber for subscription %s disconnected", subscriptionID)
 // 			return nil
 // 		}
 // 	}
@@ -77,7 +77,7 @@ package main
 // // Acknowledge handles message acknowledgments from subscribers.
 // // This is a no-op in this implementation - no visibility timeout handler over here for now
 // func (s *SubscriberHandler) Acknowledge(ctx context.Context, req *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
-// 	log.Printf("Received acknowledgment for message: %s from subscription: %s", req.Id, req.SubscriptionId)
+// 	glog.Infof("Received acknowledgment for message: %s from subscription: %s", req.Id, req.SubscriptionId)
 // 	return &pb.AcknowledgeResponse{Success: true}, nil
 // }
 
@@ -89,7 +89,7 @@ package main
 // 		for subscriptionID, startTime := range s.connTimers {
 // 			elapsedTime := time.Since(startTime)
 // 			// Use \r to overwrite the current line
-// 			log.Printf("CONNECT CLIENT: %s [Elapsed Time: %v]", subscriptionID, elapsedTime)
+// 			glog.Infof("CONNECT CLIENT: %s [Elapsed Time: %v]", subscriptionID, elapsedTime)
 // 		}
 // 		s.mu.Unlock()
 // 	}
@@ -111,7 +111,7 @@ package main
 // 		grpc.ChainStreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 // 			// Log keep-alive pings
 // 			md, _ := metadata.FromIncomingContext(ss.Context())
-// 			log.Printf("Keep-alive ping received: %v", md)
+// 			glog.Infof("Keep-alive ping received: %v", md)
 // 			return handler(srv, ss)
 // 		}),
 // 	)
@@ -122,7 +122,7 @@ package main
 // 		log.Fatalf("Failed to listen: %v", err)
 // 	}
 
-// 	log.Println("Server is running on port 50051")
+// 	glog.Info("Server is running on port 50051")
 // 	if err := grpcServer.Serve(listener); err != nil {
 // 		log.Fatalf("Failed to serve: %v", err)
 // 	}

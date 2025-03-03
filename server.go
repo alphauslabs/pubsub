@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -14,6 +14,7 @@ import (
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
+	"github.com/golang/glog"
 
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
@@ -40,8 +41,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
-	b, _ := json.Marshal(in)
-
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
@@ -59,9 +58,18 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
-		log.Printf("Error writing to Spanner: %v", err)
+		glog.Infof("Error writing to Spanner: %v", err)
 		return nil, err
 	}
+
+	m := storage.Message{
+		Message: &pb.Message{
+			Id:      messageID,
+			Topic:   in.TopicId,
+			Payload: in.Payload,
+		},
+	}
+	b, _ := json.Marshal(&m)
 
 	// broadcast message
 	bcastin := handlers.BroadCastInput{
@@ -72,114 +80,104 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	out := s.Op.Broadcast(ctx, bin)
 	for _, v := range out {
 		if v.Error != nil { // for us to know, then do necessary actions if frequent
-			log.Printf("[Publish] Error broadcasting message: %v", v.Error)
+			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
 		}
 	}
-	log.Printf("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
+	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
 	return &pb.PublishResponse{MessageId: messageID}, nil
 }
 
 // Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	log.Printf("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.TopicId, in.SubscriptionId)
+	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.TopicId, in.SubscriptionId)
 
 	// Validate if subscription exists for the given topic
-	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	err := s.validateSubscription(in.TopicId, in.SubscriptionId)
+	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
+	err := s.checkIfTopicSubscriptionIsCorrect(in.TopicId, in.SubscriptionId)
 	if err != nil {
-		log.Printf("[Subscribe] Error validating subscription: %v", err)
+		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
 	}
 
-	log.Printf("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
+	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
 
 	// Continuous loop to stream messages
 	for {
 		select {
 		// Check if client has disconnected
 		case <-stream.Context().Done():
-			log.Printf("[Subscribe] Client disconnected, closing stream for subscription %s", in.SubscriptionId)
+			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.SubscriptionId)
 			return nil
 		default:
 			// Get messages from local storage for the topic
 			messages, err := storage.GetMessagesByTopic(in.TopicId)
 			if err != nil {
-				log.Printf("[Subscribe] Error getting messages: %v", err)
+				glog.Infof("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
 				continue
 			}
 
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
-				log.Printf("[Subscribe] No messages found for topic %s, waiting...", in.TopicId)
+				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.TopicId)
 				time.Sleep(time.Second) // todo: not sure if this is the best way
 				continue
 			}
 
-			log.Printf("[Subscribe] Found %d messages for topic %s", len(messages), in.TopicId)
+			glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.TopicId)
 
 			// Process each message
 			for _, message := range messages {
 				// Skip if message is already locked by another subscriber
-				if info, exists := s.MessageLocks.Load(message.Id); exists {
-					inf := info.(handlers.MessageLockInfo)
-					if inf.Locked {
-						log.Printf("[Subscribe] Message %s is already locked, skipping...", message.Id)
-						continue
-					}
+				if atomic.LoadInt32(&message.Deleted) == 1 || atomic.LoadInt32(&message.Locked) == 1 {
+					glog.Infof("[Subscribe] Message %s is already locked or deleted, skipping...", message.Id)
+					continue
 				}
 
 				// Attempt to acquire distributed lock for the message
 				// Default visibility timeout of 30 seconds
-				if err := s.broadcastLock(stream.Context(), message.Id, in.SubscriptionId, 30*time.Second); err != nil {
-					log.Printf("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
+				if err := s.broadcastLock(stream.Context(), message.Id, in.TopicId); err != nil {
+					glog.Infof("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
 					continue // Skip if unable to acquire lock
 				}
-				log.Printf("[Subscribe] Successfully acquired lock for message %s", message.Id)
+				glog.Infof("[Subscribe] Successfully acquired lock for message %s", message.Id)
 
 				// Stream message to subscriber
-				log.Printf("[Subscribe] Sending message %s to subscriber %s", message.Id, in.SubscriptionId)
-				if err := stream.Send(message); err != nil {
+				if err := stream.Send(message.Message); err != nil {
 					// Release lock if sending fails
-					log.Printf("[Subscribe] Error sending message %s to subscriber: %v", message.Id, err)
-					s.localUnlock(message.Id)
-					log.Printf("[Subscribe] Lock released due to send error for message %s", message.Id)
-					return err // Return error to close stream
+					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.SubscriptionId, err)
+				} else {
+					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 				}
-				log.Printf("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 			}
 		}
 	}
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
-	log.Printf("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
+	glog.Infof("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
 	// Check if message lock exists and is still valid (within 1 minute)
-	lockInfo, ok := s.MessageLocks.Load(in.Id)
-	if !ok {
-		log.Printf("[Acknowledge] Error: Message lock not found for ID: %s", in.Id)
-		return nil, status.Error(codes.NotFound, "message lock not found")
-	}
+	// lockInfo, ok := s.MessageLocks.Load(in.Id)
+	// if !ok {
+	// 	glog.Infof("[Acknowledge] Error: Message lock not found for ID: %s", in.Id)
+	// 	return nil, status.Error(codes.NotFound, "message lock not found")
+	// }
 
-	info := lockInfo.(handlers.MessageLockInfo)
-	log.Printf("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
+	// info := lockInfo.(handlers.MessageLockInfo)
+	// glog.Infof("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
 
-	// Check if lock is valid and not timed out
-	if !info.Locked || time.Now().After(info.Timeout) {
-		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
-	}
+	// // Check if lock is valid and not timed out
+	// if !info.Locked || time.Now().After(info.Timeout) {
+	// 	return nil, status.Error(codes.FailedPrecondition, "message lock expired")
+	// }
 
-	// Get message processed in time
-	log.Printf("[Acknowledge] Retrieving message %s from storage", in.Id)
+	// Check if message exists in storage
+	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
-		log.Printf("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
+		glog.Infof("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
-
-	// Mark as processed since subscriber acknowledged in time
-	log.Printf("[Acknowledge] Marking message %s as processed", in.Id)
-	msg.Processed = true
 
 	// Update the processed status in Spanner
 	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
@@ -187,59 +185,58 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	}
 
 	// Log acknowledgment
-	log.Printf("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
-
+	glog.Infof("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
+	s.Op.Broadcast(ctx, bin) // broadcast to set deleted
 
 	// Clean up message (processed)
-	log.Printf("[Acknowledge] Cleaning up message %s from local state", in.Id)
-	s.MessageLocks.Delete(in.Id)
-	if timer, ok := s.MessageTimer.Load(in.Id); ok {
-		log.Printf("[Acknowledge] Stopping timer for message %s", in.Id)
-		timer.(*time.Timer).Stop()
-		s.MessageTimer.Delete(in.Id)
-	}
+	// glog.Infof("[Acknowledge] Cleaning up message %s from local state", in.Id)
+	// s.MessageLocks.Delete(in.Id)
+	// if timer, ok := s.MessageTimer.Load(in.Id); ok {
+	// 	glog.Infof("[Acknowledge] Stopping timer for message %s", in.Id)
+	// 	timer.(*time.Timer).Stop()
+	// 	s.MessageTimer.Delete(in.Id)
+	// }
 
-	// Remove the message from in-memory storage
-	storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
+	// // Remove the message from in-memory storage
+	// storage.RemoveMessage(in.Id, "") // RemoveMessage method from Storage
 
-	log.Printf("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
+	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
 // ModifyVisibilityTimeout extends message lock timeout
 func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
-	log.Printf("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
+	glog.Infof("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
 
 	lockInfo, ok := s.MessageLocks.Load(in.Id)
 	if !ok {
-		log.Printf("[ModifyVisibility] Error: Message lock not found for ID: %s", in.Id)
+		glog.Infof("[ModifyVisibility] Error: Message lock not found for ID: %s", in.Id)
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
 
 	info := lockInfo.(handlers.MessageLockInfo)
-	log.Printf("[ModifyVisibility] Current lock info - Locked: %v, Timeout: %v, NodeID: %s",
+	glog.Infof("[ModifyVisibility] Current lock info - Locked: %v, Timeout: %v, NodeID: %s",
 		info.Locked, info.Timeout, info.NodeID)
 
 	if !info.Locked {
-		log.Printf("[ModifyVisibility] Error: Message %s is not locked", in.Id)
+		glog.Infof("[ModifyVisibility] Error: Message %s is not locked", in.Id)
 		return nil, status.Error(codes.FailedPrecondition, "message not locked")
 	}
 
 	// Check if this node owns the lock before extending
 	if info.NodeID != s.Op.HostPort() {
-		log.Printf("[ModifyVisibility] Error: Only lock owner can extend timeout. Current owner: %s, This node: %s",
+		glog.Infof("[ModifyVisibility] Error: Only lock owner can extend timeout. Current owner: %s, This node: %s",
 			info.NodeID, s.Op.HostPort())
 		return nil, status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
 	}
 
 	// Broadcast new timeout
-	log.Printf("[ModifyVisibility] Broadcasting timeout extension for message %s", in.Id)
+	glog.Infof("[ModifyVisibility] Broadcasting timeout extension for message %s", in.Id)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", in.Id, in.NewTimeout, s.Op.HostPort())),
@@ -249,27 +246,27 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 	// Update local timer
 	if timer, ok := s.MessageTimer.Load(in.Id); ok {
-		log.Printf("[ModifyVisibility] Stopping existing timer for message %s", in.Id)
+		glog.Infof("[ModifyVisibility] Stopping existing timer for message %s", in.Id)
 		timer.(*time.Timer).Stop()
 	}
-	log.Printf("[ModifyVisibility] Creating new timer for %d seconds", in.NewTimeout)
+	glog.Infof("[ModifyVisibility] Creating new timer for %d seconds", in.NewTimeout)
 	newTimer := time.NewTimer(time.Duration(in.NewTimeout) * time.Second)
 	s.MessageTimer.Store(in.Id, newTimer)
 
 	// Update lock info
 	newTimeout := time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
-	log.Printf("[ModifyVisibility] Updating lock timeout from %v to %v", info.Timeout, newTimeout)
+	glog.Infof("[ModifyVisibility] Updating lock timeout from %v to %v", info.Timeout, newTimeout)
 	info.Timeout = newTimeout
 	s.MessageLocks.Store(in.Id, info)
 
 	go func() {
-		log.Printf("[ModifyVisibility] Starting timeout handler for message %s", in.Id)
+		glog.Infof("[ModifyVisibility] Starting timeout handler for message %s", in.Id)
 		<-newTimer.C
-		log.Printf("[ModifyVisibility] Timer expired for message %s, handling timeout", in.Id)
+		glog.Infof("[ModifyVisibility] Timer expired for message %s, handling timeout", in.Id)
 		s.handleMessageTimeout(in.Id)
 	}()
 
-	log.Printf("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
+	glog.Infof("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
 	return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
 }
 
@@ -348,48 +345,47 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
 	}
 
-	// 1. Check if the new name already exists
+	// Check if the new name already exists
 	exist, err := s.topicExists(ctx, req.NewName)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to check name availability: %v", err)
-	}
 	if exist {
-		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists", req.NewName)
+		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists, err: %v", req.NewName, err)
 	}
 
-	// 2. Fetch the current topic to get its old name
+	// Fetch the current topic to get its old name
 	current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Perform both updates in a read-write transaction
-	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// 3a. Update the topic row
-		mutTopic := spanner.Update(TopicsTable,
-			[]string{"id", "name", "updatedAt"},
-			[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
-		)
-		if err := txn.BufferWrite([]*spanner.Mutation{mutTopic}); err != nil {
-			return err
-		}
-
-		// 3b. Update all subscriptions referencing the old topic name
-		stmtSubs := spanner.Statement{
-			SQL: `UPDATE Subscriptions
-                  SET topic = @newName,
-                      updatedAt = PENDING_COMMIT_TIMESTAMP()
-                  WHERE topic = @oldName`,
-			Params: map[string]interface{}{
-				"newName": req.NewName,
-				"oldName": current.Name,
-			},
-		}
-		_, err2 := txn.Update(ctx, stmtSubs)
-		return err2
-	})
+	mutTopic := spanner.Update(TopicsTable,
+		[]string{"id", "name", "updatedAt"},
+		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
+	)
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
+	}
+
+	// Update all subscriptions referencing the old topic name
+	stmt := spanner.Statement{
+		SQL: `UPDATE Subscriptions
+			  SET topic = @newName,
+			  updatedAt = PENDING_COMMIT_TIMESTAMP()
+			  WHERE topic = @oldName`,
+		Params: map[string]interface{}{
+			"newName": req.NewName,
+			"oldName": current.Name,
+		},
+	}
+	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		_, err := txn.Update(ctx, stmt)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update subscriptions: %v", err)
 	}
 
 	updatedTopic := &pb.Topic{
@@ -408,10 +404,14 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
-	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// Delete topic
-		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+	// Delete topic
+	topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{topicMutation})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+	}
 
+	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		// Delete all related subscriptions
 		stmt := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @topicId`,
@@ -419,18 +419,8 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 				"topicId": req.Id,
 			},
 		}
-
-		// Execute delete operations
-		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
-			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-		}
-
-		// Execute subscription deletion
-		iter := txn.Query(ctx, stmt)
-		defer iter.Stop()
-
-		_, err := iter.Next()
-		if err != nil && err != iterator.Done {
+		_, err = txn.Update(ctx, stmt)
+		if err != nil {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -438,7 +428,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	})
 
 	if err != nil {
-		log.Printf("Failed to delete topic and subscriptions: %v", err)
+		glog.Infof("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
 	go func() {
@@ -497,7 +487,7 @@ func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("existence check failed: %w", err)
+		return true, fmt.Errorf("existence check failed: %w", err)
 	}
 	return true, nil
 }
@@ -510,7 +500,6 @@ func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
 }
 
 func (s *server) notifyLeader(flag int) {
-
 	// Create a simple payload with just the flag
 	data := map[string]interface{}{
 		"flag": flag,
@@ -519,7 +508,7 @@ func (s *server) notifyLeader(flag int) {
 	// Serialize the data
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Error marshaling data: %v", err)
+		glog.Infof("Error marshaling data: %v", err)
 		return
 	}
 
@@ -532,7 +521,7 @@ func (s *server) notifyLeader(flag int) {
 	// Serialize the SendInput
 	inputData, err := json.Marshal(input)
 	if err != nil {
-		log.Printf("Error marshaling send input: %v", err)
+		glog.Infof("Error marshaling send input: %v", err)
 		return
 	}
 
@@ -542,70 +531,8 @@ func (s *server) notifyLeader(flag int) {
 
 	_, err = s.Op.Send(timeoutCtx, inputData)
 	if err != nil {
-		log.Printf("Failed to send to leader: %v", err)
+		glog.Infof("Failed to send to leader: %v", err)
 	} else {
-		log.Printf("Successfully notified leader with flag: %d", flag)
+		glog.Infof("Successfully notified leader with flag: %d", flag)
 	}
 }
-
-/*
-func (s *server) notifyLeader(flag int) {
-	// Check if we're already the leader (optimization)
-	hasLock, _ := s.Op.HasLock()
-	if hasLock {
-		log.Println("[Leader] This node is the leader, triggering broadcast directly")
-		// Use a background context for the broadcast
-		bgCtx := context.Background()
-		broadcast.ImmediateBroadcast(bgCtx, s.Op, s.Client)
-		return
-	}
-
-	// Run in a goroutine to avoid blocking the caller
-	go func() {
-		// retry backoff
-		backoffs := []time.Duration{
-			100 * time.Millisecond,
-			500 * time.Millisecond,
-			1 * time.Second,
-			2 * time.Second,
-		}
-
-		// Create a simple payload - content doesn't matter
-		input := send.topicsubupdates{
-			Type: "topicsubupdates", // Must match the handler registration
-			Msg:  []byte(fmt.Sprintf(`{"flag":%d}`, flag)),
-		}
-
-		data, err := json.Marshal(input)
-		if err != nil {
-			log.Printf("[NotifyLeader] Error marshaling input: %v", err)
-			return
-		}
-
-		// Try multiple times with increasing delays
-		for i, delay := range backoffs {
-			// Create a fresh context for each attempt
-			attemptCtx := context.Background()
-			timeoutCtx, cancel := context.WithTimeout(attemptCtx, 5*time.Second)
-
-			log.Printf("[NotifyLeader] Attempt %d to notify leader", i+1)
-			_, err := s.Op.Send(timeoutCtx, data)
-
-			// Always cancel the context when done with this attempt
-			cancel()
-
-			if err == nil {
-				log.Printf("[NotifyLeader] Successfully notified leader")
-				return // Success!
-			}
-
-			log.Printf("[NotifyLeader] Attempt %d failed: %v", i+1, err)
-
-			// Sleep before next attempt
-			time.Sleep(delay)
-		}
-
-		log.Printf("[NotifyLeader] Failed to notify leader after %d attempts", len(backoffs))
-	}()
-}
-*/

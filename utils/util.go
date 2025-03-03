@@ -3,11 +3,11 @@ package utils
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	"cloud.google.com/go/spanner"
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/flowerinthenight/hedge"
+	"github.com/golang/glog"
 )
 
 func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
@@ -32,19 +32,19 @@ func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 
 func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) error {
 	if id == "" {
-		log.Println("[ERROR]: Received invalid message ID")
+		glog.Info("[ERROR]: Received invalid message ID")
 		return nil
 	}
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"id", "processed"}, []interface{}{id, true}),
+		spanner.Update("Messages", []string{"id", "processed", "updatedAt"}, []interface{}{id, true, spanner.CommitTimestamp}),
 	})
 	if err != nil {
-		log.Printf("[ERROR]: Failed to update message processed status in Spanner: %v", err)
+		glog.Infof("[ERROR]: Failed to update message processed status in Spanner: %v", err)
 		return err
 	}
 
-	log.Printf("[STORAGE]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, true)
+	glog.Infof("[STORAGE]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, true)
 	return nil
 }
