@@ -13,7 +13,7 @@ func RunCheckForExpired() {
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
-				if atomic.LoadInt32(&v1.Locked) == 1 {
+				if atomic.LoadInt32(&v1.Deleted) == 0 && atomic.LoadInt32(&v1.Locked) == 1 {
 					switch {
 					case time.Since(v1.Age) >= 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
 						atomic.StoreInt32(&v1.Locked, 0) // release lock
