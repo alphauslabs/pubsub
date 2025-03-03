@@ -70,7 +70,7 @@ func main() {
 			defer cancel()
 
 			if _, err := client.Publish(ctx, message); err != nil {
-				log.Printf("Failed to publish message: %v", err)
+				glog.Infof("Failed to publish message: %v", err)
 			}
 		}(i)
 	}
@@ -84,5 +84,5 @@ func main() {
 	// Calculate and log the messages per second
 	duration := endTime.Sub(startTime).Seconds()
 	messagesPerSecond := float64(*rowCount) / duration
-	log.Printf("Published %d messages in %.2f seconds (%.2f messages per second)\n", *rowCount, duration, messagesPerSecond)
+	glog.Infof("Published %d messages in %.2f seconds (%.2f messages per second)\n", *rowCount, duration, messagesPerSecond)
 }

@@ -3,14 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/golang/glog"
 )
 
 const (
@@ -56,13 +56,11 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Println("[Broadcast] Sending event type:", in.Type, "Data:", string(in.Msg))
 	return ctrlbroadcast[in.Type](appInstance, in.Msg)
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("[Broadcast] Received message:\n", string(msg))
-	var message pb.Message
+	var message storage.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
@@ -77,8 +75,12 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles topic-subscription updates
 func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("Received topic-subscriptions:\n", string(msg))
-	if err := storage.StoreTopicSubscriptions(msg); err != nil {
+	var topicSubs map[string]map[string]*storage.Subscription
+	if err := json.Unmarshal(msg, &topicSubs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal topic-subscriptions: %w", err)
+	}
+
+	if err := storage.StoreTopicSubscriptions(topicSubs); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}
 
@@ -87,10 +89,10 @@ func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
 
 // Handles lock/unlock/delete/extend operations separately
 func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
-	log.Println("[MessageEvent] Received message event:", string(msg))
+	glog.Info("[MessageEvent] Received message event:", string(msg))
 	parts := strings.Split(string(msg), ":")
 	if len(parts) < 2 {
-		log.Println("[Error] Invalid message event format:", msg)
+		glog.Info("[Error] Invalid message event format:", msg)
 		return nil, fmt.Errorf("invalid message event format")
 	}
 
@@ -107,93 +109,89 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 
 	handler, exists := eventHandlers[messageType]
 	if !exists {
-		log.Println("[Error] Unknown message event type:", messageType)
+		glog.Info("[Error] Unknown message event type:", messageType)
 		return nil, fmt.Errorf("unknown message event: %s", messageType)
 	}
 
-	log.Println("[MessageEvent] Processing event:", messageType, "for message ID:", messageID)
+	glog.Info("[MessageEvent] Processing event:", messageType, "for message ID:", messageID)
 	return handler(appInstance, messageID, parts[2:])
 }
 
 // Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
-	log.Println("[Lock] Attempting to lock message:", messageID, "Params:", params)
-	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid lock parameters")
-	}
+	glog.Info("[Lock] Attempting to lock message:", messageID, "Params:", params)
+	// Check if already locked
+	// if existingLock, exists := app.MessageLocks.Load(messageID); exists {
+	// 	info := existingLock.(MessageLockInfo)
 
-	timeoutSeconds, err := strconv.Atoi(params[0])
+	// 	// If lock is expired, allow new lock
+	// 	if time.Now().After(info.Timeout) {
+	// 		glog.Info("[Lock] Previous lock expired, allowing new lock.")
+	// 		// Continue with new lock
+	// 	} else if info.NodeID == requestingNodeID {
+	// 		// Same node is refreshing its lock, allow it
+	// 		info.LockHolders[app.NodeID] = true
+	// 		app.MessageLocks.Store(messageID, info)
+	// 		glog.Info("[Lock] Lock refreshed by same node:", requestingNodeID)
+	// 		return nil, nil
+	// 	} else {
+	// 		// Different node has a valid lock, reject
+	// 		glog.Info("[Lock] Message already locked by another node:", info.NodeID)
+	// 		return nil, fmt.Errorf("message already locked by another node")
+	// 	}
+	// }
+
+	msg, err := storage.GetMessage(messageID)
 	if err != nil {
 		return nil, err
 	}
-	subscriberID := params[1]
-	requestingNodeID := params[2]
-
-	app.Mutex.Lock() // todo: mutex lock and unlock, might remove this if no need
-	defer app.Mutex.Unlock()
-
-	// Check if already locked
-	if existingLock, exists := app.MessageLocks.Load(messageID); exists {
-		info := existingLock.(MessageLockInfo)
-
-		// If lock is expired, allow new lock
-		if time.Now().After(info.Timeout) {
-			log.Println("[Lock] Previous lock expired, allowing new lock.")
-			// Continue with new lock
-		} else if info.NodeID == requestingNodeID {
-			// Same node is refreshing its lock, allow it
-			info.LockHolders[app.NodeID] = true
-			app.MessageLocks.Store(messageID, info)
-			log.Println("[Lock] Lock refreshed by same node:", requestingNodeID)
-			return nil, nil
-		} else {
-			// Different node has a valid lock, reject
-			log.Println("[Lock] Message already locked by another node:", info.NodeID)
-			return nil, fmt.Errorf("message already locked by another node")
-		}
+	if msg == nil {
+		return nil, fmt.Errorf("message not found")
 	}
 
+	atomic.StoreInt32(&msg.Locked, 1) // Lock the message
+	// Todo: check if actually updated...
+	msg.Mu.Lock()
+	msg.Age = time.Now().UTC()
+	msg.Mu.Unlock()
 	// Each node maintains its own timer
 	// Create new lock
-	lockInfo := MessageLockInfo{
-		Locked:       true,
-		Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
-		NodeID:       requestingNodeID,
-		SubscriberID: subscriberID,
-		LockHolders:  make(map[string]bool),
-	}
+	// lockInfo := MessageLockInfo{
+	// 	Locked:       true,
+	// 	Timeout:      time.Now().Add(time.Duration(timeoutSeconds) * time.Second),
+	// 	NodeID:       requestingNodeID,
+	// 	SubscriberID: subscriberID,
+	// 	LockHolders:  make(map[string]bool),
+	// }
 
-	// Mark this node as acknowledging the lock
-	lockInfo.LockHolders[app.NodeID] = true
+	// // Mark this node as acknowledging the lock
+	// lockInfo.LockHolders[app.NodeID] = true
 
-	app.MessageLocks.Store(messageID, lockInfo)
+	// app.MessageLocks.Store(messageID, lockInfo)
 
-	// Set up a local timer to clear the lock when it expires
-	time.AfterFunc(time.Duration(timeoutSeconds)*time.Second, func() {
-		if lock, exists := app.MessageLocks.Load(messageID); exists {
-			info := lock.(MessageLockInfo)
-			if info.NodeID == requestingNodeID && time.Now().After(info.Timeout) {
-				app.MessageLocks.Delete(messageID)
-				log.Printf("[Lock] Timer expired, node %s automatically released local lock for message: %s",
-					app.NodeID, messageID)
-			}
-		}
-	})
-	log.Println("[Lock] Message locked successfully by node:", requestingNodeID)
+	// // Set up a local timer to clear the lock when it expires
+	// time.AfterFunc(time.Duration(timeoutSeconds)*time.Second, func() {
+	// 	if lock, exists := app.MessageLocks.Load(messageID); exists {
+	// 		info := lock.(MessageLockInfo)
+	// 		if info.NodeID == requestingNodeID && time.Now().After(info.Timeout) {
+	// 			app.MessageLocks.Delete(messageID)
+	// 			glog.Infof("[Lock] Timer expired, node %s automatically released local lock for message: %s",
+	// 				app.NodeID, messageID)
+	// 		}
+	// 	}
+	// })
+	// glog.Info("[Lock] Message locked successfully by node:", requestingNodeID)
 	return nil, nil
 }
 
 func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte, error) {
-	log.Println("[Unlock] Attempting to unlock message:", messageID)
+	glog.Info("[Unlock] Attempting to unlock message:", messageID)
 	if len(params) < 2 {
 		return nil, fmt.Errorf("invalid unlock parameters, expected at least [nodeID, reason]")
 	}
 
 	unlockingNodeID := params[0]
 	unlockReason := params[1]
-
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
 
 	// Check if the message is locked
 	if lockInfo, exists := app.MessageLocks.Load(messageID); exists {
@@ -208,10 +206,10 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 			// 	timer.(*time.Timer).Stop()
 			// 	app.MessageTimer.Delete(messageID)
 			// }
-			log.Printf("[Unlock] Node %s acknowledged unlock for message: %s (reason: %s, node: %s)",
+			glog.Infof("[Unlock] Node %s acknowledged unlock for message: %s (reason: %s, node: %s)",
 				app.NodeID, messageID, unlockReason, unlockingNodeID)
 		} else {
-			log.Printf("[Unlock] Rejected unlock from node %s for message: %s - lock not expired yet (expires at: %v)",
+			glog.Infof("[Unlock] Rejected unlock from node %s for message: %s - lock not expired yet (expires at: %v)",
 				unlockingNodeID, messageID, info.Timeout)
 			return nil, fmt.Errorf("lock not expired yet, current time: %v, expires at: %v",
 				time.Now(), info.Timeout)
@@ -222,13 +220,20 @@ func handleUnlockMsg(app *app.PubSub, messageID string, params []string) ([]byte
 }
 
 func handleDeleteMsg(app *app.PubSub, messageID string, _ []string) ([]byte, error) {
-	log.Println("[Delete] Removing message:", messageID)
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
+	glog.Info("[Delete] Removing message:", messageID)
 
-	app.MessageLocks.Delete(messageID)
-	app.MessageTimer.Delete(messageID)
-	log.Println("[Delete] Message successfully removed:", messageID)
+	m, err := storage.GetMessage(messageID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, fmt.Errorf("message not found")
+	}
+
+	// Delete from storage
+	atomic.StoreInt32(&m.Deleted, 1)
+
+	glog.Info("[Delete] Message successfully removed:", messageID)
 	return nil, nil
 }
 
@@ -244,9 +249,6 @@ func handleExtendMsg(app *app.PubSub, messageID string, params []string) ([]byte
 
 	extendingNodeID := params[1]
 
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
-
 	if lockInfo, ok := app.MessageLocks.Load(messageID); ok {
 		info := lockInfo.(MessageLockInfo)
 
@@ -254,9 +256,9 @@ func handleExtendMsg(app *app.PubSub, messageID string, params []string) ([]byte
 		if info.NodeID == extendingNodeID {
 			info.Timeout = time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
 			app.MessageLocks.Store(messageID, info)
-			log.Printf("[Extend] Message %s timeout extended by node %s", messageID, extendingNodeID)
+			glog.Infof("[Extend] Message %s timeout extended by node %s", messageID, extendingNodeID)
 		} else {
-			log.Printf("[Extend] Rejected extend from non-owner node %s for message: %s", extendingNodeID, messageID)
+			glog.Infof("[Extend] Rejected extend from non-owner node %s for message: %s", extendingNodeID, messageID)
 			return nil, fmt.Errorf("only lock owner can extend timeout")
 		}
 	}
@@ -271,12 +273,8 @@ func handleRetryMsg(app *app.PubSub, messageID string, params []string) ([]byte,
 
 	retryNodeID := params[0]
 
-	// Make the message available again for processing
-	app.Mutex.Lock()
-	defer app.Mutex.Unlock()
-
 	app.MessageLocks.Delete(messageID)
-	log.Printf("[Retry] Message %s is now available again (unlocked by node %s)", messageID, retryNodeID)
+	glog.Infof("[Retry] Message %s is now available again (unlocked by node %s)", messageID, retryNodeID)
 
 	return nil, nil
 }

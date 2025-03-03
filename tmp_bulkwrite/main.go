@@ -85,7 +85,7 @@ func WriteBatchUsingDML(w io.Writer, client *spanner.Client, batch []*pubsubprot
 }
 
 func startPublisherListener() {
-	log.Println("[FO] Listening for publisher messages...")
+	glog.Info("[FO] Listening for publisher messages...")
 }
 
 func runBulkWriterAsLeader(workerID int) {
@@ -114,9 +114,9 @@ func runBulkWriterAsLeader(workerID int) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
-						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
+						glog.Infof("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
+						glog.Infof("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
@@ -130,9 +130,9 @@ func runBulkWriterAsLeader(workerID int) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
-						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
+						glog.Infof("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
+						glog.Infof("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
@@ -162,7 +162,7 @@ func runBulkWriterAsFollower() {
 	}
 	s := grpc.NewServer()
 	pubsubproto.RegisterPubSubServiceServer(s, &server{client: client}) // Pass the client to the server
-	log.Printf("[FOLLOWER] gRPC server is running on :%s\n", *followerPort)
+	glog.Infof("[FOLLOWER] gRPC server is running on :%s\n", *followerPort)
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("[FOLLOWER] Failed to serve: %v", err)
@@ -170,7 +170,7 @@ func runBulkWriterAsFollower() {
 	}()
 
 	// Handle incoming messages via gRPC
-	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
+	glog.Info("[FOLLOWER] Follower is now listening for messages from the consumer...")
 	select {}
 }
 
@@ -234,11 +234,11 @@ func (s *server) Publish(ctx context.Context, req *pubsubproto.PublishRequest) (
 
 	_, err := s.client.ForwardMessage(ctx, forwardReq)
 	if err != nil {
-		log.Printf("[FOLLOWER] Error forwarding message to leader: %v\n", err)
+		glog.Infof("[FOLLOWER] Error forwarding message to leader: %v\n", err)
 		return nil, status.Errorf(codes.Internal, "failed to forward message to leader: %v", err)
 	}
 
-	log.Printf("[FOLLOWER] Message forwarded to leader successfully: %v\n", req)
+	glog.Infof("[FOLLOWER] Message forwarded to leader successfully: %v\n", req)
 	return &pubsubproto.PublishResponse{MessageId: "00"}, nil
 }
 
@@ -260,7 +260,7 @@ func main() {
 	s := grpc.NewServer()
 
 	if *isLeader {
-		log.Println("Running as [LEADER].")
+		glog.Info("Running as [LEADER].")
 		pubsubproto.RegisterPubSubServiceServer(s, &server{}) // Leader doesn't need a client
 		go startPublisherListener()
 
@@ -271,14 +271,14 @@ func main() {
 		}
 
 		// Also start the follower logic on the leader
-		log.Println("Leader is also running as a follower.")
+		glog.Info("Leader is also running as a follower.")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			runBulkWriterAsFollower()
 		}()
 	} else {
-		log.Println("Running as [FOLLOWER].")
+		glog.Info("Running as [FOLLOWER].")
 		conn, err := grpc.Dial(*leaderURL, grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("[FOLLOWER] Failed to connect to leader: %v", err)
@@ -295,7 +295,7 @@ func main() {
 		}()
 	}
 
-	log.Printf("(MAIN) gRPC server is running on :50050\n")
+	glog.Infof("(MAIN) gRPC server is running on :50050\n")
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)

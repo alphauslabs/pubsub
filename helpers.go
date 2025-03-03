@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -15,104 +14,92 @@ import (
 
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/golang/glog"
 )
 
-// validateTopicSubscription checks if subscription exists in storage
-func (s *server) validateSubscription(topicID, subscriptionID string) error {
-	log.Printf("[Subscribe] Checking if subscription exists for topic: %s", topicID)
+// Checks if the topic subscription is correct, and exists in the memory
+func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscriptionID string) error {
+	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", topicID)
 	subs, err := storage.GetSubscribtionsForTopic(topicID)
 
 	if err != nil {
-		log.Printf("[Subscribe] Topic %s not found in storage", topicID)
+		glog.Infof("[Subscribe] Topic %s not found in storage", topicID)
 		return status.Errorf(codes.NotFound, "Topic %s not found", topicID)
 	}
 
-	log.Printf("[Subscribe] Found subscriptions for topic %s: %v", topicID, subs)
+	glog.Infof("[Subscribe] Found subscriptions for topic %s: %v", topicID, subs)
 
 	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
 	for _, sub := range subs {
-		if sub == subscriptionID {
+		if sub.Id == subscriptionID {
 			found = true
-			log.Printf("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
+			glog.Infof("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
 			break
 		}
 	}
 
 	if !found {
-		log.Printf("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
+		glog.Infof("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
 		return status.Errorf(codes.NotFound, "Subscription %s not found", subscriptionID)
 	}
+
 	return nil
 }
 
 // / broadcastLock handles distributed locking
-func (s *server) broadcastLock(ctx context.Context, messageID string, subscriberID string, timeout time.Duration) error {
-	lockInfo := handlers.MessageLockInfo{
-		Timeout:      time.Now().Add(timeout),
-		Locked:       true,
-		NodeID:       s.Op.HostPort(),
-		SubscriberID: subscriberID,
-		LockHolders:  make(map[string]bool),
-	}
-
+func (s *server) broadcastLock(ctx context.Context, messageId, topicId string) error {
 	// Check if message exists in storage
-	_, err := storage.GetMessage(messageID)
+	_, err := storage.GetMessage(messageId)
 	if err != nil {
 		return err
 	}
 
-	// Store lock information
-	lockInfo.LockHolders[s.Op.HostPort()] = true
-	s.MessageLocks.Store(messageID, lockInfo)
-
 	// Broadcast lock request
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("lock:%s:%d:%s:%s", messageID, int(timeout.Seconds()), subscriberID, s.Op.HostPort())),
+		Msg:  []byte(fmt.Sprintf("lock:%s:%s", messageId, topicId)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin)
 
-	// Track acknowledgments
-	successCount := 1 // Include self
 	for _, v := range out {
-		if v.Error == nil {
-			successCount++
+		if v.Error != nil {
+			glog.Errorf("[Lock] Error broadcasting lock request: %v", v.Error)
 		}
 	}
 
 	// Need majority for consensus
 	// todo: Nice idea, but what if we have to be strict, like all nodes (instead of majority) must acknowledge the lock?
 	// Check consensus mode from configuration (could be stored in server struct)
-	consensusMode := s.ConsensusMode // Add this field to server struct: "majority" or "all"
+	// consensusMode := s.ConsensusMode // Add this field to server struct: "majority" or "all"
 
-	// Determine required acknowledgments based on mode
-	requiredAcks := len(out)/2 + 1 // Default to majority
-	if consensusMode == "all" {
-		requiredAcks = len(out) // Require all nodes
-	}
+	// // Determine required acknowledgments based on mode
+	// requiredAcks := len(out)/2 + 1 // Default to majority
+	// if consensusMode == "all" {
+	// 	requiredAcks = len(out) // Require all nodes
+	// }
 
-	// Check if we got enough acknowledgments
-	if successCount < requiredAcks {
-		s.MessageLocks.Delete(messageID)
-		log.Printf("[Lock] Failed to acquire lock for message %s: got %d/%d required acknowledgments",
-			messageID, successCount, requiredAcks)
-		return fmt.Errorf("failed to acquire lock across %s of nodes (got %d/%d)",
-			consensusMode, successCount, requiredAcks)
-	}
+	// // Check if we got enough acknowledgments
+	// if successCount < requiredAcks {
+	// 	s.MessageLocks.Delete(messageID)
+	// 	glog.Infof("[Lock] Failed to acquire lock for message %s: got %d/%d required acknowledgments",
+	// 		messageID, successCount, requiredAcks)
+	// 	return fmt.Errorf("failed to acquire lock across %s of nodes (got %d/%d)",
+	// 		consensusMode, successCount, requiredAcks)
+	// }
 
-	log.Printf("[Lock] Successfully acquired lock for message %s with %d/%d acknowledgments",
-		messageID, successCount, len(out))
+	// glog.Infof("[Lock] Successfully acquired lock for message %s with %d/%d acknowledgments",
+	// 	messageID, successCount, len(out))
 
-	// Start timeout timer
-	timer := time.NewTimer(timeout)
-	s.MessageTimer.Store(messageID, timer)
+	// // Start timeout timer
+	// timer := time.NewTimer(timeout)
+	// s.MessageTimer.Store(messageID, timer)
 
-	go func() {
-		<-timer.C
-		s.handleMessageTimeout(messageID)
-	}()
+	// go func() {
+	// 	<-timer.C
+	// 	s.handleMessageTimeout(messageID)
+	// }()
 
 	return nil
 }
@@ -124,7 +111,7 @@ func (s *server) handleMessageTimeout(messageID string) {
 		info := lockInfo.(handlers.MessageLockInfo)
 		// Any node can unlock a message if its timeout has expired
 		if info.Locked && time.Now().After(info.Timeout) {
-			log.Printf("[Timeout] Node %s detected expired lock for message %s (owned by %s)",
+			glog.Infof("[Timeout] Node %s detected expired lock for message %s (owned by %s)",
 				s.Op.HostPort(), messageID, info.NodeID)
 			//s.broadcastUnlock(context.Background(), messageID)
 			s.localUnlock(messageID)
@@ -141,7 +128,7 @@ func (s *server) localUnlock(messageID string) {
 		s.MessageTimer.Delete(messageID)
 	}
 
-	log.Printf("[Unlock] Node %s locally unlocked message %s", s.Op.HostPort(), messageID)
+	glog.Infof("[Unlock] Node %s locally unlocked message %s", s.Op.HostPort(), messageID)
 }
 
 // func (s *server) broadcastUnlock(ctx context.Context, messageID string) {
@@ -171,7 +158,7 @@ func (s *server) localUnlock(messageID string) {
 // 		s.MessageTimer.Delete(messageID)
 // 	}
 
-// 	log.Printf("[Unlock] Node %s broadcasted unlock for message %s ", s.Op.HostPort(), messageID)
+// 	glog.Infof("[Unlock] Node %s broadcasted unlock for message %s ", s.Op.HostPort(), messageID)
 // }
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
@@ -210,7 +197,7 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 
 	// Broadcast new timeout to all nodes
 	s.Op.Broadcast(context.TODO(), msgBytes)
-	log.Printf("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.HostPort(), messageID)
+	glog.Infof("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.HostPort(), messageID)
 
 	return nil
 }

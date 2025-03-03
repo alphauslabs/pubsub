@@ -1,83 +1,124 @@
 package storage
 
 import (
-	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
-	"cloud.google.com/go/spanner" //added spanner client
+	//added spanner client
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/golang/glog"
 )
+
+type Message struct {
+	*pb.Message
+	Locked     int32
+	AutoExtend int32
+	Deleted    int32
+	Age        time.Time
+	Mu         sync.Mutex
+}
+
+type MessageMap struct {
+	Messages map[string]*Message
+	mu       sync.RWMutex
+}
+
+// NewMessageMap creates a new message map
+func NewMessageMap() *MessageMap {
+	return &MessageMap{
+		Messages: make(map[string]*Message),
+	}
+}
+
+// Get retrieves a message by ID
+func (mm *MessageMap) Get(id string) (*Message, bool) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	msg, exists := mm.Messages[id]
+	return msg, exists
+}
+
+// Put adds or updates a message
+func (mm *MessageMap) Put(id string, msg *Message) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	mm.Messages[id] = msg
+}
+
+// Delete removes a message
+func (mm *MessageMap) Delete(id string) bool {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	_, exists := mm.Messages[id]
+	if exists {
+		delete(mm.Messages, id)
+	}
+	return exists
+}
+
+// GetAll returns a copy of all Messages
+func (mm *MessageMap) GetAll() []*Message {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	result := make([]*Message, 0, len(mm.Messages))
+	for _, msg := range mm.Messages {
+		result = append(result, msg)
+	}
+	return result
+}
+
+// Count returns the number of Messages
+func (mm *MessageMap) Count() int {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	return len(mm.Messages)
+}
+
+type Subscription struct {
+	*pb.Subscription
+}
 
 var (
-	mu            sync.RWMutex
-	messages      = make(map[string]*pb.Message)
-	topicSubs     = make(map[string][]string)
-	topicMessages = make(map[string]map[string]*pb.Message)
-	lastActivity  = time.Now()
-	spannerClient *spanner.Client //included spanner client
+	// Map for topic subscriptions
+	topicSubs   = make(map[string]map[string]*Subscription)
+	topicSubsMu sync.RWMutex
+
+	// Map for topic Messages
+	TopicMessages = make(map[string]*MessageMap)
+	topicMsgMu    sync.RWMutex
 )
 
-// func NewStorage() *Storage {
-// 	s := &Storage{
-// 		messages:      make(map[string]*pb.Message),
-// 		topicSubs:     make(map[string][]string),
-// 		topicMessages: make(map[string]map[string]*pb.Message),
-// 		lastActivity:  time.Now(),
-// 	}
-
-// 	go s.monitorActivity()
-
-// 	return s
-// }
-
-func StoreMessage(msg *pb.Message) error {
+func StoreMessage(msg *Message) error {
 	if msg == nil || msg.Id == "" {
-		log.Println("[ERROR]: Received invalid message")
+		glog.Info("[ERROR]: Received invalid message")
 		return ErrInvalidMessage
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	// Lock the topic Messages map for writing
+	topicMsgMu.Lock()
+	defer topicMsgMu.Unlock()
 
-	messages[msg.Id] = msg
-
-	if _, exists := topicMessages[msg.Topic]; !exists {
-		topicMessages[msg.Topic] = make(map[string]*pb.Message)
+	if _, exists := TopicMessages[msg.Topic]; !exists {
+		TopicMessages[msg.Topic] = NewMessageMap()
 	}
-	topicMessages[msg.Topic][msg.Id] = msg
+	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
-	lastActivity = time.Now()
-	log.Printf("[STORAGE]: Stored messages:ID = %s, Topic = %s", msg.Id, msg.Topic)
-
+	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
 	return nil
 }
 
-func StoreTopicSubscriptions(data []byte) error {
-	if len(data) == 0 {
-		log.Println("[ERROR]: Received empty topic-subscription data")
-		return ErrInvalidTopicSub
-	}
+func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
+	// Lock internal subscription data
+	topicSubsMu.Lock()
+	defer topicSubsMu.Unlock()
 
-	var recv map[string][]string
-	if err := json.Unmarshal(data, &recv); err != nil {
-		return err
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	topicSubs = recv // always replace
-
-	lastActivity = time.Now()
-
-	topicCount := len(topicSubs)
-	totalSubs := 0
-	for _, subs := range topicSubs {
-		totalSubs += len(subs)
-	}
-	log.Printf("[STORAGE]: Stored topic-subscription data: %d topics, %d total subscriptions", topicCount, totalSubs)
+	topicSubs = d // replaces everytime
+	glog.Infof("[STORAGE] Stored topic-subscription data with len %d", len(topicSubs))
 
 	return nil
 }
@@ -87,90 +128,104 @@ func MonitorActivity() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		mu.RLock()
-		elapsed := time.Since(lastActivity)
-		msgCount := len(messages)
-		topicCount := len(topicSubs)
+		var topicMsgCounts = make(map[string]int)
+		var topicSubDetails = make(map[string]int)
 
-		topicMsgCounts := make(map[string]int)
-		for topic, msgs := range topicMessages {
-			topicMsgCounts[topic] = len(msgs)
+		topicMsgMu.RLock()
+		for topic, msgs := range TopicMessages {
+			topicMsgCounts[topic] = msgs.Count()
 		}
+		topicMsgMu.RUnlock()
 
-		topicSubDetails := make(map[string]int)
+		topicSubsMu.RLock()
 		for topic, subs := range topicSubs {
 			topicSubDetails[topic] = len(subs)
 		}
+		topicSubsMu.RUnlock()
 
-		mu.RUnlock()
-
-		log.Printf("[STORAGE] Status: %d messages, %d topics, last activity: %v ago", msgCount, topicCount, elapsed.Round(time.Second))
-		log.Printf("[STORAGE] Topic-Subscription Structure:")
 		if len(topicSubDetails) == 0 {
-			log.Println("[STORAGE]    No topic-subscription data available")
+			glog.Info("[Storage monitor] No topic-subscription data available")
 		} else {
 			for topic, subCount := range topicSubDetails {
-				log.Printf("[STORAGE]    Topic: %s - Subscriptions: %d", topic, subCount)
+				glog.Infof("[Storage monitor] Topic: %s - Subscriptions: %d", topic, subCount)
 			}
 		}
 
-		log.Println("[STORAGE] Message Distribution:")
 		if len(topicMsgCounts) == 0 {
-			log.Println("[STORAGE]    No messages available")
+			glog.Info("[Storage monitor] No Messages available")
 		} else {
 			for topic, count := range topicMsgCounts {
-				log.Printf("[STORAGE]    Topic: %s - Messages: %d", topic, count)
+				glog.Infof("[Storage monitor] Topic: %s - Messages: %d", topic, count)
 			}
 		}
+	}
+}
 
-		if elapsed > 10*time.Minute {
-			log.Printf("[STORAGE] No activity detected in the last %v", elapsed.Round(time.Second))
+func GetMessage(id string) (*Message, error) {
+	topicMsgMu.RLock()
+	defer topicMsgMu.RUnlock()
+
+	// Since we don't know which topic this message belongs to,
+	// we need to search all topics
+	for _, msgs := range TopicMessages {
+		if msg, exists := msgs.Get(id); exists {
+			return msg, nil
 		}
 	}
+
+	return nil, ErrMessageNotFound
 }
 
-func GetMessage(id string) (*pb.Message, error) {
-	mu.RLock()
-	defer mu.RUnlock()
+func GetMessagesByTopic(topicID string) ([]*Message, error) {
+	topicMsgMu.RLock()
+	defer topicMsgMu.RUnlock()
 
-	msg, exists := messages[id]
-	if !exists {
-		return nil, ErrMessageNotFound
-	}
-	return msg, nil
-}
-
-func GetMessagesByTopic(topicID string) ([]*pb.Message, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	topicMsgs, exists := topicMessages[topicID]
+	topicMsgs, exists := TopicMessages[topicID]
 	if !exists {
 		return nil, nil
 	}
 
-	messages := make([]*pb.Message, 0, len(topicMsgs))
-	for _, msg := range topicMsgs {
-		messages = append(messages, msg)
-	}
-	return messages, nil
+	return topicMsgs.GetAll(), nil
 }
 
-func GetSubscribtionsForTopic(topicID string) ([]string, error) {
-	mu.RLock()
-	defer mu.RUnlock()
+func GetSubscribtionsForTopic(topicID string) ([]*Subscription, error) {
+	topicSubsMu.RLock()
+	defer topicSubsMu.RUnlock()
 
 	subs, exists := topicSubs[topicID]
 	if !exists {
 		return nil, ErrTopicNotFound
 	}
+	// Convert map to slice
+	subList := make([]*Subscription, 0, len(subs))
+	for _, sub := range subs {
+		subList = append(subList, sub)
+	}
 
-	return subs, nil
+	return subList, nil
 }
 
-// NEW METHOD TO REMOVE MESSAGES IN QUEUE AFTER ACKNOWLEDGE
-func RemoveMessage(id string) {
-	mu.Lock()
-	defer mu.Unlock()
-	delete(messages, id)
+// RemoveMessage removes a message from storage
+func RemoveMessage(id string, topicID string) error {
+	topicMsgMu.Lock()
+	defer topicMsgMu.Unlock()
+
+	// If topicID is provided, we can directly check that topic
+	if topicID != "" {
+		if topicMsgs, exists := TopicMessages[topicID]; exists {
+			if topicMsgs.Delete(id) {
+				return nil
+			}
+		}
+		return ErrMessageNotFound
+	}
+
+	// If topicID is not provided, search all topics
+	for _, msgs := range TopicMessages {
+		if msgs.Delete(id) {
+			return nil
+		}
+	}
+
+	return ErrMessageNotFound
 }
