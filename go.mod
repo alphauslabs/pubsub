@@ -6,7 +6,7 @@ toolchain go1.24.0
 
 require (
 	cloud.google.com/go/spanner v1.75.0
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250226091851-35a0c5c2d445
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250303050003-4f32647d3a18
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/golang/glog v1.2.3
 	github.com/google/uuid v1.6.0

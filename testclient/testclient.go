@@ -55,7 +55,7 @@ func main() {
 		}
 		fmt.Printf("r.Topics: %v\n", r.Topics)
 	case "deletetopic":
-		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Id: topic})
+		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Delete failed: %v", err)
 		}
