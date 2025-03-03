@@ -15,6 +15,7 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
+	"github.com/google/uuid"
 
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -38,11 +39,12 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
-
+	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
+		[]string{"id", "name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
 		[]interface{}{
+			msgId,
 			in.Topic,
 			in.Payload,
 			spanner.CommitTimestamp,
@@ -60,7 +62,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	m := storage.Message{
 		Message: &pb.Message{
-			Id:      messageID,
+			Id:      msgId,
 			Topic:   in.Topic,
 			Payload: in.Payload,
 		},
@@ -79,8 +81,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
 		}
 	}
-	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
-	return &pb.PublishResponse{MessageId: messageID}, nil
+	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", msgId)
+	return &pb.PublishResponse{MessageId: msgId}, nil
 }
 
 // Subscribe to receive messages for a subscription
