@@ -16,38 +16,45 @@ import (
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
 	isFirst := true
-	ticker := time.NewTicker(5 * time.Second) // will adjust to lower value later
+	ticker := time.NewTicker(5 * time.Second) // check every 5 seconds
 	defer ticker.Stop()
 	var lastQueryTime time.Time
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if atomic.LoadInt32(&leader.IsLeader) != 1 {
+			if atomic.LoadInt32(&leader.IsLeader) != 1 { // Check if leader
 				continue
 			}
+
 			func() {
-				lastQueryTime = time.Now().UTC()
-				stmt := spanner.Statement{
-					SQL: `SELECT id, topic, payload 
-			  FROM Messages
-			  WHERE processed = FALSE and createdAt > @lastquerytime`,
-					Params: map[string]interface{}{"lastquerytime": lastQueryTime},
+				var stmt spanner.Statement
+
+				if isFirst { // 1st query, fetch all unprocessed
+					stmt = spanner.Statement{
+						SQL: `SELECT id, topic, payload 
+							  FROM Messages
+							  WHERE processed = FALSE`,
+					}
+					isFirst = false // fasle after 1st query
+				} else {
+					// next queries fetch new messages after lastQueryTime
+					stmt = spanner.Statement{
+						SQL: `SELECT id, topic, payload 
+							  FROM Messages
+							  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
+						Params: map[string]interface{}{"lastQueryTime": lastQueryTime},
+					}
 				}
 
-				if isFirst { // query all
-					stmt.SQL = `SELECT id, topic, payload 
-					FROM Messages
-					WHERE processed = FALSE`
-					stmt.Params = map[string]interface{}{}
-				}
-
-				isFirst = false
+				glog.Infof("[BroadcastMessage] Executing query: %s", stmt.SQL)
 
 				iter := spannerClient.Single().Query(ctx, stmt)
 				defer iter.Stop()
-				count := 0
+
+				count := 0 // counter for processed messages
 				for {
 					row, err := iter.Next()
 					if err == iterator.Done {
@@ -58,12 +65,14 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 						continue
 					}
 					count++
+
 					var msg pb.Message
 					if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
+						glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
 						continue
 					}
 
-					// Structure the message
+					// Structure
 					messageInfo := struct {
 						ID      string `json:"id"`
 						Topic   string `json:"topic"`
@@ -83,7 +92,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 
 					// Create broadcast input
 					broadcastInput := BroadCastInput{
-						Type: Message, // Using const from same package
+						Type: Message,
 						Msg:  data,
 					}
 
@@ -102,6 +111,12 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 						}
 					}
 				}
+
+				// Update lastQueryTime
+				if count > 0 {
+					lastQueryTime = time.Now().UTC()
+				}
+
 				if count == 0 {
 					glog.Info("[BroadcastMessage] No new unprocessed messages found.")
 				}

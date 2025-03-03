@@ -18,7 +18,7 @@ import (
 )
 
 // Checks if the topic subscription is correct, and exists in the memory
-func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscriptionID string) error {
+func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", topicID)
 	subs, err := storage.GetSubscribtionsForTopic(topicID)
 
@@ -32,16 +32,16 @@ func (s *server) checkIfTopicSubscriptionIsCorrect(topicID, subscriptionID strin
 	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
 	for _, sub := range subs {
-		if sub.Id == subscriptionID {
+		if sub.Name == subscription {
 			found = true
-			glog.Infof("[Subscribe] Subscription %s found in topic %s", subscriptionID, topicID)
+			glog.Infof("[Subscribe] Subscription %s found in topic %s", subscription, topicID)
 			break
 		}
 	}
 
 	if !found {
-		glog.Infof("[Subscribe] Subscription %s not found in topic %s", subscriptionID, topicID)
-		return status.Errorf(codes.NotFound, "Subscription %s not found", subscriptionID)
+		glog.Infof("[Subscribe] Subscription %s not found in topic %s", subscription, topicID)
+		return status.Errorf(codes.NotFound, "Subscription %s not found", subscription)
 	}
 
 	return nil

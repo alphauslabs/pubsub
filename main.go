@@ -24,6 +24,7 @@ import (
 	"github.com/alphauslabs/pubsub/sweep"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/timedoff"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -64,6 +65,11 @@ func main() {
 	app := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
+		LeaderActive: timedoff.New(60*time.Second, &timedoff.CallbackT{
+			Callback: func(i interface{}) {
+				glog.Errorf("Warning! No leader active after 1 minute")
+			},
+		}),
 	}
 
 	go storage.MonitorActivity()
@@ -74,6 +80,7 @@ func main() {
 		"locktable",
 		"pubsublock",
 		"logtable",
+		hedge.WithDuration(5000),
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
 			glog.Infof("Leader callback: %v", string(msg))
@@ -83,6 +90,9 @@ func main() {
 				log.Fatalf("failed to convert string to int: %v", err)
 			}
 			atomic.StoreInt32(&leader.IsLeader, int32(v))
+			if v == 1 {
+				app.LeaderActive.On()
+			}
 		}),
 		hedge.WithLeaderHandler( // if leader only, handles Send()
 			app,
@@ -97,12 +107,6 @@ func main() {
 
 	app.Op = op
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		if err := run(ctx, &server{PubSub: app}); err != nil {
-			log.Fatalf("failed to run: %v", err)
-		}
-	}()
-
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
 
@@ -119,6 +123,12 @@ func main() {
 			m = fmt.Sprintf("failed: %v, no leader after ", err)
 		default:
 			m = "leader active after "
+		}
+	}()
+
+	go func() {
+		if err := run(ctx, &server{PubSub: app}); err != nil {
+			log.Fatalf("failed to run: %v", err)
 		}
 	}()
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
