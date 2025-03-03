@@ -22,8 +22,9 @@ var (
 )
 
 func main() {
-	defer glog.Flush()
+	flag.Set("logtostderr", "true")
 	flag.Parse()
+	defer glog.Flush()
 	glog.Infof("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
 	if len(ins) != 4 {
