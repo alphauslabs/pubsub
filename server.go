@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync/atomic"
 	"time"
 
@@ -40,9 +39,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
-
-	autoExtend := GetSubscriptionAutoExtend(s.Client, in.TopicId)
-	messageID := uuid.New().String()
+	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
 		[]string{"id", "name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
@@ -54,7 +51,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			spanner.CommitTimestamp,
 			nil,   // Explicitly set visibilityTimeout as NULL
 			false, // Default to unprocessed
-			autoExtend,
 		},
 	)
 
@@ -213,38 +209,32 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 // ModifyVisibilityTimeout extends message lock timeout
 func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
-	// Load lock info
+	glog.Infof("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
+
 	lockInfo, ok := s.MessageLocks.Load(in.Id)
 	if !ok {
-		log.Printf("[ModifyVisibility] Error: Message lock not found for ID: %s", in.Id)
+		glog.Infof("[ModifyVisibility] Error: Message lock not found for ID: %s", in.Id)
 		return nil, status.Error(codes.NotFound, "message lock not found")
 	}
 
-	// Ensure type assertion is valid
-	info, valid := lockInfo.(handlers.MessageLockInfo)
-	if !valid {
-		log.Printf("[ModifyVisibility] Error: Invalid lock information structure for message %s", in.Id)
-		return nil, status.Error(codes.Internal, "invalid lock structure")
-	}
+	info := lockInfo.(handlers.MessageLockInfo)
+	glog.Infof("[ModifyVisibility] Current lock info - Locked: %v, Timeout: %v, NodeID: %s",
+		info.Locked, info.Timeout, info.NodeID)
 
-	log.Printf("[ModifyVisibility] Request to extend visibility timeout for message %s by subscriber %s to %d seconds. Lock owner: %s",
-		in.Id, info.SubscriberID, in.NewTimeout, info.NodeID)
-
-	// Validate that the message is actually locked
 	if !info.Locked {
-		log.Printf("[ModifyVisibility] Error: Message %s is not locked", in.Id)
+		glog.Infof("[ModifyVisibility] Error: Message %s is not locked", in.Id)
 		return nil, status.Error(codes.FailedPrecondition, "message not locked")
 	}
 
-	// Ensure only the lock owner can extend the timeout
+	// Check if this node owns the lock before extending
 	if info.NodeID != s.Op.HostPort() {
-		log.Printf("[ModifyVisibility] Error: Only lock owner can extend timeout. Current owner: %s, This node: %s",
+		glog.Infof("[ModifyVisibility] Error: Only lock owner can extend timeout. Current owner: %s, This node: %s",
 			info.NodeID, s.Op.HostPort())
 		return nil, status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
 	}
 
-	// Broadcast timeout extension to all nodes
-	log.Printf("[ModifyVisibility] Broadcasting timeout extension for message %s to %d seconds", in.Id, in.NewTimeout)
+	// Broadcast new timeout
+	glog.Infof("[ModifyVisibility] Broadcasting timeout extension for message %s", in.Id)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", in.Id, in.NewTimeout, s.Op.HostPort())),
@@ -252,36 +242,29 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 	bin, _ := json.Marshal(broadcastData)
 	s.Op.Broadcast(ctx, bin)
 
-	// Stop existing timer safely
+	// Update local timer
 	if timer, ok := s.MessageTimer.Load(in.Id); ok {
-		if !timer.(*time.Timer).Stop() {
-			select {
-			case <-timer.(*time.Timer).C:
-			default:
-			}
-		}
-		s.MessageTimer.Delete(in.Id) // Ensure old timer is removed
+		glog.Infof("[ModifyVisibility] Stopping existing timer for message %s", in.Id)
+		timer.(*time.Timer).Stop()
 	}
-
-	// Create and store a new timeout timer
-	newTimeout := time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
-	log.Printf("[ModifyVisibility] Updating lock timeout from %v to %v", info.Timeout, newTimeout)
-
-	info.Timeout = newTimeout
-	s.MessageLocks.Store(in.Id, info)
-
+	glog.Infof("[ModifyVisibility] Creating new timer for %d seconds", in.NewTimeout)
 	newTimer := time.NewTimer(time.Duration(in.NewTimeout) * time.Second)
 	s.MessageTimer.Store(in.Id, newTimer)
 
-	// Handle timeout expiration in a separate goroutine
+	// Update lock info
+	newTimeout := time.Now().Add(time.Duration(in.NewTimeout) * time.Second)
+	glog.Infof("[ModifyVisibility] Updating lock timeout from %v to %v", info.Timeout, newTimeout)
+	info.Timeout = newTimeout
+	s.MessageLocks.Store(in.Id, info)
+
 	go func() {
-		log.Printf("[ModifyVisibility] Starting timeout handler for message %s", in.Id)
+		glog.Infof("[ModifyVisibility] Starting timeout handler for message %s", in.Id)
 		<-newTimer.C
-		log.Printf("[ModifyVisibility] Timer expired for message %s, handling timeout", in.Id)
+		glog.Infof("[ModifyVisibility] Timer expired for message %s, handling timeout", in.Id)
 		s.handleMessageTimeout(in.Id)
 	}()
 
-	log.Printf("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
+	glog.Infof("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
 	return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
 }
 
@@ -538,4 +521,70 @@ func (s *server) notifyLeader(flag int) {
 	} else {
 		glog.Infof("Successfully notified leader with flag: %d", flag)
 	}
+}
+
+func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Topic == "" || req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
+	}
+
+	// Default autoextend to false
+	autoExtend := false
+	if req.Autoextend != nil {
+		autoExtend = *req.Autoextend
+	}
+
+	m := spanner.Insert(
+		SubsTable,
+		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
+		[]interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
+	)
+
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:       req.Name,
+		Topic:      req.Topic,
+		Autoextend: autoExtend,
+	}, nil
+}
+
+func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	stmt := spanner.Statement{
+		SQL: `SELECT name, topic, autoextend FROM Subscriptions WHERE name = @name`,
+		Params: map[string]interface{}{
+			"name": req.Name,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	row, err := iter.Next()
+	if err == iterator.Done {
+		return nil, status.Errorf(codes.NotFound, "Subscription not found: %s", req.Name)
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Query error: %v", err)
+	}
+
+	var name, topic string
+	var autoExtend bool
+
+	if err := row.Columns(&name, &topic, &autoExtend); err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to parse subscription data: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:       name,
+		Topic:      topic,
+		Autoextend: autoExtend,
+	}, nil
 }
