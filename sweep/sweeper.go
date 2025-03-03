@@ -1,6 +1,7 @@
 package sweep
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/golang/glog"
 )
 
-func RunCheckForExpired() {
+func RunCheckForExpired(ctx context.Context) {
 	glog.Info("[sweep] run check for expired messages started")
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
@@ -31,13 +32,15 @@ func RunCheckForExpired() {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			sweep()
 		}
 	}
 }
 
-func RunCheckForDeleted() {
+func RunCheckForDeleted(ctx context.Context) {
 	glog.Info("[sweep] run check for deleted messages started")
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
@@ -54,6 +57,8 @@ func RunCheckForDeleted() {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			sweep()
 		}
