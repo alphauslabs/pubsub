@@ -6,18 +6,13 @@ toolchain go1.24.0
 
 require (
 	cloud.google.com/go/spanner v1.75.0
-<<<<<<< HEAD
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250303050003-4f32647d3a18
-=======
 	github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652
->>>>>>> 04f6ad7710ea49b318cdbd249f48d9f5e89603c1
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/flowerinthenight/timedoff v1.0.2
 	github.com/golang/glog v1.2.3
 	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.219.0
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -92,4 +87,5 @@ require (
 	google.golang.org/genproto v0.0.0-20250127172529-29210b9bc287 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250127172529-29210b9bc287 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250219182151-9fdb1cabc7b2 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 )
