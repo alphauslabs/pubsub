@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -40,8 +41,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
-	b, _ := json.Marshal(in)
-
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
@@ -62,6 +61,15 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		glog.Infof("Error writing to Spanner: %v", err)
 		return nil, err
 	}
+
+	m := storage.Message{
+		Message: &pb.Message{
+			Id:      messageID,
+			Topic:   in.TopicId,
+			Payload: in.Payload,
+		},
+	}
+	b, _ := json.Marshal(&m)
 
 	// broadcast message
 	bcastin := handlers.BroadCastInput{
@@ -85,7 +93,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	// Validate if subscription exists for the given topic
 	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	err := s.validateSubscription(in.TopicId, in.SubscriptionId)
+	err := s.checkIfTopicSubscriptionIsCorrect(in.TopicId, in.SubscriptionId)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
@@ -121,32 +129,26 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Process each message
 			for _, message := range messages {
 				// Skip if message is already locked by another subscriber
-				if info, exists := s.MessageLocks.Load(message.Id); exists {
-					inf := info.(handlers.MessageLockInfo)
-					if inf.Locked {
-						glog.Infof("[Subscribe] Message %s is already locked, skipping...", message.Id)
-						continue
-					}
+				if atomic.LoadInt32(&message.Deleted) == 1 || atomic.LoadInt32(&message.Locked) == 1 {
+					glog.Infof("[Subscribe] Message %s is already locked or deleted, skipping...", message.Id)
+					continue
 				}
 
 				// Attempt to acquire distributed lock for the message
 				// Default visibility timeout of 30 seconds
-				if err := s.broadcastLock(stream.Context(), message.Id, in.SubscriptionId, 30*time.Second); err != nil {
+				if err := s.broadcastLock(stream.Context(), message.Id, in.TopicId); err != nil {
 					glog.Infof("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
 					continue // Skip if unable to acquire lock
 				}
 				glog.Infof("[Subscribe] Successfully acquired lock for message %s", message.Id)
 
 				// Stream message to subscriber
-				glog.Infof("[Subscribe] Sending message %s to subscriber %s", message.Id, in.SubscriptionId)
-				if err := stream.Send(message); err != nil {
+				if err := stream.Send(message.Message); err != nil {
 					// Release lock if sending fails
-					glog.Infof("[Subscribe] Error sending message %s to subscriber: %v", message.Id, err)
-					s.localUnlock(message.Id)
-					glog.Infof("[Subscribe] Lock released due to send error for message %s", message.Id)
-					return err // Return error to close stream
+					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.SubscriptionId, err)
+				} else {
+					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 				}
-				glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
 			}
 		}
 	}
@@ -155,31 +157,27 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 	glog.Infof("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
 	// Check if message lock exists and is still valid (within 1 minute)
-	lockInfo, ok := s.MessageLocks.Load(in.Id)
-	if !ok {
-		glog.Infof("[Acknowledge] Error: Message lock not found for ID: %s", in.Id)
-		return nil, status.Error(codes.NotFound, "message lock not found")
-	}
+	// lockInfo, ok := s.MessageLocks.Load(in.Id)
+	// if !ok {
+	// 	glog.Infof("[Acknowledge] Error: Message lock not found for ID: %s", in.Id)
+	// 	return nil, status.Error(codes.NotFound, "message lock not found")
+	// }
 
-	info := lockInfo.(handlers.MessageLockInfo)
-	glog.Infof("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
+	// info := lockInfo.(handlers.MessageLockInfo)
+	// glog.Infof("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
 
-	// Check if lock is valid and not timed out
-	if !info.Locked || time.Now().After(info.Timeout) {
-		return nil, status.Error(codes.FailedPrecondition, "message lock expired")
-	}
+	// // Check if lock is valid and not timed out
+	// if !info.Locked || time.Now().After(info.Timeout) {
+	// 	return nil, status.Error(codes.FailedPrecondition, "message lock expired")
+	// }
 
-	// Get message processed in time
+	// Check if message exists in storage
 	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
 		glog.Infof("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
-
-	// Mark as processed since subscriber acknowledged in time
-	glog.Infof("[Acknowledge] Marking message %s as processed", in.Id)
-	msg.Processed = true
 
 	// Update the processed status in Spanner
 	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
@@ -188,25 +186,24 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Log acknowledgment
 	glog.Infof("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
-
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
+	s.Op.Broadcast(ctx, bin) // broadcast to set deleted
 
 	// Clean up message (processed)
-	glog.Infof("[Acknowledge] Cleaning up message %s from local state", in.Id)
-	s.MessageLocks.Delete(in.Id)
-	if timer, ok := s.MessageTimer.Load(in.Id); ok {
-		glog.Infof("[Acknowledge] Stopping timer for message %s", in.Id)
-		timer.(*time.Timer).Stop()
-		s.MessageTimer.Delete(in.Id)
-	}
+	// glog.Infof("[Acknowledge] Cleaning up message %s from local state", in.Id)
+	// s.MessageLocks.Delete(in.Id)
+	// if timer, ok := s.MessageTimer.Load(in.Id); ok {
+	// 	glog.Infof("[Acknowledge] Stopping timer for message %s", in.Id)
+	// 	timer.(*time.Timer).Stop()
+	// 	s.MessageTimer.Delete(in.Id)
+	// }
 
-	// Remove the message from in-memory storage
-	storage.RemoveMessage(in.Id) // RemoveMessage method from Storage
+	// // Remove the message from in-memory storage
+	// storage.RemoveMessage(in.Id, "") // RemoveMessage method from Storage
 
 	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil

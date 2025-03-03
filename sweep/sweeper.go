@@ -4,41 +4,58 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
 )
 
-type message struct { // sample only
-	Payload    string
-	Time       time.Time
-	Topic      string
-	Locked     int32
-	AutoExtend int32
-}
-
-var m = make(map[string][]*message)
-
-func Run() {
+func RunCheckForExpired() {
+	glog.Info("[sweep] run check for expired messages started")
 	sweep := func() {
-		for _, v := range m {
-			for _, v1 := range v {
-				if atomic.LoadInt32(&v1.Locked) == 1 {
+		for _, v := range storage.TopicMessages {
+			for _, v1 := range v.Messages {
+				if atomic.LoadInt32(&v1.Deleted) == 0 && atomic.LoadInt32(&v1.Locked) == 1 {
+					v1.Mu.Lock()
 					switch {
-					case time.Since(v1.Time) > 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
+					case time.Since(v1.Age) >= 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
 						atomic.StoreInt32(&v1.Locked, 0) // release lock
-					case time.Since(v1.Time) > 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 1:
-						v1.Time = time.Now().UTC() // extend lock
+					case time.Since(v1.Age) >= 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 1:
+						v1.Age = time.Now().UTC() // extend lock
 					}
+					v1.Mu.Unlock()
 				}
 			}
 		}
 	}
+
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case t := <-ticker.C:
+		case <-ticker.C:
 			sweep()
-			glog.Infof("[sweep] time: %v", t.Second())
+		}
+	}
+}
+
+func RunCheckForDeleted() {
+	glog.Info("[sweep] run check for deleted messages started")
+	sweep := func() {
+		for _, v := range storage.TopicMessages {
+			for _, v1 := range v.Messages {
+				if atomic.LoadInt32(&v1.Deleted) == 1 {
+					delete(v.Messages, v1.Id)
+					glog.Info("[sweep] deleted message:", v1.Id)
+				}
+			}
+		}
+	}
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			sweep()
 		}
 	}
 }

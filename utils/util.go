@@ -38,7 +38,7 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"id", "processed"}, []interface{}{id, true}),
+		spanner.Update("Messages", []string{"id", "processed", "updatedAt"}, []interface{}{id, true, spanner.CommitTimestamp}),
 	})
 	if err != nil {
 		glog.Infof("[ERROR]: Failed to update message processed status in Spanner: %v", err)
