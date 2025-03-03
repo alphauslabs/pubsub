@@ -144,18 +144,18 @@ func MonitorActivity() {
 		topicSubsMu.RUnlock()
 
 		if len(topicSubDetails) == 0 {
-			glog.Info("[Storage monitor] No topic-subscription data available")
+			glog.Info("[Storage Monitor] No topic-subscription data available")
 		} else {
 			for topic, subCount := range topicSubDetails {
-				glog.Infof("[Storage monitor] Topic: %s - Subscriptions: %d", topic, subCount)
+				glog.Infof("[Storage Monitor] Topic: %s - Subscriptions: %d", topic, subCount)
 			}
 		}
 
 		if len(topicMsgCounts) == 0 {
-			glog.Info("[Storage monitor] No Messages available")
+			glog.Info("[Storage Monitor] No Messages available")
 		} else {
 			for topic, count := range topicMsgCounts {
-				glog.Infof("[Storage monitor] Topic: %s - Messages: %d", topic, count)
+				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
 			}
 		}
 	}
@@ -176,11 +176,11 @@ func GetMessage(id string) (*Message, error) {
 	return nil, ErrMessageNotFound
 }
 
-func GetMessagesByTopic(topicID string) ([]*Message, error) {
+func GetMessagesByTopic(topicName string) ([]*Message, error) {
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 
-	topicMsgs, exists := TopicMessages[topicID]
+	topicMsgs, exists := TopicMessages[topicName]
 	if !exists {
 		return nil, nil
 	}
@@ -188,11 +188,11 @@ func GetMessagesByTopic(topicID string) ([]*Message, error) {
 	return topicMsgs.GetAll(), nil
 }
 
-func GetSubscribtionsForTopic(topicID string) ([]*Subscription, error) {
+func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
 
-	subs, exists := topicSubs[topicID]
+	subs, exists := topicSubs[topicName]
 	if !exists {
 		return nil, ErrTopicNotFound
 	}
@@ -206,13 +206,13 @@ func GetSubscribtionsForTopic(topicID string) ([]*Subscription, error) {
 }
 
 // RemoveMessage removes a message from storage
-func RemoveMessage(id string, topicID string) error {
+func RemoveMessage(id string, topicName string) error {
 	topicMsgMu.Lock()
 	defer topicMsgMu.Unlock()
 
-	// If topicID is provided, we can directly check that topic
-	if topicID != "" {
-		if topicMsgs, exists := TopicMessages[topicID]; exists {
+	// If topicName is provided, we can directly check that topic
+	if topicName != "" {
+		if topicMsgs, exists := TopicMessages[topicName]; exists {
 			if topicMsgs.Delete(id) {
 				return nil
 			}
@@ -220,7 +220,7 @@ func RemoveMessage(id string, topicID string) error {
 		return ErrMessageNotFound
 	}
 
-	// If topicID is not provided, search all topics
+	// If topicName is not provided, search all topics
 	for _, msgs := range TopicMessages {
 		if msgs.Delete(id) {
 			return nil
