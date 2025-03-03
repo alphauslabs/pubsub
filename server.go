@@ -42,6 +42,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
+	autoExtend := GetSubscriptionAutoExtend(s.Client, in.TopicId)
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
@@ -54,6 +55,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			spanner.CommitTimestamp,
 			nil,   // Explicitly set visibilityTimeout as NULL
 			false, // Default to unprocessed
+			autoExtend,
 		},
 	)
 
