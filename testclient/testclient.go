@@ -130,6 +130,32 @@ func main() {
 		}
 		log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
 
+	case "createsubscription":
+		if topic == "" || sub == "" {
+			log.Fatalf("CreateSubscription requires topic and subscription ID")
+		}
+
+		autoExtend := false
+		if newtopicname != "" {
+			parsedAutoExtend, err := strconv.ParseBool(newtopicname)
+			if err != nil {
+				log.Fatalf("Invalid autoextend value (must be true or false): %v", err)
+			}
+			autoExtend = parsedAutoExtend
+		}
+
+		r, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
+			TopicId:           topic,
+			VisibilityTimeout: 30,
+			Id:                sub,
+			AutoExtend:        &autoExtend,
+		})
+		if err != nil {
+			log.Fatalf("Create Subscription Failed: %v", err)
+		}
+
+		glog.Infof("Subscription Created!\nID: %s\nTopic ID: %s\nAutoExtend: %v", r.Id, r.TopicId, autoExtend)
+
 	default:
 		fmt.Println("Invalid method, try again...")
 	}
