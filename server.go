@@ -463,32 +463,34 @@ func (s *server) notifyLeader(flag int) {
 }
 
 func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
-	if req.Topic == "" || req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
-	}
+    if req.Topic == "" || req.Name == "" {
+        return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
+    }
 
-	// Default autoextend to false
-	autoExtend := false
-	if req.Autoextend != nil {
-		autoExtend = *req.Autoextend
-	}
+    // Default autoextend to false if not provided
+    autoExtend := false
+    if req.Autoextend != nil {
+        autoExtend = *req.Autoextend
+    }
 
-	m := spanner.Insert(
-		SubsTable,
-		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
-		[]interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
-	)
+    m := spanner.Insert(
+        SubsTable,
+        []string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
+        []interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
+    )
 
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
-	}
+    _, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+    if err != nil {
+        return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
+    }
 
-	return &pb.Subscription{
-		Name:       req.Name,
-		Topic:      req.Topic,
-		Autoextend: autoExtend,
-	}, nil
+    glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
+
+    return &pb.Subscription{
+        Name:       req.Name,
+        Topic:      req.Topic,
+        Autoextend: autoExtend,
+    }, nil
 }
 
 func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.Subscription, error) {
