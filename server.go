@@ -16,7 +16,6 @@ import (
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
 
-	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -40,12 +39,10 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
-	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
 		[]string{"name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
 		[]interface{}{
-			messageID,
 			in.Topic,
 			in.Payload,
 			spanner.CommitTimestamp,
