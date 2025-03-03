@@ -110,6 +110,54 @@ func main() {
 			glog.Infof("Acknowledge Response: %v\n", ackres)
 		}
 
+	case "createsubscription":
+		r, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
+			Topic:             topic,
+			VisibilityTimeout: 30,
+			Name:              sub,
+//			Autoextend:        true,
+		})
+		if err != nil {
+			log.Fatalf("CreateSubscription failed: %v", err)
+		}
+		glog.Infof("Subscription Created!\nID: %s\nName: %s\n", r.Name, r.Topic)
+
+	case "getsubscription":
+		r, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("GetSubscription failed: %v", err)
+		}
+		glog.Infof("Subscription Found!\nID: %s\nName: %s\n", r.Name, r.Topic)
+
+	case "updatesubscription":
+		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
+			Name:                    sub,
+			ModifyVisibilityTimeout: 60,
+//			Autoextend:              true,
+		})
+		if err != nil {
+			log.Fatalf("UpdateSubscription failed: %v", err)
+		}
+		glog.Infof("Subscription Updated!\nID: %s\n", sub)
+
+	case "deletesubscription":
+		r, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("DeleteSubscription failed: %v", err)
+		}
+		if r.Success {
+			glog.Infof("Subscription ID: %s deleted successfully", sub)
+		} else {
+			glog.Infof("Subscription ID: %s not found", sub)
+		}
+
+	case "listsubscriptions":
+		r, err := c.ListSubscriptions(context.Background(), &pb.Empty{})
+		if err != nil {
+			log.Fatalf("ListSubscriptions failed: %v", err)
+		}
+		fmt.Printf("r.Subscriptions: %v\n", r.Subscriptions)
+
 	default:
 		fmt.Println("Invalid method, try again...")
 	}
