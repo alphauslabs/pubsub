@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -18,7 +19,7 @@ import (
 var (
 	method = flag.String("method", "", "gRPC method to call")
 	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}|{newtopicname} , Please leave empty if not needed, don't remove | separator")
+	input  = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
 )
 
 func main() {
@@ -27,10 +28,10 @@ func main() {
 	defer glog.Flush()
 	glog.Infof("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
-	if len(ins) != 4 {
+	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
+	topic, sub, payload, newtopicname, extendVisibility := ins[0], ins[1], ins[2], ins[3], ins[4]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -109,6 +110,67 @@ func main() {
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
 		}
+
+	case "extendvisibility":
+	    if payload == "" {
+	        log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
+	    }
+	
+	    // Convert the extendVisibility input (new timeout) to an integer
+	    newTimeout, err := strconv.Atoi(newtopicname) // Assuming newtopicname holds the timeout value
+	    if err != nil {
+	        log.Fatalf("Invalid timeout value: %v", err)
+	    }
+	
+	    // Ensure the subscription ID is provided
+	    if sub == "" {
+	        log.Fatalf("ExtendVisibilityTimeout requires a valid subscription ID.")
+	    }
+	
+	    // Call ModifyVisibilityTimeout with the correct parameters
+	    r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+	        Id:              payload,           
+	        NewTimeout:      int32(newTimeout), 
+	        SubscriptionId:  sub,               
+	    })
+	    if err != nil {
+	        log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
+	    }
+	
+	    log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
+
+
+	case "createsubscription":
+		if topic == "" || sub == "" {
+			log.Fatalf("CreateSubscription requires topic and subscription name")
+		}
+
+		autoExtend := false
+		if newtopicname != "" {
+			parsedAutoExtend, err := strconv.ParseBool(newtopicname)
+			if err != nil {
+				log.Fatalf("Invalid autoextend value (must be true or false): %v", err)
+			}
+			autoExtend = parsedAutoExtend
+		}
+
+		r, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
+			Topic:      topic,
+			Name:       sub,
+			Autoextend: &autoExtend,
+		})
+		if err != nil {
+			log.Fatalf("Create Subscription Failed: %v", err)
+		}
+
+		glog.Infof("Subscription Created! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
+
+	case "getsubscription":
+		r, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("Get Subscription Failed: %v", err)
+		}
+		glog.Infof("Subscription Found! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
 
 	default:
 		fmt.Println("Invalid method, try again...")
