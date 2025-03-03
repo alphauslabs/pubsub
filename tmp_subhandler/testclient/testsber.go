@@ -26,7 +26,7 @@ package main
 // 		log.Fatalf("Failed to subscribe: %v", err)
 // 	}
 
-// 	log.Printf("Subscribed to subscription ID: %s", subscriptionID)
+// 	glog.Infof("Subscribed to subscription ID: %s", subscriptionID)
 
 // 	// Start the timer
 // 	startTime := time.Now()
@@ -42,6 +42,6 @@ package main
 // 		elapsedTime := time.Since(startTime)
 
 // 		// Print the received message along with the elapsed time on the same line
-// 		log.Printf("Received message: %s [Connection Time: %v]", msg.Payload, elapsedTime)
+// 		glog.Infof("Received message: %s [Connection Time: %v]", msg.Payload, elapsedTime)
 // 	}
 // }

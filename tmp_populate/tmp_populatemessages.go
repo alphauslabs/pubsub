@@ -26,7 +26,7 @@ package common
 // 	}
 // 	defer client.Close()
 
-// 	log.Println("Connected to Spanner successfully.")
+// 	glog.Info("Connected to Spanner successfully.")
 
 // 	// Start data insertion
 // 	insertData(ctx, client)
@@ -79,7 +79,7 @@ package common
 // 		}
 // 	}
 
-// 	log.Printf("Prepared %d mutations for insertion.", len(mutations))
+// 	glog.Infof("Prepared %d mutations for insertion.", len(mutations))
 
 // 	// Apply mutations
 // 	_, err := client.Apply(ctx, mutations)
@@ -87,13 +87,13 @@ package common
 // 		log.Fatalf("Failed to insert data: %v", err)
 // 	}
 
-// 	log.Println("Sample data inserted successfully into Messages table.")
+// 	glog.Info("Sample data inserted successfully into Messages table.")
 
 // 	// Print summary of messages per topic
 // 	for topic, total := range topicCounter {
 // 		processed := processedCounter[topic]
 // 		unprocessed := total - processed
-// 		log.Printf("%s: %d total messages (%d unprocessed, %d processed)",
+// 		glog.Infof("%s: %d total messages (%d unprocessed, %d processed)",
 // 			topic, total, unprocessed, processed)
 // 	}
 // }

@@ -85,7 +85,7 @@ func main() {
 	flag.Parse()
 
 	if *isLeader {
-		log.Println("Running as [LEADER].")
+		glog.Info("Running as [LEADER].")
 		go startPublisherListener()
 		go startLeaderHTTPServer()
 		for i := 0; i < *numWorkers; i++ {
@@ -93,7 +93,7 @@ func main() {
 			go runBulkWriterAsLeader(i)
 		}
 	} else {
-		log.Println("Running as [FOLLOWER].")
+		glog.Info("Running as [FOLLOWER].")
 		go startPublisherListener()
 		go runBulkWriterAsFollower()
 	}
@@ -102,7 +102,7 @@ func main() {
 }
 
 func startPublisherListener() {
-	log.Println("[LEADER] Listening for publisher messages...")
+	glog.Info("[LEADER] Listening for publisher messages...")
 }
 
 func startLeaderHTTPServer() {
@@ -125,7 +125,7 @@ func startLeaderHTTPServer() {
 		w.Write([]byte("[LEADER] Message received successfully"))
 	})
 
-	log.Println("[LEADER] now listening for forwarded messages from followers on :8080...")
+	glog.Info("[LEADER] now listening for forwarded messages from followers on :8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -155,9 +155,9 @@ func runBulkWriterAsLeader(workerID int) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
-						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
+						glog.Infof("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
+						glog.Infof("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
@@ -171,9 +171,9 @@ func runBulkWriterAsLeader(workerID int) {
 					defer func() { <-workerPool }() // Release worker
 					err := WriteBatchUsingDML(log.Writer(), client, batch)
 					if err != nil {
-						log.Printf("[LEADER] Error writing batch to Spanner: %v\n", err)
+						glog.Infof("[LEADER] Error writing batch to Spanner: %v\n", err)
 					} else {
-						log.Printf("Successfully wrote batch of %d messages\n", len(batch))
+						glog.Infof("Successfully wrote batch of %d messages\n", len(batch))
 					}
 				}(batch)
 				batch = nil
@@ -184,7 +184,7 @@ func runBulkWriterAsLeader(workerID int) {
 	// Calculate and log the average batch size
 	if stats.totalBatches > 0 {
 		stats.averageBatchSize = float64(stats.totalMessages) / float64(stats.totalBatches)
-		log.Printf("Average batch size: %.2f\n", stats.averageBatchSize)
+		glog.Infof("Average batch size: %.2f\n", stats.averageBatchSize)
 	}
 }
 
@@ -202,18 +202,18 @@ func runBulkWriterAsFollower() {
 			return
 		}
 
-		log.Printf("[FOLLOWER] Follower received message: %v\n", message)
+		glog.Infof("[FOLLOWER] Follower received message: %v\n", message)
 
 		jsonData, err := json.Marshal(message)
 		if err != nil {
-			log.Printf("[FOLLOWER] Error marshalling message: %v\n", err)
+			glog.Infof("[FOLLOWER] Error marshalling message: %v\n", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		resp, err := http.Post(*leaderURL+"/write", "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			log.Printf("[FOLLOWER] Error forwarding message to leader: %v\n", err)
+			glog.Infof("[FOLLOWER] Error forwarding message to leader: %v\n", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -221,15 +221,15 @@ func runBulkWriterAsFollower() {
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("[FOLLOWER] Error reading response from leader: %v\n", err)
+			glog.Infof("[FOLLOWER] Error reading response from leader: %v\n", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("[FOLLOWER] Leader response: %s\n", string(body))
+		glog.Infof("[FOLLOWER] Leader response: %s\n", string(body))
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("[FOLLOWER] Message forwarded to leader successfully"))
 	})
 
-	log.Println("[FOLLOWER] Follower is now listening for messages from the consumer...")
+	glog.Info("[FOLLOWER] Follower is now listening for messages from the consumer...")
 	log.Fatal(http.ListenAndServe(":8080", nil)) // Use a different port for the follower
 }

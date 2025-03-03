@@ -18,7 +18,7 @@ package main
 // 	if err != nil {
 // 		log.Fatalf("Failed to create topic: %v", err)
 // 	}
-// 	log.Printf("Created topic: %+v", topic)
+// 	glog.Infof("Created topic: %+v", topic)
 
 // 	// Get the created topic.
 // 	fetched, err := client.GetTopic(ctx, &pb.GetTopicRequest{
@@ -27,7 +27,7 @@ package main
 // 	if err != nil {
 // 		log.Fatalf("Failed to get topic: %v", err)
 // 	}
-// 	log.Printf("Fetched topic: %+v", fetched)
+// 	glog.Infof("Fetched topic: %+v", fetched)
 
 // 	// Update the topic.
 // 	updated, err := client.UpdateTopic(ctx, &pb.UpdateTopicRequest{
@@ -37,14 +37,14 @@ package main
 // 	if err != nil {
 // 		log.Fatalf("Failed to update topic: %v", err)
 // 	}
-// 	log.Printf("Updated topic: %+v", updated)
+// 	glog.Infof("Updated topic: %+v", updated)
 
 // 	// List topics.
 // 	listResp, err := client.ListTopics(ctx, &pb.ListTopicsRequest{})
 // 	if err != nil {
 // 		log.Fatalf("Failed to list topics: %v", err)
 // 	}
-// 	log.Printf("Listed topics: %+v", listResp.Topics)
+// 	glog.Infof("Listed topics: %+v", listResp.Topics)
 
 // 	// Delete the topic.
 // 	_, err = client.DeleteTopic(ctx, &pb.DeleteTopicRequest{
@@ -53,5 +53,5 @@ package main
 // 	if err != nil {
 // 		log.Fatalf("Failed to delete topic: %v", err)
 // 	}
-// 	log.Println("Deleted topic successfully")
+// 	glog.Info("Deleted topic successfully")
 // }

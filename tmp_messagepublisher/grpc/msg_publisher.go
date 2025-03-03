@@ -48,11 +48,11 @@ package main
 
 // 	resp, err := client.Publish(ctx, msg)
 // 	if err != nil {
-// 		log.Printf("[ERROR] Message %d to %s failed: %v", id, topicID, err)
+// 		glog.Infof("[ERROR] Message %d to %s failed: %v", id, topicID, err)
 // 		return
 // 	}
 
-// 	log.Printf("[SUCCESS] Message %d published to %s. Message ID: %s", id, topicID, resp.MessageId)
+// 	glog.Infof("[SUCCESS] Message %d published to %s. Message ID: %s", id, topicID, resp.MessageId)
 // }
 
 // // Connects to a gRPC server and returns a client
@@ -70,13 +70,13 @@ package main
 // 	// Determine active endpoints
 // 	if *useMock {
 // 		activeEndpoints = mockEndpoints
-// 		log.Println("Using mock gRPC servers (localhost:8080, localhost:8081, localhost:8082)")
+// 		glog.Info("Using mock gRPC servers (localhost:8080, localhost:8081, localhost:8082)")
 // 	} else if *useBulkWrite {
 // 		activeEndpoints = bulkWriteEndpoints
-// 		log.Println("Using bulk write GCP gRPC endpoints (ports 8080)")
+// 		glog.Info("Using bulk write GCP gRPC endpoints (ports 8080)")
 // 	} else {
 // 		activeEndpoints = directWriteEndpoints
-// 		log.Println("Using direct write GCP gRPC endpoints (ports 8085)")
+// 		glog.Info("Using direct write GCP gRPC endpoints (ports 8085)")
 // 	}
 
 // 	for _, endpoint := range activeEndpoints {
@@ -100,8 +100,8 @@ package main
 // 	wg.Wait()
 // 	duration := time.Since(startTime)
 
-// 	log.Printf("All messages published.")
-// 	log.Printf("Total Messages: %d", *numMessages)
-// 	log.Printf("Total Time: %.2f seconds", duration.Seconds())
-// 	log.Printf("Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
+// 	glog.Infof("All messages published.")
+// 	glog.Infof("Total Messages: %d", *numMessages)
+// 	glog.Infof("Total Time: %.2f seconds", duration.Seconds())
+// 	glog.Infof("Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
 // }
