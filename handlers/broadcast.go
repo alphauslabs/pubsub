@@ -151,7 +151,9 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 
 	atomic.StoreInt32(&msg.Locked, 1) // Lock the message
 	// Todo: check if actually updated...
-
+	msg.Mu.Lock()
+	msg.Age = time.Now().UTC()
+	msg.Mu.Unlock()
 	// Each node maintains its own timer
 	// Create new lock
 	// lockInfo := MessageLockInfo{

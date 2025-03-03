@@ -15,6 +15,7 @@ type Message struct {
 	AutoExtend int32
 	Deleted    int32
 	Age        time.Time
+	Mu         sync.Mutex
 }
 
 type MessageMap struct {
