@@ -209,35 +209,34 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 // ModifyVisibilityTimeout extends message lock timeout
 func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
-    glog.Infof("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
+	glog.Infof("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
 
-    // Fetch subscription to check AutoExtend status
-    sub, err := s.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: in.SubscriptionId})
-    if err != nil {
-        glog.Infof("[ModifyVisibility] Failed to retrieve subscription %s: %v", in.SubscriptionId, err)
-        return nil, status.Errorf(codes.NotFound, "subscription not found")
-    }
+	// Fetch subscription to check AutoExtend status
+	sub, err := s.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: in.SubscriptionId})
+	if err != nil {
+		glog.Infof("[ModifyVisibility] Failed to retrieve subscription %s: %v", in.SubscriptionId, err)
+		return nil, status.Errorf(codes.NotFound, "subscription not found")
+	}
 
-    // Log AutoExtend status
-    glog.Infof("[ModifyVisibility] Subscription %s AutoExtend: %v", sub.Name, sub.Autoextend)
+	// Log AutoExtend status
+	glog.Infof("[ModifyVisibility] Subscription %s AutoExtend: %v", sub.Name, sub.Autoextend)
 
-    // If AutoExtend is enabled, deny manual extension
-    if sub.Autoextend {
-        glog.Infof("[ModifyVisibility] Autoextend is enabled, ignoring manual visibility timeout extension.")
-        return nil, status.Errorf(codes.FailedPrecondition, "autoextend is enabled, manual extension not allowed")
-    }
+	// If AutoExtend is enabled, deny manual extension
+	if sub.Autoextend {
+		glog.Infof("[ModifyVisibility] Autoextend is enabled, ignoring manual visibility timeout extension.")
+		return nil, status.Errorf(codes.FailedPrecondition, "autoextend is enabled, manual extension not allowed")
+	}
 
-    // Proceed with manual timeout extension
-    err = s.ExtendVisibilityTimeout(in.Id, in.SubscriptionId, time.Duration(in.NewTimeout)*time.Second)
-    if err != nil {
-        glog.Infof("[ModifyVisibility] Failed to extend timeout for message %s: %v", in.Id, err)
-        return nil, err
-    }
+	// Proceed with manual timeout extension
+	err = s.ExtendVisibilityTimeout(in.Id, in.SubscriptionId, time.Duration(in.NewTimeout)*time.Second)
+	if err != nil {
+		glog.Infof("[ModifyVisibility] Failed to extend timeout for message %s: %v", in.Id, err)
+		return nil, err
+	}
 
-    glog.Infof("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
-    return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
+	glog.Infof("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
+	return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
 }
-
 
 func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
@@ -463,34 +462,34 @@ func (s *server) notifyLeader(flag int) {
 }
 
 func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
-    if req.Topic == "" || req.Name == "" {
-        return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
-    }
+	if req.Topic == "" || req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
+	}
 
-    // Default autoextend to false if not provided
-    autoExtend := false
-    if req.Autoextend != nil {
-        autoExtend = *req.Autoextend
-    }
+	// Default autoextend to false if not provided
+	autoExtend := false
+	if req.Autoextend != nil {
+		autoExtend = *req.Autoextend
+	}
 
-    m := spanner.Insert(
-        SubsTable,
-        []string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
-        []interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
-    )
+	m := spanner.Insert(
+		SubsTable,
+		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
+		[]interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
+	)
 
-    _, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
-    if err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
-    }
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
+	}
 
-    glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
+	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
-    return &pb.Subscription{
-        Name:       req.Name,
-        Topic:      req.Topic,
-        Autoextend: autoExtend,
-    }, nil
+	return &pb.Subscription{
+		Name:       req.Name,
+		Topic:      req.Topic,
+		Autoextend: autoExtend,
+	}, nil
 }
 
 func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.Subscription, error) {
@@ -527,5 +526,100 @@ func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionReq
 		Name:       name,
 		Topic:      topic,
 		Autoextend: autoExtend,
+	}, nil
+}
+
+func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	// First get the existing subscription to preserve the topic
+	existingSub, err := s.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: req.Name})
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the subscription
+	m := spanner.Update(
+		SubsTable,
+		[]string{"name", "visibility_timeout", "autoextend", "updatedAt"},
+		[]interface{}{
+			req.Name,
+			req.ModifyVisibilityTimeout,
+			req.Autoextend,
+			spanner.CommitTimestamp,
+		},
+	)
+
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:              req.Name,
+		Topic:             existingSub.Topic,
+		VisibilityTimeout: req.ModifyVisibilityTimeout,
+		Autoextend:        req.GetAutoextend(),
+	}, nil
+}
+
+func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscriptionRequest) (*pb.DeleteSubscriptionResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	m := spanner.Delete(SubsTable, spanner.Key{req.Name})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
+	}
+
+	return &pb.DeleteSubscriptionResponse{
+		Success:   true,
+		DeletedAt: time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSubscriptionsResponse, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM Subscriptions`,
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var subscriptions []*pb.Subscription
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to iterate subscriptions: %v", err)
+		}
+
+		var (
+			name              string
+			topic             string
+			visibilityTimeout int32
+			autoextend        bool
+		)
+
+		if err := row.Columns(&name, &topic, &visibilityTimeout, &autoextend); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to parse subscription data: %v", err)
+		}
+
+		subscriptions = append(subscriptions, &pb.Subscription{
+			Name:              name,
+			Topic:             topic,
+			VisibilityTimeout: visibilityTimeout,
+			Autoextend:        autoextend,
+		})
+	}
+
+	return &pb.ListSubscriptionsResponse{
+		Subscriptions: subscriptions,
 	}, nil
 }
