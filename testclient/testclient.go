@@ -112,7 +112,6 @@ func main() {
 		}
 
 	case "extendvisibility":
-		//make sure to receive a valid input for extending visibility timeout
 		if payload == "" {
 			log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
 		}
@@ -132,7 +131,7 @@ func main() {
 
 	case "createsubscription":
 		if topic == "" || sub == "" {
-			log.Fatalf("CreateSubscription requires topic and subscription ID")
+			log.Fatalf("CreateSubscription requires topic and subscription name")
 		}
 
 		autoExtend := false
@@ -145,16 +144,22 @@ func main() {
 		}
 
 		r, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
-			TopicId:           topic,
-			VisibilityTimeout: 30,
-			Id:                sub,
-			AutoExtend:        &autoExtend,
+			Topic:      topic,
+			Name:       sub,
+			Autoextend: &autoExtend,
 		})
 		if err != nil {
 			log.Fatalf("Create Subscription Failed: %v", err)
 		}
 
-		glog.Infof("Subscription Created!\nID: %s\nTopic ID: %s\nAutoExtend: %v", r.Id, r.TopicId, autoExtend)
+		glog.Infof("Subscription Created! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
+
+	case "getsubscription":
+		r, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("Get Subscription Failed: %v", err)
+		}
+		glog.Infof("Subscription Found! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
 
 	default:
 		fmt.Println("Invalid method, try again...")
