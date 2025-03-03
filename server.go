@@ -290,7 +290,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 
 	// -----for testing only-----------//
 	go func() {
-		s.notifyLeader(1) // Send flag=1 to indicate an update
+		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 	}()
 
 	return topic, nil
@@ -334,29 +334,18 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 
 func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
 	if req.NewName == "" {
 		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
 	}
 
-	// Check if the new name already exists
-	exist, err := s.topicExists(ctx, req.NewName)
-	if exist {
-		return nil, status.Errorf(codes.AlreadyExists, "topic name %q already exists, err: %v", req.NewName, err)
-	}
-
-	// Fetch the current topic to get its old name
-	// current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
-	// if err != nil {
-	// 	return nil, err
-	// }
 	// todo: delete the old then insert new
 	mutTopic := spanner.Update(TopicsTable,
 		[]string{"name", "updatedAt"},
 		[]interface{}{req.NewName, spanner.CommitTimestamp},
 	)
-	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
 	}
@@ -387,7 +376,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		Name: req.NewName,
 	}
 	go func() {
-		s.notifyLeader(1) // Send flag=1 to indicate an update
+		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 	}()
 
 	return updatedTopic, nil
@@ -426,7 +415,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 	go func() {
-		s.notifyLeader(1) // Send flag=1 to indicate an update
+		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 	}()
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
@@ -463,26 +452,6 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 	}
 
 	return &pb.ListTopicsResponse{Topics: topics}, nil
-}
-
-// Helper functions
-func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
-	stmt := spanner.Statement{
-		SQL:    "SELECT 1 FROM Topics WHERE name = @name LIMIT 1",
-		Params: map[string]interface{}{"name": name},
-	}
-
-	iter := s.Client.Single().Query(ctx, stmt)
-	defer iter.Stop()
-
-	_, err := iter.Next()
-	if err == iterator.Done {
-		return false, nil
-	}
-	if err != nil {
-		return true, fmt.Errorf("existence check failed: %w", err)
-	}
-	return true, nil
 }
 
 func (s *server) notifyLeader(flag int) {
