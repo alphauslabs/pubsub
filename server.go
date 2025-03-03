@@ -171,7 +171,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	// 	return nil, status.Error(codes.FailedPrecondition, "message lock expired")
 	// }
 
-	// Get message processed in time
+	// Check if message exists in storage
 	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
