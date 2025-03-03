@@ -19,7 +19,7 @@ import (
 var (
 	method = flag.String("method", "", "gRPC method to call")
 	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}|{newtopicname} , Please leave empty if not needed, don't remove | separator")
+	input  = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
 )
 
 func main() {
@@ -28,10 +28,10 @@ func main() {
 	defer glog.Flush()
 	glog.Infof("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
-	if len(ins) != 4 {
+	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
+	topic, sub, payload, newtopicname, extendVisibility := ins[0], ins[1], ins[2], ins[3], ins[4]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -112,17 +112,25 @@ func main() {
 		}
 
 	case "extendvisibility":
-		if payload == "" {
-			log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
+		if extendVisibility == "" {
+			log.Fatalf("ExtendVisibilityTimeout requires a valid timeout value in the input field")
 		}
-		timeoutValue, err := strconv.Atoi(newtopicname)
+
+		// Convert the extendVisibility input to an integer
+		newTimeout, err := strconv.Atoi(extendVisibility)
 		if err != nil {
 			log.Fatalf("Invalid timeout value: %v", err)
 		}
 
+		// Ensure the subscription ID is provided
+		if sub == "" {
+			log.Fatalf("ExtendVisibilityTimeout requires a valid subscription ID.")
+		}
+
+		// Call ModifyVisibilityTimeout with the correct parameters
 		r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-			Id:         payload,
-			NewTimeout: int32(timeoutValue),
+			SubscriptionId: sub,               // Use the correct variable for subscription ID
+			NewTimeout:     int32(newTimeout), // Convert to int32
 		})
 		if err != nil {
 			log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
