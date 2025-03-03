@@ -16,12 +16,11 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
-
 	"github.com/google/uuid"
+
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type server struct {
@@ -38,7 +37,7 @@ const (
 
 // Publish a message to a topic
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	if in.TopicId == "" {
+	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
 
@@ -46,10 +45,10 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	messageID := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
+		[]string{"id", "name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
 		[]interface{}{
-			messageID,
-			in.TopicId,
+			msgId,
+			in.Topic,
 			in.Payload,
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
@@ -67,8 +66,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	m := storage.Message{
 		Message: &pb.Message{
-			Id:      messageID,
-			Topic:   in.TopicId,
+			Id:      msgId,
+			Topic:   in.Topic,
 			Payload: in.Payload,
 		},
 	}
@@ -86,34 +85,34 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
 		}
 	}
-	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", messageID)
-	return &pb.PublishResponse{MessageId: messageID}, nil
+	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", msgId)
+	return &pb.PublishResponse{MessageId: msgId}, nil
 }
 
 // Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.TopicId, in.SubscriptionId)
+	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
 
 	// Validate if subscription exists for the given topic
-	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.TopicId)
-	err := s.checkIfTopicSubscriptionIsCorrect(in.TopicId, in.SubscriptionId)
+	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.Topic)
+	err := s.checkIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
 	}
 
-	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.SubscriptionId)
+	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
 
 	// Continuous loop to stream messages
 	for {
 		select {
 		// Check if client has disconnected
 		case <-stream.Context().Done():
-			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.SubscriptionId)
+			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
 			// Get messages from local storage for the topic
-			messages, err := storage.GetMessagesByTopic(in.TopicId)
+			messages, err := storage.GetMessagesByTopic(in.Topic)
 			if err != nil {
 				glog.Infof("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
@@ -122,12 +121,12 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
-				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.TopicId)
+				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.Topic)
 				time.Sleep(time.Second) // todo: not sure if this is the best way
 				continue
 			}
 
-			glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.TopicId)
+			glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
 
 			// Process each message
 			for _, message := range messages {
@@ -139,7 +138,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 				// Attempt to acquire distributed lock for the message
 				// Default visibility timeout of 30 seconds
-				if err := s.broadcastLock(stream.Context(), message.Id, in.TopicId); err != nil {
+				if err := s.broadcastLock(stream.Context(), message.Id, in.Topic); err != nil {
 					glog.Infof("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
 					continue // Skip if unable to acquire lock
 				}
@@ -148,9 +147,9 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				// Stream message to subscriber
 				if err := stream.Send(message.Message); err != nil {
 					// Release lock if sending fails
-					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.SubscriptionId, err)
+					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.Subscription, err)
 				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.SubscriptionId)
+					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.Subscription)
 				}
 			}
 		}
@@ -291,11 +290,10 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
 
-	topicID := uuid.New().String()
 	m := spanner.Insert(
 		TopicsTable,
-		[]string{"id", "name", "createdAt", "updatedAt"},
-		[]interface{}{topicID, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]string{"name", "createdAt", "updatedAt"},
+		[]interface{}{req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
@@ -304,7 +302,6 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 	}
 
 	topic := &pb.Topic{
-		Id:   topicID,
 		Name: req.Name,
 	}
 
@@ -317,13 +314,13 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 }
 
 func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Topic, error) {
-	if req.Id == "" {
+	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
-		Params: map[string]interface{}{"name": req.Id},
+		SQL:    `SELECT name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
+		Params: map[string]interface{}{"name": req.Name},
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
@@ -331,31 +328,30 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 
 	row, err := iter.Next()
 	if err == iterator.Done {
-		return nil, status.Errorf(codes.NotFound, "topic with ID %q not found", req.Id)
+		return nil, status.Errorf(codes.NotFound, "topic with ID %q not found", req.Name)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to query topic: %v", err)
 	}
 
 	var (
-		id, name             string
+		name                 string
 		createdAt, updatedAt spanner.NullTime
 	)
-	if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+	if err := row.Columns(&name, &createdAt, &updatedAt); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 	}
 
 	return &pb.Topic{
-		Id:        id,
 		Name:      name,
-		CreatedAt: convertTime(createdAt),
-		UpdatedAt: convertTime(updatedAt),
+		CreatedAt: createdAt.String(),
+		UpdatedAt: createdAt.String(),
 	}, nil
 }
 
 func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 	if req.NewName == "" {
 		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
@@ -368,14 +364,14 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	}
 
 	// Fetch the current topic to get its old name
-	current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
-	if err != nil {
-		return nil, err
-	}
-
+	// current, err := s.GetTopic(ctx, &pb.GetTopicRequest{Id: req.Id})
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// todo: delete the old then insert new
 	mutTopic := spanner.Update(TopicsTable,
-		[]string{"id", "name", "updatedAt"},
-		[]interface{}{current.Id, req.NewName, spanner.CommitTimestamp},
+		[]string{"name", "updatedAt"},
+		[]interface{}{req.NewName, spanner.CommitTimestamp},
 	)
 	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
 	if err != nil {
@@ -390,7 +386,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 			  WHERE topic = @oldName`,
 		Params: map[string]interface{}{
 			"newName": req.NewName,
-			"oldName": current.Name,
+			"oldName": req.Name,
 		},
 	}
 	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
@@ -405,7 +401,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	}
 
 	updatedTopic := &pb.Topic{
-		Id:   current.Id,
 		Name: req.NewName,
 	}
 	go func() {
@@ -416,12 +411,12 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 }
 
 func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
-	if req.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
 
 	// Delete topic
-	topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Id})
+	topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{topicMutation})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
@@ -430,9 +425,9 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		// Delete all related subscriptions
 		stmt := spanner.Statement{
-			SQL: `DELETE FROM Subscriptions WHERE topic = @topicId`,
+			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
 			Params: map[string]interface{}{
-				"topicId": req.Id,
+				"Topic": req.Name,
 			},
 		}
 		_, err = txn.Update(ctx, stmt)
@@ -455,7 +450,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 }
 
 func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsResponse, error) {
-	stmt := spanner.Statement{SQL: `SELECT id, name, createdAt, updatedAt FROM Topics`}
+	stmt := spanner.Statement{SQL: `SELECT name, createdAt, updatedAt FROM Topics`}
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -470,18 +465,17 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 		}
 
 		var (
-			id, name             string
+			name                 string
 			createdAt, updatedAt spanner.NullTime
 		)
-		if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+		if err := row.Columns(&name, &createdAt, &updatedAt); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 		}
 
 		topics = append(topics, &pb.Topic{
-			Id:        id,
 			Name:      name,
-			CreatedAt: convertTime(createdAt),
-			UpdatedAt: convertTime(updatedAt),
+			CreatedAt: createdAt.String(),
+			UpdatedAt: createdAt.String(),
 		})
 	}
 
@@ -506,13 +500,6 @@ func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
 		return true, fmt.Errorf("existence check failed: %w", err)
 	}
 	return true, nil
-}
-
-func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
-	if !t.Valid {
-		return nil
-	}
-	return timestamppb.New(t.Time)
 }
 
 func (s *server) notifyLeader(flag int) {
