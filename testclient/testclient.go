@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -106,6 +107,25 @@ func main() {
 			}
 			log.Printf("Acknowledge Response: %v\n", ackres)
 		}
+
+	case "extendvisibility":
+		//make sure to receive a valid input for extending visibility timeout
+		if payload == "" {
+			log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
+		}
+		timeoutValue, err := strconv.Atoi(newtopicname)
+		if err != nil {
+			log.Fatalf("Invalid timeout value: %v", err)
+		}
+
+		r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+			Id:         payload,
+			NewTimeout: int32(timeoutValue),
+		})
+		if err != nil {
+			log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
+		}
+		log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
 
 	default:
 		fmt.Println("Invalid method, try again...")
