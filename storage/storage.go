@@ -144,18 +144,18 @@ func MonitorActivity() {
 		topicSubsMu.RUnlock()
 
 		if len(topicSubDetails) == 0 {
-			glog.Info("[Storage monitor] No topic-subscription data available")
+			glog.Info("[Storage Monitor] No topic-subscription data available")
 		} else {
 			for topic, subCount := range topicSubDetails {
-				glog.Infof("[Storage monitor] Topic: %s - Subscriptions: %d", topic, subCount)
+				glog.Infof("[Storage Monitor] Topic: %s - Subscriptions: %d", topic, subCount)
 			}
 		}
 
 		if len(topicMsgCounts) == 0 {
-			glog.Info("[Storage monitor] No Messages available")
+			glog.Info("[Storage Monitor] No Messages available")
 		} else {
 			for topic, count := range topicMsgCounts {
-				glog.Infof("[Storage monitor] Topic: %s - Messages: %d", topic, count)
+				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
 			}
 		}
 	}
