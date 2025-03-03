@@ -121,7 +121,10 @@ func main() {
 			m = "leader active after "
 		}
 	}()
-	go sweep.Run() // Runs our sweeper goroutine to check if message is expired, if so, then it unlocks it.
+	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
+	go sweep.RunCheckForExpired()
+	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.
+	go sweep.RunCheckForDeleted()
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go handlers.StartDistributor(ctx, op, spannerClient)
 	// Start our fetching and broadcast routine for unprocessed messages.

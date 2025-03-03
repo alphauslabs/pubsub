@@ -8,8 +8,8 @@ import (
 	"github.com/golang/glog"
 )
 
-func Run() {
-	glog.Info("[sweep] started")
+func RunCheckForExpired() {
+	glog.Info("[sweep] run check for expired messages started")
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
@@ -26,6 +26,29 @@ func Run() {
 	}
 
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			sweep()
+		}
+	}
+}
+
+func RunCheckForDeleted() {
+	glog.Info("[sweep] run check for deleted messages started")
+	sweep := func() {
+		for _, v := range storage.TopicMessages {
+			for _, v1 := range v.Messages {
+				if atomic.LoadInt32(&v1.Deleted) == 1 {
+					delete(v.Messages, v1.Id)
+					glog.Info("[sweep] deleted message:", v1.Id)
+				}
+			}
+		}
+	}
+
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
