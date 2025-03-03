@@ -112,30 +112,33 @@ func main() {
 		}
 
 	case "extendvisibility":
-		if extendVisibility == "" {
-			log.Fatalf("ExtendVisibilityTimeout requires a valid timeout value in the input field")
-		}
+	    if payload == "" {
+	        log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
+	    }
+	
+	    // Convert the extendVisibility input (new timeout) to an integer
+	    newTimeout, err := strconv.Atoi(newtopicname) // Assuming newtopicname holds the timeout value
+	    if err != nil {
+	        log.Fatalf("Invalid timeout value: %v", err)
+	    }
+	
+	    // Ensure the subscription ID is provided
+	    if sub == "" {
+	        log.Fatalf("ExtendVisibilityTimeout requires a valid subscription ID.")
+	    }
+	
+	    // Call ModifyVisibilityTimeout with the correct parameters
+	    r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+	        Id:              payload,           
+	        NewTimeout:      int32(newTimeout), 
+	        SubscriptionId:  sub,               
+	    })
+	    if err != nil {
+	        log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
+	    }
+	
+	    log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
 
-		// Convert the extendVisibility input to an integer
-		newTimeout, err := strconv.Atoi(extendVisibility)
-		if err != nil {
-			log.Fatalf("Invalid timeout value: %v", err)
-		}
-
-		// Ensure the subscription ID is provided
-		if sub == "" {
-			log.Fatalf("ExtendVisibilityTimeout requires a valid subscription ID.")
-		}
-
-		// Call ModifyVisibilityTimeout with the correct parameters
-		r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-			SubscriptionId: sub,               // Use the correct variable for subscription ID
-			NewTimeout:     int32(newTimeout), // Convert to int32
-		})
-		if err != nil {
-			log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
-		}
-		log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
 
 	case "createsubscription":
 		if topic == "" || sub == "" {
