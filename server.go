@@ -211,7 +211,24 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
     glog.Infof("[ModifyVisibility] Request to modify visibility timeout for message %s to %d seconds", in.Id, in.NewTimeout)
 
-    err := s.ExtendVisibilityTimeout(in.Id, in.SubscriptionId, time.Duration(in.NewTimeout)*time.Second)
+    // Fetch subscription to check AutoExtend status
+    sub, err := s.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: in.SubscriptionId})
+    if err != nil {
+        glog.Infof("[ModifyVisibility] Failed to retrieve subscription %s: %v", in.SubscriptionId, err)
+        return nil, status.Errorf(codes.NotFound, "subscription not found")
+    }
+
+    // Log AutoExtend status
+    glog.Infof("[ModifyVisibility] Subscription %s AutoExtend: %v", sub.Name, sub.Autoextend)
+
+    // If AutoExtend is enabled, deny manual extension
+    if sub.Autoextend {
+        glog.Infof("[ModifyVisibility] Autoextend is enabled, ignoring manual visibility timeout extension.")
+        return nil, status.Errorf(codes.FailedPrecondition, "autoextend is enabled, manual extension not allowed")
+    }
+
+    // Proceed with manual timeout extension
+    err = s.ExtendVisibilityTimeout(in.Id, in.SubscriptionId, time.Duration(in.NewTimeout)*time.Second)
     if err != nil {
         glog.Infof("[ModifyVisibility] Failed to extend timeout for message %s: %v", in.Id, err)
         return nil, err
@@ -220,6 +237,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
     glog.Infof("[ModifyVisibility] Successfully extended visibility timeout for message %s", in.Id)
     return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
 }
+
 
 func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
