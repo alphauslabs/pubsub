@@ -490,3 +490,69 @@ func (s *server) notifyLeader(flag int) {
 		glog.Infof("Successfully notified leader with flag: %d", flag)
 	}
 }
+
+func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Topic == "" || req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
+	}
+
+	// Default autoextend to false
+	autoExtend := false
+	if req.Autoextend != nil {
+		autoExtend = *req.Autoextend
+	}
+
+	m := spanner.Insert(
+		SubsTable,
+		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
+		[]interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
+	)
+
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:       req.Name,
+		Topic:      req.Topic,
+		Autoextend: autoExtend,
+	}, nil
+}
+
+func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	stmt := spanner.Statement{
+		SQL: `SELECT name, topic, autoextend FROM Subscriptions WHERE name = @name`,
+		Params: map[string]interface{}{
+			"name": req.Name,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	row, err := iter.Next()
+	if err == iterator.Done {
+		return nil, status.Errorf(codes.NotFound, "Subscription not found: %s", req.Name)
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Query error: %v", err)
+	}
+
+	var name, topic string
+	var autoExtend bool
+
+	if err := row.Columns(&name, &topic, &autoExtend); err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to parse subscription data: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:       name,
+		Topic:      topic,
+		Autoextend: autoExtend,
+	}, nil
+}
