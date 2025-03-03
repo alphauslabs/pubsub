@@ -20,7 +20,6 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type server struct {
@@ -275,11 +274,10 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
 
-	Topic := uuid.New().String()
 	m := spanner.Insert(
 		TopicsTable,
-		[]string{"id", "name", "createdAt", "updatedAt"},
-		[]interface{}{Topic, req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]string{"name", "createdAt", "updatedAt"},
+		[]interface{}{req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
@@ -305,7 +303,7 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT id, name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
+		SQL:    `SELECT name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
 		Params: map[string]interface{}{"name": req.Name},
 	}
 
@@ -321,10 +319,10 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 	}
 
 	var (
-		id, name             string
+		name                 string
 		createdAt, updatedAt spanner.NullTime
 	)
-	if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+	if err := row.Columns(&name, &createdAt, &updatedAt); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 	}
 
@@ -398,7 +396,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 
 func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
+		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
 
 	// Delete topic
@@ -436,7 +434,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 }
 
 func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsResponse, error) {
-	stmt := spanner.Statement{SQL: `SELECT id, name, createdAt, updatedAt FROM Topics`}
+	stmt := spanner.Statement{SQL: `SELECT name, createdAt, updatedAt FROM Topics`}
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -451,10 +449,10 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 		}
 
 		var (
-			id, name             string
+			name                 string
 			createdAt, updatedAt spanner.NullTime
 		)
-		if err := row.Columns(&id, &name, &createdAt, &updatedAt); err != nil {
+		if err := row.Columns(&name, &createdAt, &updatedAt); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 		}
 
@@ -486,13 +484,6 @@ func (s *server) topicExists(ctx context.Context, name string) (bool, error) {
 		return true, fmt.Errorf("existence check failed: %w", err)
 	}
 	return true, nil
-}
-
-func convertTime(t spanner.NullTime) *timestamppb.Timestamp {
-	if !t.Valid {
-		return nil
-	}
-	return timestamppb.New(t.Time)
 }
 
 func (s *server) notifyLeader(flag int) {
