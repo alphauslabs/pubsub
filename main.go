@@ -9,9 +9,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -62,7 +59,7 @@ func main() {
 		return
 	}
 	defer spannerClient.Close()
-	app := &app.PubSub{
+	ap := &app.PubSub{
 		Client:        spannerClient,
 		ConsensusMode: "all",
 		LeaderActive: timedoff.New(60*time.Second, &timedoff.CallbackT{
@@ -82,30 +79,22 @@ func main() {
 		"logtable",
 		hedge.WithDuration(5000),
 		hedge.WithGroupSyncInterval(2*time.Second),
-		hedge.WithLeaderCallback(2, func(data interface{}, msg []byte) {
-			glog.Infof("Leader callback: %v", string(msg))
-			s := strings.Split(string(msg), "")
-			v, err := strconv.Atoi(s[0])
-			if err != nil {
-				log.Fatalf("failed to convert string to int: %v", err)
-			}
-			atomic.StoreInt32(&leader.IsLeader, int32(v))
-			if v == 1 {
-				app.LeaderActive.On()
-			}
-		}),
+		hedge.WithLeaderCallback(
+			ap,
+			leader.LeaderCallBack,
+		),
 		hedge.WithLeaderHandler( // if leader only, handles Send()
-			app,
+			ap,
 			handlers.Send,
 		),
 		hedge.WithBroadcastHandler( // handles Broadcast()
-			app,
+			ap,
 			handlers.Broadcast,
 		),
 		hedge.WithLogger(log.New(io.Discard, "", 0)), // silence
 	)
 
-	app.Op = op
+	ap.Op = op
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1) // optional wait
 	go op.Run(ctx, done)
@@ -127,7 +116,7 @@ func main() {
 	}()
 
 	go func() {
-		if err := run(ctx, &server{PubSub: app}); err != nil {
+		if err := run(ctx, &server{PubSub: ap}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()

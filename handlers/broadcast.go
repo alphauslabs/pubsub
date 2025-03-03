@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	Message  = "message"
-	Topicsub = "topicsub"
-	MsgEvent = "msgEvent"
+	Message          = "message"
+	Topicsub         = "topicsub"
+	LeaderLiveliness = "leaderliveliness"
+	MsgEvent         = "msgEvent"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -42,9 +43,10 @@ type MessageLockInfo struct {
 }
 
 var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
-	Message:  handleBroadcastedMsg,
-	Topicsub: handleBroadcastedTopicsub,
-	MsgEvent: handleMessageEvent, // Handles message locks, unlocks, deletes
+	Message:          handleBroadcastedMsg,
+	Topicsub:         handleBroadcastedTopicsub,
+	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
+	LeaderLiveliness: handleLeaderLiveliness,
 }
 
 // Root handler for op.Broadcast()
@@ -276,5 +278,14 @@ func handleRetryMsg(app *app.PubSub, messageID string, params []string) ([]byte,
 	app.MessageLocks.Delete(messageID)
 	glog.Infof("[Retry] Message %s is now available again (unlocked by node %s)", messageID, retryNodeID)
 
+	return nil, nil
+}
+
+func handleLeaderLiveliness(app *app.PubSub, msg []byte) ([]byte, error) {
+	// Handle leader liveliness messages
+	m := string(msg)
+	if strings.HasPrefix(m, "1") {
+		app.LeaderActive.On()
+	}
 	return nil, nil
 }
