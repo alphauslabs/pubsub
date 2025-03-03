@@ -179,10 +179,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
 
-	// Mark as processed since subscriber acknowledged in time
-	glog.Infof("[Acknowledge] Marking message %s as processed", in.Id)
-	msg.Processed = true
-
 	// Update the processed status in Spanner
 	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
@@ -190,13 +186,12 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	// Log acknowledgment
 	glog.Infof("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
-
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
+	s.Op.Broadcast(ctx, bin) // broadcast to set deleted
 
 	// Clean up message (processed)
 	// glog.Infof("[Acknowledge] Cleaning up message %s from local state", in.Id)
