@@ -516,7 +516,6 @@ func (s *server) notifyLeader(flag int) {
 		"flag": flag,
 	}
 
-	// Serialize the data
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		log.Printf("Error marshaling data: %v", err)
@@ -525,7 +524,7 @@ func (s *server) notifyLeader(flag int) {
 
 	// Create SendInput with topicsubupdates type
 	input := handlers.SendInput{
-		Type: "topicsubupdates", // Use the constant defined in send.go
+		Type: "topicsubupdates",
 		Msg:  jsonData,
 	}
 
