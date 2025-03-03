@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/spanner"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -239,37 +237,4 @@ func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
 	}
 
 	return nil
-}
-
-func GetSubscriptionAutoExtend(client *spanner.Client, subscriptionID string) int32 {
-	ctx := context.Background()
-
-	stmt := spanner.Statement{
-		SQL: `SELECT autoextend FROM Subscriptions WHERE id = @id`,
-		Params: map[string]interface{}{
-			"id": subscriptionID,
-		},
-	}
-
-	iter := client.Single().Query(ctx, stmt)
-	defer iter.Stop()
-
-	var autoextend int32
-
-	row, err := iter.Next()
-	if err == iterator.Done {
-		return 0 // Default to NOT autoextend if no result found
-	}
-	if err != nil {
-		glog.Errorf("[autoextend] Failed to fetch autoextend flag for subscription %s: %v", subscriptionID, err)
-		return 0
-	}
-
-	// Read the column value properly
-	if err := row.Columns(&autoextend); err != nil {
-		glog.Errorf("[autoextend] Failed to read column value for subscription %s: %v", subscriptionID, err)
-		return 0
-	}
-
-	return autoextend
 }
