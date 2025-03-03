@@ -54,8 +54,8 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		for _, subName := range subscriptions {
 			subMap[subName] = &storage.Subscription{
 				Subscription: &pb.Subscription{
-					Id:      subName,
-					TopicId: topic,
+					Name:  subName,
+					Topic: topic,
 				},
 			}
 		}

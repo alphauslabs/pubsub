@@ -42,7 +42,7 @@ func main() {
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(context.Background(), &pb.PublishRequest{TopicId: topic, Payload: payload})
+		r, err := c.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: payload})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
@@ -55,7 +55,7 @@ func main() {
 		}
 		fmt.Printf("r.Topics: %v\n", r.Topics)
 	case "deletetopic":
-		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Id: topic})
+		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Delete failed: %v", err)
 		}
@@ -65,28 +65,28 @@ func main() {
 			glog.Infof("Topic ID: %s not found", topic)
 		}
 	case "updatetopic":
-		r, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
-			Id:      topic,
+		_, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
+			Name:    topic,
 			NewName: newtopicname,
 		})
 		if err != nil {
 			log.Fatalf("Update Failed: %v", err)
 		}
-		glog.Infof("Updated!\nID: %s\nPrevious Name:\nNew Name:%s\n", r.Id, r.Name)
+		glog.Infof("Updated!\nID: %s\nPrevious Name:\nNew Name:%s\n", topic, newtopicname)
 	case "gettopic":
-		r, err := c.GetTopic(context.Background(), &pb.GetTopicRequest{Id: topic})
+		_, err := c.GetTopic(context.Background(), &pb.GetTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Read Failed: %v", err)
 		}
-		glog.Infof("Topic Found!\nID: %s\nName: %s\n", r.Id, r.Name)
+		glog.Infof("Topic Found!\nID: %s\nName: %s\n", topic)
 	case "createtopic":
-		r, err := c.CreateTopic(context.Background(), &pb.CreateTopicRequest{Name: topic})
+		_, err := c.CreateTopic(context.Background(), &pb.CreateTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Create Failed: %v", err)
 		}
-		glog.Infof("Topic Created!\nID: %s\nName: %s\n", r.Id, r.Name)
+		glog.Infof("Topic Created!\nID: %s\nName: %s\n", topic)
 	case "subscribe":
-		r, err := c.Subscribe(context.Background(), &pb.SubscribeRequest{TopicId: topic, SubscriptionId: sub})
+		r, err := c.Subscribe(context.Background(), &pb.SubscribeRequest{Topic: topic, Subscription: sub})
 		if err != nil {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
@@ -103,7 +103,7 @@ func main() {
 			}
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
-			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, SubscriptionId: sub})
+			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
