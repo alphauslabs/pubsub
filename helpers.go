@@ -163,44 +163,48 @@ func (s *server) localUnlock(messageID string) {
 
 // ExtendVisibilityTimeout extends the visibility timeout for a message
 func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) error {
-	value, exists := s.MessageLocks.Load(messageID)
-	if !exists {
-		return status.Error(codes.NotFound, "message not locked")
-	}
+    value, exists := s.MessageLocks.Load(messageID)
+    if !exists {
+        return status.Error(codes.NotFound, "message not locked")
+    }
 
-	info, ok := value.(handlers.MessageLockInfo)
-	if !ok {
-		return status.Error(codes.Internal, "invalid lock info")
-	}
+    info, ok := value.(handlers.MessageLockInfo)
+    if !ok {
+        return status.Error(codes.Internal, "invalid lock info")
+    }
 
-	// Check if this node owns the lock
-	if info.NodeID != s.Op.HostPort() {
-		return status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
-	}
+    // Retrieve subscription to check AutoExtend
+    sub, err := s.GetSubscription(context.TODO(), &pb.GetSubscriptionRequest{Name: subscriberID})
+    if err != nil {
+        return status.Error(codes.NotFound, "subscription not found")
+    }
 
-	// Check subscriber ID
-	if info.SubscriberID != subscriberID {
-		return status.Error(codes.PermissionDenied, "message locked by another subscriber")
-	}
+    // Log AutoExtend status
+    glog.Infof("[ExtendVisibility] Subscription %s has AutoExtend: %v", sub.Name, sub.Autoextend)
 
-	// Extend visibility timeout
-	newExpiresAt := time.Now().Add(visibilityTimeout)
-	info.Timeout = newExpiresAt
-	s.MessageLocks.Store(messageID, info)
+    // If AutoExtend is disabled, allow manual extension
+    if !sub.Autoextend {
+        glog.Infof("[ExtendVisibility] Autoextend is disabled. Allowing manual extension.")
+    }
 
-	// Broadcast new timeout
-	broadcastData := handlers.BroadCastInput{
-		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.HostPort())),
-	}
-	msgBytes, _ := json.Marshal(broadcastData)
+    // Extend visibility timeout
+    newExpiresAt := time.Now().Add(visibilityTimeout)
+    info.Timeout = newExpiresAt
+    s.MessageLocks.Store(messageID, info)
 
-	// Send broadcast to all nodes
-	s.Op.Broadcast(context.TODO(), msgBytes)
-	glog.Infof("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.HostPort(), messageID)
+    // Broadcast new timeout
+    broadcastData := handlers.BroadCastInput{
+        Type: handlers.MsgEvent,
+        Msg:  []byte(fmt.Sprintf("extend:%s:%d:%s", messageID, int(visibilityTimeout.Seconds()), s.Op.HostPort())),
+    }
+    msgBytes, _ := json.Marshal(broadcastData)
 
-	return nil
+    s.Op.Broadcast(context.TODO(), msgBytes)
+    glog.Infof("[ExtendVisibility] Visibility timeout extended for message: %s by subscriber: %s", messageID, subscriberID)
+
+    return nil
 }
+
 
 // AutoExtendTimeout automatically extends the visibility timeout if autoextend is enabled
 func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) {
