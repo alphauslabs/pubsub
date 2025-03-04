@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 	"strings"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
@@ -31,7 +30,7 @@ func main() {
 	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload, newtopicname, extendVisibility := ins[0], ins[1], ins[2], ins[3], ins[4]
+	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
