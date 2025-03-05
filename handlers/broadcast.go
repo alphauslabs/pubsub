@@ -145,6 +145,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// 	}
 	// }
 
+	// Ensure subscription name is provided
 	if len(params) < 1 {
 		glog.Error("[Lock] Subscription name missing in params")
 		return nil, fmt.Errorf("subscription name missing in params")
@@ -162,12 +163,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// Retrieve the topic associated with the message
-	if msg.Topic == "" {
-		glog.Errorf("[Lock] Message %s does not have an associated topic", messageID)
-		return nil, fmt.Errorf("message %s does not have an associated topic", messageID)
-	}
-
+	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
 	if err != nil {
 		glog.Errorf("[Lock] Failed to retrieve subscriptions for topic %s: %v", msg.Topic, err)
@@ -177,13 +173,12 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// Convert slice to map for quick lookup
 	subscriptionsMap := make(map[string]*storage.Subscription)
 	for _, sub := range subscriptionsSlice {
-		subscriptionsMap[sub.Subscription.Name] = sub //
+		subscriptionsMap[sub.Subscription.Name] = sub
 	}
 
 	// Check if this subscription enabled autoextend
 	autoExtend := false
-	sub, exists := subscriptionsMap[subscriptionName]
-	if exists && sub != nil && sub.Subscription != nil && sub.Subscription.Autoextend {
+	if sub, exists := subscriptionsMap[subscriptionName]; exists && sub.Subscription.Autoextend {
 		autoExtend = true
 	}
 
