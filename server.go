@@ -179,12 +179,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		return &pb.AcknowledgeResponse{Success: true}, nil // Return success
 	}
 
-	// Check if message has already been processed
-	if msg.Processed {
-		glog.Infof("[Acknowledge] Message %s has already been processed, skipping.", in.Id)
-		return &pb.AcknowledgeResponse{Success: true}, nil // Return success
-	}
-
 	// Update the processed status in Spanner
 	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
