@@ -106,7 +106,7 @@ func main() {
 
 			// Simulate processing
 			glog.Infof("Processing message: %v\n", rec.Id)
-			time.Sleep(10 * time.Second) // Simulate processing time
+			time.Sleep(5 * time.Second) // Simulate processing time
 
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
