@@ -10,10 +10,11 @@ import (
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
-	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -151,18 +152,16 @@ func main() {
 			// Acknowledge the message
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
+				if status.Code(err) == codes.NotFound { // match return error code
+					glog.Infof("Acknowledge failed: Message %s not found: %v", rec.Id, err)
+					continue // Skip to the next message
+				}
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
+			glog.Infof("Acknowledge Response: %v\n", ackres)
+			ackCount++
+			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
-			// Check if the message exists in storage
-			_, err = storage.GetMessage(rec.Id)
-			if err == nil { //no error, msg exists
-				glog.Infof("Acknowledge Response: %v\n", ackres)
-				ackCount++
-				glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
-			} else {
-				glog.Infof("Message %s not found in storage, skipping.\n", rec.Id)
-			}
 		}
 
 	case "createsubscription":
