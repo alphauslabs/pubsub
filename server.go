@@ -484,7 +484,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
 	}
 
-	// Default autoextend to false
+	// Default autoextend to false if not provided
 	autoExtend := false
 	if req.Autoextend != nil {
 		autoExtend = *req.Autoextend
@@ -500,6 +500,8 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create subscription: %v", err)
 	}
+
+	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
 	return &pb.Subscription{
 		Name:       req.Name,
@@ -542,5 +544,100 @@ func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionReq
 		Name:       name,
 		Topic:      topic,
 		Autoextend: autoExtend,
+	}, nil
+}
+
+func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscriptionRequest) (*pb.Subscription, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	// First get the existing subscription to preserve the topic
+	existingSub, err := s.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: req.Name})
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the subscription
+	m := spanner.Update(
+		SubsTable,
+		[]string{"name", "visibility_timeout", "autoextend", "updatedAt"},
+		[]interface{}{
+			req.Name,
+			req.ModifyVisibilityTimeout,
+			req.Autoextend,
+			spanner.CommitTimestamp,
+		},
+	)
+
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
+	}
+
+	return &pb.Subscription{
+		Name:              req.Name,
+		Topic:             existingSub.Topic,
+		VisibilityTimeout: req.ModifyVisibilityTimeout,
+		Autoextend:        req.GetAutoextend(),
+	}, nil
+}
+
+func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscriptionRequest) (*pb.DeleteSubscriptionResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
+	}
+
+	m := spanner.Delete(SubsTable, spanner.Key{req.Name})
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
+	}
+
+	return &pb.DeleteSubscriptionResponse{
+		Success:   true,
+		DeletedAt: time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSubscriptionsResponse, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM Subscriptions`,
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var subscriptions []*pb.Subscription
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to iterate subscriptions: %v", err)
+		}
+
+		var (
+			name              string
+			topic             string
+			visibilityTimeout int32
+			autoextend        bool
+		)
+
+		if err := row.Columns(&name, &topic, &visibilityTimeout, &autoextend); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to parse subscription data: %v", err)
+		}
+
+		subscriptions = append(subscriptions, &pb.Subscription{
+			Name:              name,
+			Topic:             topic,
+			VisibilityTimeout: visibilityTimeout,
+			Autoextend:        autoextend,
+		})
+	}
+
+	return &pb.ListSubscriptionsResponse{
+		Subscriptions: subscriptions,
 	}, nil
 }

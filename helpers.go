@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
@@ -173,14 +174,18 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 		return status.Error(codes.Internal, "invalid lock info")
 	}
 
-	// Check if this node owns the lock
-	if info.NodeID != s.Op.HostPort() {
-		return status.Error(codes.PermissionDenied, "only the lock owner can extend timeout")
+	// Retrieve subscription to check AutoExtend
+	sub, err := s.GetSubscription(context.TODO(), &pb.GetSubscriptionRequest{Name: subscriberID})
+	if err != nil {
+		return status.Error(codes.NotFound, "subscription not found")
 	}
 
-	// Check subscriber ID
-	if info.SubscriberID != subscriberID {
-		return status.Error(codes.PermissionDenied, "message locked by another subscriber")
+	// Log AutoExtend status
+	glog.Infof("[ExtendVisibility] Subscription %s has AutoExtend: %v", sub.Name, sub.Autoextend)
+
+	// If AutoExtend is disabled, allow manual extension
+	if !sub.Autoextend {
+		glog.Infof("[ExtendVisibility] Autoextend is disabled. Allowing manual extension.")
 	}
 
 	// Extend visibility timeout
@@ -195,9 +200,8 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	}
 	msgBytes, _ := json.Marshal(broadcastData)
 
-	// Send broadcast to all nodes
 	s.Op.Broadcast(context.TODO(), msgBytes)
-	glog.Infof("[ExtendTimeout] Node %s extended timeout for message: %s", s.Op.HostPort(), messageID)
+	glog.Infof("[ExtendVisibility] Visibility timeout extended for message: %s by subscriber: %s", messageID, subscriberID)
 
 	return nil
 }
@@ -223,6 +227,7 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 	}
 
 	// Ensure only autoextend-enabled messages get extended
+
 	sub, err := storage.GetSubscribtionsForTopic(subscriberID)
 	if err != nil {
 		glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
@@ -232,6 +237,15 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 		glog.Infof("[AutoExtend] Subscription %s does not have autoextend enabled", subscriberID)
 		return
 	}
+	// sub, err := storage.GetSubscription(subscriberID) // todo: commented to fix errros, please uncomment if needed
+	// if err != nil {
+	// 	glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
+	// 	return
+	// }
+	// if !sub.Autoextend {
+	// 	glog.Infof("[AutoExtend] Subscription %s does not have autoextend enabled", subscriberID)
+	// 	return
+	//
 
 	// Extend visibility timeout
 	newExpiresAt := time.Now().Add(visibilityTimeout)

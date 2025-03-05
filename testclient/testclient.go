@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 	"strings"
+	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
@@ -31,15 +31,13 @@ func main() {
 	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload, newtopicname, extendVisibility := ins[0], ins[1], ins[2], ins[3], ins[4]
+	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
 	c := pb.NewPubSubServiceClient(conn)
-
-	// Contact the server and print out its response.
 
 	switch *method {
 	case "publish":
@@ -48,7 +46,6 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		glog.Infof("Message Published!\nID: %s", r.MessageId)
-
 	case "listtopics":
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
@@ -92,6 +89,8 @@ func main() {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
 
+		ackCount := 0 //counter for mssges
+
 		for {
 			rec, err := r.Recv()
 			if err == io.EOF {
@@ -104,73 +103,52 @@ func main() {
 			}
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
+
+			// Simulate processing
+			glog.Infof("Processing message: %v\n", rec.Id)
+			time.Sleep(10 * time.Second) // Simulate processing time
+
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
+			ackCount++ //increment
 		}
-
-	case "extendvisibility":
-	    if payload == "" {
-	        log.Fatalf("ExtendVisibilityTimeout requires a valid message ID in the payload field")
-	    }
-	
-	    // Convert the extendVisibility input (new timeout) to an integer
-	    newTimeout, err := strconv.Atoi(newtopicname) // Assuming newtopicname holds the timeout value
-	    if err != nil {
-	        log.Fatalf("Invalid timeout value: %v", err)
-	    }
-	
-	    // Ensure the subscription ID is provided
-	    if sub == "" {
-	        log.Fatalf("ExtendVisibilityTimeout requires a valid subscription ID.")
-	    }
-	
-	    // Call ModifyVisibilityTimeout with the correct parameters
-	    r, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-	        Id:              payload,           
-	        NewTimeout:      int32(newTimeout), 
-	        SubscriptionId:  sub,               
-	    })
-	    if err != nil {
-	        log.Fatalf("ExtendVisibilityTimeout failed: %v", err)
-	    }
-	
-	    log.Printf("Visibility Timeout Extended! Success = %v", r.Success)
-
+		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
-		if topic == "" || sub == "" {
-			log.Fatalf("CreateSubscription requires topic and subscription name")
-		}
-
-		autoExtend := false
-		if newtopicname != "" {
-			parsedAutoExtend, err := strconv.ParseBool(newtopicname)
-			if err != nil {
-				log.Fatalf("Invalid autoextend value (must be true or false): %v", err)
-			}
-			autoExtend = parsedAutoExtend
-		}
-
-		r, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
-			Topic:      topic,
-			Name:       sub,
-			Autoextend: &autoExtend,
-		})
-		if err != nil {
-			log.Fatalf("Create Subscription Failed: %v", err)
-		}
-
-		glog.Infof("Subscription Created! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
 
 	case "getsubscription":
-		r, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
+
+	case "updatesubscription":
+		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
+			Name:                    sub,
+			ModifyVisibilityTimeout: 60,
+			//			Autoextend:              true,
+		})
 		if err != nil {
-			log.Fatalf("Get Subscription Failed: %v", err)
+			log.Fatalf("UpdateSubscription failed: %v", err)
 		}
-		glog.Infof("Subscription Found! Name: %s, Topic: %s, AutoExtend: %v", r.Name, r.Topic, r.Autoextend)
+		glog.Infof("Subscription Updated!\nID: %s\n", sub)
+
+	case "deletesubscription":
+		r, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("DeleteSubscription failed: %v", err)
+		}
+		if r.Success {
+			glog.Infof("Subscription ID: %s deleted successfully", sub)
+		} else {
+			glog.Infof("Subscription ID: %s not found", sub)
+		}
+
+	case "listsubscriptions":
+		r, err := c.ListSubscriptions(context.Background(), &pb.Empty{})
+		if err != nil {
+			log.Fatalf("ListSubscriptions failed: %v", err)
+		}
+		fmt.Printf("r.Subscriptions: %v\n", r.Subscriptions)
 
 	default:
 		fmt.Println("Invalid method, try again...")
