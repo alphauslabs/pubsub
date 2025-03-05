@@ -3,7 +3,8 @@ module message_publisher
 go 1.23.1
 
 require (
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250219071234-ddc9b50dc09b
+	github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652
+	github.com/golang/glog v1.2.3
 	google.golang.org/grpc v1.70.0
 )
 

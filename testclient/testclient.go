@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 	"strings"
+	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
@@ -31,15 +31,13 @@ func main() {
 	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
-	topic, sub, payload, newtopicname, extendVisibility := ins[0], ins[1], ins[2], ins[3], ins[4]
+	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
 	conn, err := grpc.NewClient(fmt.Sprintf("%v:50051", *host), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
 	c := pb.NewPubSubServiceClient(conn)
-
-	// Contact the server and print out its response.
 
 	switch *method {
 	case "publish":
@@ -48,7 +46,6 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		glog.Infof("Message Published!\nID: %s", r.MessageId)
-
 	case "listtopics":
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
@@ -92,6 +89,8 @@ func main() {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
 
+		ackCount := 0 //counter for mssges
+
 		for {
 			rec, err := r.Recv()
 			if err == io.EOF {
@@ -104,12 +103,19 @@ func main() {
 			}
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
+
+			// Simulate processing
+			glog.Infof("Processing message: %v\n", rec.Id)
+			time.Sleep(10 * time.Second) // Simulate processing time
+
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
+			ackCount++ //increment
 		}
+		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
 
