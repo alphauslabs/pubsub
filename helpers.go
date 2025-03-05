@@ -206,13 +206,16 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 	return nil
 }
 
-// // AutoExtendTimeout automatically extends the visibility timeout if autoextend is enabled
+
+=======
+// AutoExtendTimeout automatically extends the visibility timeout if autoextend is enabled
 // func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibilityTimeout time.Duration) {
 // 	value, exists := s.MessageLocks.Load(messageID)
 // 	if !exists {
 // 		glog.Infof("[AutoExtend] Message %s not found or already processed", messageID)
 // 		return
 // 	}
+
 
 // 	info, ok := value.(handlers.MessageLockInfo)
 // 	if !ok {
@@ -233,7 +236,8 @@ func (s *server) ExtendVisibilityTimeout(messageID string, subscriberID string, 
 // 		glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
 // 		return
 // 	}
-// 	if !sub.Autoextend {
+
+// 	if !sub[0].Autoextend {
 // 		glog.Infof("[AutoExtend] Subscription %s does not have autoextend enabled", subscriberID)
 // 		return
 // 	}
