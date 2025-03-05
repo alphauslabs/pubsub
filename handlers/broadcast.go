@@ -143,39 +143,52 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// 	}
 	// }
 
-	// get the message from storage
+	if len(params) < 1 {
+		glog.Error("[Lock] Subscription name missing in params")
+		return nil, fmt.Errorf("subscription name missing in params")
+	}
+	subscriptionName := params[0]
+
+	// retrieve the message from storage
 	msg, err := storage.GetMessage(messageID)
 	if err != nil {
+		glog.Errorf("[Lock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
 	}
 	if msg == nil {
+		glog.Errorf("[Lock] Message %s not found", messageID)
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// get the topic associated with the message
+	// Retrieve the topic associated with the message
 	if msg.Topic == "" {
+		glog.Errorf("[Lock] Message %s does not have an associated topic", messageID)
 		return nil, fmt.Errorf("message %s does not have an associated topic", messageID)
 	}
 
-	subscriptions, err := storage.GetSubscribtionsForTopic(msg.Topic)
+	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve subscriptions from memory: %v", err)
+		glog.Errorf("[Lock] Failed to retrieve subscriptions for topic %s: %v", msg.Topic, err)
+		return nil, err
 	}
 
-	// check if autoextend should be applied
+	// Convert slice to map for quick lookup
+	subscriptionsMap := make(map[string]*storage.Subscription)
+	for _, sub := range subscriptionsSlice {
+		subscriptionsMap[sub.Subscription.Name] = sub //
+	}
+
+	// Check if this subscription enabled autoextend
 	autoExtend := false
-	for _, sub := range subscriptions {
-		if sub.Subscription.Autoextend {
-			autoExtend = true
-			break
-		}
+	sub, exists := subscriptionsMap[subscriptionName]
+	if exists && sub != nil && sub.Subscription != nil && sub.Subscription.Autoextend {
+		autoExtend = true
 	}
 
 	// Lock the message atomically
 	atomic.StoreInt32(&msg.Locked, 1)
 
-	// Update the message's visibilityTimeout based on AutoExtend
-	// Todo: check if actually updated...
+	//  Update msg.Age and set autoextend only if the subscription has it enabled
 	msg.Mu.Lock()
 	msg.Age = time.Now().UTC()
 
@@ -200,7 +213,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// // Mark this node as acknowledging the lock
 	// lockInfo.LockHolders[app.NodeID] = true
 
-	glog.Infof("[Lock] Message %s locked successfully with AutoExtend: %t", messageID, autoExtend)
+	glog.Infof("[Lock] Message %s locked successfully for Subscription: %s with AutoExtend: %t", messageID, subscriptionName, autoExtend)
 	// app.MessageLocks.Store(messageID, lockInfo)
 
 	// // Set up a local timer to clear the lock when it expires
