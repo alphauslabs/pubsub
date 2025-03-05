@@ -18,7 +18,7 @@ import (
 var (
 	method = flag.String("method", "", "gRPC method to call")
 	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicId}|{subId}|{payload}|{newtopicname} , Please leave empty if not needed, don't remove | separator")
+	input  = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 	defer glog.Flush()
 	glog.Infof("[Test] method: %v", *method)
 	ins := strings.Split(*input, "|")
-	if len(ins) != 4 {
+	if len(ins) != 5 {
 		log.Fatalf("Invalid input: %v", *input)
 	}
 	topic, sub, payload, newtopicname := ins[0], ins[1], ins[2], ins[3]
@@ -38,8 +38,6 @@ func main() {
 	defer conn.Close()
 	c := pb.NewPubSubServiceClient(conn)
 
-	// Contact the server and print out its response.
-
 	switch *method {
 	case "publish":
 		r, err := c.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: payload})
@@ -47,7 +45,6 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		glog.Infof("Message Published!\nID: %s", r.MessageId)
-
 	case "listtopics":
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
@@ -109,6 +106,39 @@ func main() {
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
 		}
+
+	case "createsubscription":
+
+	case "getsubscription":
+
+	case "updatesubscription":
+		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
+			Name:                    sub,
+			ModifyVisibilityTimeout: 60,
+			//			Autoextend:              true,
+		})
+		if err != nil {
+			log.Fatalf("UpdateSubscription failed: %v", err)
+		}
+		glog.Infof("Subscription Updated!\nID: %s\n", sub)
+
+	case "deletesubscription":
+		r, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("DeleteSubscription failed: %v", err)
+		}
+		if r.Success {
+			glog.Infof("Subscription ID: %s deleted successfully", sub)
+		} else {
+			glog.Infof("Subscription ID: %s not found", sub)
+		}
+
+	case "listsubscriptions":
+		r, err := c.ListSubscriptions(context.Background(), &pb.Empty{})
+		if err != nil {
+			log.Fatalf("ListSubscriptions failed: %v", err)
+		}
+		fmt.Printf("r.Subscriptions: %v\n", r.Subscriptions)
 
 	default:
 		fmt.Println("Invalid method, try again...")
