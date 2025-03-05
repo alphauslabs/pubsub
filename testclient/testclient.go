@@ -88,6 +88,8 @@ func main() {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
 
+		ackCount := 0 //counter for mssges
+
 		for {
 			rec, err := r.Recv()
 			if err == io.EOF {
@@ -105,7 +107,9 @@ func main() {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
+			ackCount++ //increment
 		}
+		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
 
