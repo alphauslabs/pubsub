@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -106,7 +107,6 @@ func main() {
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
 
-
 			if *processingTime > 0 { // can set time=0 for instant ack
 				startTime := time.Now()
 				ticker := time.NewTicker(5 * time.Second)
@@ -148,14 +148,21 @@ func main() {
 				}
 			}
 
-
+			// Acknowledge the message
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
-			glog.Infof("Acknowledge Response: %v\n", ackres)
-			ackCount++ //increment
-			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
+
+			// Check if the message exists in storage
+			_, err = storage.GetMessage(rec.Id)
+			if err == nil { //no error, msg exists
+				glog.Infof("Acknowledge Response: %v\n", ackres)
+				ackCount++
+				glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
+			} else {
+				glog.Infof("Message %s not found in storage, skipping.\n", rec.Id)
+			}
 		}
 
 	case "createsubscription":

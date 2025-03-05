@@ -152,7 +152,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 				// Try to acquire lock for this message at subscription level
 				if !message.LockForSubscription(in.Subscription) {
-					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...", 
+					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...",
 						message.Id, in.Subscription)
 					continue
 				}
@@ -175,10 +175,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					}
 					unlockBin, _ := json.Marshal(unlockData)
 					s.Op.Broadcast(context.Background(), unlockBin)
-					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v", 
+					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v",
 						message.Id, clientID, in.Subscription, err)
 				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s", 
+					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s",
 						message.Id, clientID, in.Subscription)
 					// Mark this client as having processed the message
 					message.ProcessedBy[clientID] = true
