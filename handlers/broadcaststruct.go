@@ -58,7 +58,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 			Subscription: &pb.Subscription{
 				Name:       subName,
 				Topic:      topic,
-				AutoExtend: autoExtend, // Now included in memory structure
+				Autoextend: autoExtend, // Now included in memory structure
 			},
 		}
 	}
@@ -83,7 +83,7 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	glog.Info("STRUCT-Leader: Broadcasting updated topic-subscription structure with AutoExtend.")
 	for topic, subs := range latest {
 		for subName, sub := range subs {
-			glog.Infof("STRUCT-Leader: %s -> %s (AutoExtend: %t)", topic, subName, sub.Subscription.AutoExtend)
+			glog.Infof("STRUCT-Leader: %s -> %s (AutoExtend: %t)", topic, subName, sub.Subscription.Autoextend)
 		}
 	}
 
