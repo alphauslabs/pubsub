@@ -138,39 +138,29 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				if message.SentToSubs == nil {
 					message.SentToSubs = make(map[string]bool)
 				}
-
-				// First check if this subscription has already received this message
-				if message.HasBeenSentToSubscription(in.Subscription) {
-					message.Mu.Unlock()
-					continue
-				}
+				message.Mu.Unlock()
 
 				// Skip if this client has already processed this message
 				if message.ProcessedBy[clientID] {
-					message.Mu.Unlock()
 					continue
 				}
-
-				// Mark this client as having processed the message and mark subscription
-				message.ProcessedBy[clientID] = true
-				message.MarkSentToSubscription(in.Subscription)
-				message.Mu.Unlock()
 
 				// Now check if message is deleted
 				if atomic.LoadInt32(&message.Deleted) == 1 {
 					continue
 				}
 
-				// Try to acquire lock for this message at client level
-				if !atomic.CompareAndSwapInt32(&message.Locked, 0, 1) {
-					glog.V(2).Infof("[Subscribe] Message %s is locked by another client, skipping...", message.Id)
+				// Try to acquire lock for this message at subscription level
+				if !message.LockForSubscription(in.Subscription) {
+					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...", 
+						message.Id, in.Subscription)
 					continue
 				}
 
-				// Broadcast lock request to all nodes
+				// Broadcast lock request to all nodes with subscription info
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s", message.Id, in.Topic, clientID)),
+					Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s:%s", message.Id, in.Topic, in.Subscription, clientID)),
 				}
 				bin, _ := json.Marshal(broadcastData)
 				s.Op.Broadcast(context.Background(), bin)
@@ -178,23 +168,25 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				// Send the message to the client
 				if err := stream.Send(message.Message); err != nil {
 					// Release lock and broadcast unlock if sending fails
-					atomic.StoreInt32(&message.Locked, 0)
+					message.UnlockForSubscription(in.Subscription)
 					unlockData := handlers.BroadCastInput{
 						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s", message.Id, clientID)),
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
 					}
 					unlockBin, _ := json.Marshal(unlockData)
 					s.Op.Broadcast(context.Background(), unlockBin)
-					glog.Errorf("[Subscribe] Failed to send message %s to client %s: %v", 
-						message.Id, clientID, err)
+					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v", 
+						message.Id, clientID, in.Subscription, err)
 				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to client %s", 
-						message.Id, clientID)
+					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s", 
+						message.Id, clientID, in.Subscription)
+					// Mark this client as having processed the message
+					message.ProcessedBy[clientID] = true
 					// Release lock and broadcast unlock after successful send
-					atomic.StoreInt32(&message.Locked, 0)
+					message.UnlockForSubscription(in.Subscription)
 					unlockData := handlers.BroadCastInput{
 						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s", message.Id, clientID)),
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
 					}
 					unlockBin, _ := json.Marshal(unlockData)
 					s.Op.Broadcast(context.Background(), unlockBin)
