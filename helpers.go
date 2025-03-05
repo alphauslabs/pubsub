@@ -223,7 +223,7 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 	}
 
 	// Ensure only autoextend-enabled messages get extended
-	sub, err := storage.GetSubscription(subscriberID)
+	sub, err := storage.GetSubscribtionsForTopic(subscriberID)
 	if err != nil {
 		glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
 		return
@@ -249,7 +249,6 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 	s.Op.Broadcast(context.TODO(), msgBytes)
 	glog.Infof("[AutoExtend] Node %s auto-extended timeout for message: %s", s.Op.HostPort(), messageID)
 }
-
 
 // HandleBroadcastMessage processes broadcast messages received from other nodes
 func (s *server) HandleBroadcastMessage(msgType string, msgData []byte) error {
