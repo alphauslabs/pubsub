@@ -79,7 +79,15 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 		return
 	}
 
-	// Marshal topic-subscription data
+	//log message to see the broadcasted message
+	glog.Info("STRUCT-Leader: Broadcasting updated topic-subscription structure with AutoExtend.")
+	for topic, subs := range latest {
+		for subName, sub := range subs {
+			glog.Infof("STRUCT-Leader: %s -> %s (AutoExtend: %t)", topic, subName, sub.Subscription.AutoExtend)
+		}
+	}
+
+	// Marshal topic-subscription data into JSON
 	msgData, err := json.Marshal(latest)
 	if err != nil {
 		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
