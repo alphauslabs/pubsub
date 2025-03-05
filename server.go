@@ -174,7 +174,15 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
 		glog.Infof("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
-		return nil, status.Error(codes.NotFound, "message not found")
+		// assume msg already acknowledged and removed
+		glog.Infof("[Acknowledge] Message %s not found in storage. It may have been removed after acknowledgment: %v", in.Id, err)
+		return &pb.AcknowledgeResponse{Success: true}, nil // Return success
+	}
+
+	// Check if message has already been processed
+	if msg.Processed {
+		glog.Infof("[Acknowledge] Message %s has already been processed, skipping.", in.Id)
+		return &pb.AcknowledgeResponse{Success: true}, nil // Return success
 	}
 
 	// Update the processed status in Spanner
