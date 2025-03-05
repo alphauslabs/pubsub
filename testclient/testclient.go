@@ -11,7 +11,6 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -106,7 +105,7 @@ func main() {
 
 			// Simulate processing
 			glog.Infof("Processing message: %v\n", rec.Id)
-			time.Sleep(10 * time.Second) // Simulate processing time
+			time.Sleep(5 * time.Second) // Simulate processing time
 
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
@@ -114,8 +113,8 @@ func main() {
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
 			ackCount++ //increment
+			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 		}
-		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
 
