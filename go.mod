@@ -9,10 +9,10 @@ require (
 	github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/flowerinthenight/timedoff v1.0.2
-	github.com/golang/glog v1.2.3
+	github.com/golang/glog v1.2.4
 	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.219.0
-	google.golang.org/grpc v1.70.0
+	google.golang.org/grpc v1.71.0
 )
 
 require (
