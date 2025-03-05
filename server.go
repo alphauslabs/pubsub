@@ -357,14 +357,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
 
-	// Delete topic
-	topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{topicMutation})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-	}
+	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// Delete topic
+		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
 
-	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		// Delete all related subscriptions
 		stmt := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
@@ -372,8 +368,16 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 				"Topic": req.Name,
 			},
 		}
-		_, err = txn.Update(ctx, stmt)
-		if err != nil {
+
+		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
+			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+		}
+
+		iter := txn.Query(ctx, stmt)
+		defer iter.Stop()
+
+		_, err := iter.Next()
+		if err != nil && err != iterator.Done {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -384,6 +388,20 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		glog.Infof("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
+
+	// Remove from in-memory storage
+	if err := storage.RemoveTopic(req.Name); err != nil {
+		glog.Infof("Failed to remove topic from memory: %v", err) // Continue to broadcast the deletion
+	}
+
+	glog.Infof("Broadcasting topic deletion for %s", req.Name)
+	broadcastData := handlers.BroadCastInput{
+		Type: "topicdeleted",
+		Msg:  []byte(req.Name),
+	}
+	bin, _ := json.Marshal(broadcastData)
+	s.Op.Broadcast(ctx, bin)
+
 	go func() {
 		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 	}()

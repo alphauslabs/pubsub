@@ -11,7 +11,6 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

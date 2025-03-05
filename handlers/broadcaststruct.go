@@ -16,7 +16,6 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// Global variables to track last broadcast state
 var (
 	lastBroadcasted = make(map[string]map[string]*storage.Subscription)
 )
@@ -53,12 +52,12 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 			topicSub[topic] = make(map[string]*storage.Subscription)
 		}
 
-		// Store subscription with autoextend
+		// Store topic-subscription with autoextend structure
 		topicSub[topic][subName] = &storage.Subscription{
 			Subscription: &pb.Subscription{
 				Name:       subName,
 				Topic:      topic,
-				Autoextend: autoExtend, // Now included in memory structure
+				Autoextend: autoExtend,
 			},
 		}
 	}
