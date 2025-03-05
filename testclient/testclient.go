@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
@@ -102,6 +103,11 @@ func main() {
 			}
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
+
+			// Simulate processing
+			glog.Infof("Processing message: %v\n", rec.Id)
+			time.Sleep(10 * time.Second) // Simulate processing time
+
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
