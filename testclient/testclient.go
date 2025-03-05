@@ -12,7 +12,9 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -106,7 +108,6 @@ func main() {
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
 
-
 			if *processingTime > 0 { // can set time=0 for instant ack
 				startTime := time.Now()
 				ticker := time.NewTicker(5 * time.Second)
@@ -148,14 +149,19 @@ func main() {
 				}
 			}
 
-
+			// Acknowledge the message
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
+				if status.Code(err) == codes.NotFound { // match return error code
+					glog.Infof("Acknowledge failed: Message %s not found: %v", rec.Id, err)
+					continue // Skip to the next message
+				}
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
-			ackCount++ //increment
+			ackCount++
 			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
+
 		}
 
 	case "createsubscription":
