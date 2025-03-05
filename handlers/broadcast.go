@@ -143,6 +143,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// 	}
 	// }
 
+	// get the message from storage
 	msg, err := storage.GetMessage(messageID)
 	if err != nil {
 		return nil, err
@@ -151,11 +152,41 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 		return nil, fmt.Errorf("message not found")
 	}
 
-	atomic.StoreInt32(&msg.Locked, 1) // Lock the message
+	// get the topic associated with the message
+	if msg.Topic == "" {
+		return nil, fmt.Errorf("message %s does not have an associated topic", messageID)
+	}
+
+	subscriptions, err := storage.GetSubscribtionsForTopic(msg.Topic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve subscriptions from memory: %v", err)
+	}
+
+	// check if autoextend should be applied
+	autoExtend := false
+	for _, sub := range subscriptions {
+		if sub.Subscription.Autoextend {
+			autoExtend = true
+			break
+		}
+	}
+
+	// Lock the message atomically
+	atomic.StoreInt32(&msg.Locked, 1)
+
+	// Update the message's visibilityTimeout based on AutoExtend
 	// Todo: check if actually updated...
 	msg.Mu.Lock()
 	msg.Age = time.Now().UTC()
+
+	if autoExtend {
+		atomic.StoreInt32(&msg.AutoExtend, 1) //
+	} else {
+		atomic.StoreInt32(&msg.AutoExtend, 0) //
+	}
+
 	msg.Mu.Unlock()
+
 	// Each node maintains its own timer
 	// Create new lock
 	// lockInfo := MessageLockInfo{
@@ -169,6 +200,7 @@ func handleLockMsg(app *app.PubSub, messageID string, params []string) ([]byte, 
 	// // Mark this node as acknowledging the lock
 	// lockInfo.LockHolders[app.NodeID] = true
 
+	glog.Infof("[Lock] Message %s locked successfully with AutoExtend: %t", messageID, autoExtend)
 	// app.MessageLocks.Store(messageID, lockInfo)
 
 	// // Set up a local timer to clear the lock when it expires
