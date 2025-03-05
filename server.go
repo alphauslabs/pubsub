@@ -396,7 +396,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
 	broadcastData := handlers.BroadCastInput{
-		Type: "topic_deleted",
+		Type: "topicdeleted",
 		Msg:  []byte(req.Name),
 	}
 	bin, _ := json.Marshal(broadcastData)
