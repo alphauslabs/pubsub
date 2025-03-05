@@ -38,8 +38,6 @@ func main() {
 	defer conn.Close()
 	c := pb.NewPubSubServiceClient(conn)
 
-	// Contact the server and print out its response.
-
 	switch *method {
 	case "publish":
 		r, err := c.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: payload})
@@ -47,7 +45,6 @@ func main() {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		glog.Infof("Message Published!\nID: %s", r.MessageId)
-
 	case "listtopics":
 		r, err := c.ListTopics(context.Background(), &pb.Empty{})
 		if err != nil {
