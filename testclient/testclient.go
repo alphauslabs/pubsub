@@ -108,10 +108,31 @@ func main() {
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
 
 			if *processingTime > 0 { // can set time=0 for instant ack
-				// Simulate processing with logs every 5 seconds
 				startTime := time.Now()
 				ticker := time.NewTicker(5 * time.Second)
+				extendThreshold := 20 * time.Second // when to request extension
 				processingDone := time.After(time.Duration(*processingTime) * time.Second)
+				stopExtension := make(chan bool)
+
+				// go routine to request visibility extension every "extendThreshold" seconds
+				go func() {
+					for {
+						select {
+						case <-time.After(extendThreshold):
+							glog.Infof("Requesting visibility extension for message %s", rec.Id)
+							_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+								Id:             rec.Id,
+								SubscriptionId: sub,
+								NewTimeout:     30,
+							})
+							if err != nil {
+								glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
+							}
+						case <-stopExtension:
+							return // stop requesting visibility extension once processing is done
+						}
+					}
+				}()
 
 				for {
 					select {
