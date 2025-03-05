@@ -258,10 +258,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		Name: req.Name,
 	}
 
-	// -----for testing only-----------//
-	go func() {
-		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
-	}()
+	go s.notifyLeader(notifleader)
 
 	return topic, nil
 }
@@ -345,9 +342,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	updatedTopic := &pb.Topic{
 		Name: req.NewName,
 	}
-	go func() {
-		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
-	}()
+	go s.notifyLeader(notifleader)
 
 	return updatedTopic, nil
 }
@@ -384,9 +379,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		glog.Infof("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
-	go func() {
-		s.notifyLeader(notifleader) // Send flag=1 to indicate an update
-	}()
+	go s.notifyLeader(notifleader)
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
@@ -422,43 +415,6 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 	}
 
 	return &pb.ListTopicsResponse{Topics: topics}, nil
-}
-
-func (s *server) notifyLeader(flag int) {
-	// Create a simple payload with just the flag
-	data := map[string]interface{}{
-		"flag": flag,
-	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		glog.Infof("Error marshaling data: %v", err)
-		return
-	}
-
-	// Create SendInput with topicsubupdates type
-	input := handlers.SendInput{
-		Type: "topicsubupdates",
-		Msg:  jsonData,
-	}
-
-	// Serialize the SendInput
-	inputData, err := json.Marshal(input)
-	if err != nil {
-		glog.Infof("Error marshaling send input: %v", err)
-		return
-	}
-
-	// Send to leader with timeout
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	_, err = s.Op.Send(timeoutCtx, inputData)
-	if err != nil {
-		glog.Infof("Failed to send to leader: %v", err)
-	} else {
-		glog.Infof("Successfully notified leader with flag: %d", flag)
-	}
 }
 
 func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
@@ -622,4 +578,41 @@ func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSu
 	return &pb.ListSubscriptionsResponse{
 		Subscriptions: subscriptions,
 	}, nil
+}
+
+func (s *server) notifyLeader(flag byte) {
+	// Create a simple payload with just the flag
+	data := map[string]interface{}{
+		"flag": flag,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		glog.Infof("Error marshaling data: %v", err)
+		return
+	}
+
+	// Create SendInput with topicsubupdates type
+	input := handlers.SendInput{
+		Type: "topicsubupdates",
+		Msg:  jsonData,
+	}
+
+	// Serialize the SendInput
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		glog.Infof("Error marshaling send input: %v", err)
+		return
+	}
+
+	// Send to leader with timeout
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	_, err = s.Op.Send(timeoutCtx, inputData)
+	if err != nil {
+		glog.Infof("Failed to send to leader: %v", err)
+	} else {
+		glog.Infof("Successfully notified leader with flag: %d", flag)
+	}
 }
