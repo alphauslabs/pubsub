@@ -11,10 +11,14 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked     int32
-	AutoExtend int32
-	Deleted    int32
-	Age        time.Time
+	Locked        int32
+	AutoExtend    int32
+	Deleted       int32
+	Age           time.Time
+	// Track which clients have processed this message
+	ProcessedBy map[string]bool // map[clientID]bool
+	// Track which subscriptions have received this message
+	SentToSubs map[string]bool // map[subscriptionID]bool
 	Mu         sync.Mutex
 }
 
