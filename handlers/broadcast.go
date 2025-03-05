@@ -18,6 +18,7 @@ const (
 	Topicsub         = "topicsub"
 	LeaderLiveliness = "leaderliveliness"
 	MsgEvent         = "msgEvent"
+	TopicDeleted     = "topicdeleted"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -47,6 +48,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	Topicsub:         handleBroadcastedTopicsub,
 	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
 	LeaderLiveliness: handleLeaderLiveliness,
+	TopicDeleted:     handleTopicDeleted,
 }
 
 // Root handler for op.Broadcast()
@@ -287,5 +289,20 @@ func handleLeaderLiveliness(app *app.PubSub, msg []byte) ([]byte, error) {
 	if strings.HasPrefix(m, "1") {
 		app.LeaderActive.On()
 	}
+	return nil, nil
+}
+
+// Handle topic deletion
+func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
+	topicName := string(msg)
+	glog.Infof("[Delete] Received topic deletion notification for topic: %s", topicName)
+
+	// Remove from memory
+	if err := storage.RemoveTopic(topicName); err != nil {
+		glog.Infof("[Delete] Error removing topic from memory: %v", err)
+		return nil, fmt.Errorf("failed to remove topic from memory: %w", err)
+	}
+
+	glog.Infof("[Delete] Successfully removed topic %s from memory", topicName)
 	return nil, nil
 }
