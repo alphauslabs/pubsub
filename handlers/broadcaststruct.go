@@ -23,7 +23,7 @@ var (
 
 func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string]map[string]*storage.Subscription {
 	stmt := spanner.Statement{
-		SQL: `SELECT topic, ARRAY_AGG(name) AS subscriptions FROM Subscriptions WHERE name IS NOT NULL GROUP BY topic`,
+		SQL: `SELECT topic, name AS subscription, autoextend FROM Subscriptions WHERE name IS NOT NULL ORDER BY topic, subscription`,
 	}
 
 	iter := client.Single().Query(ctx, stmt)
@@ -41,26 +41,26 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		}
 
 		var topic string
-		var subscriptions []string
-		if err := row.Columns(&topic, &subscriptions); err != nil {
+		var subName string
+		var autoExtend bool
+		if err := row.Columns(&topic, &subName, &autoExtend); err != nil {
 			glog.Infof("STRUCT-Error reading row: %v", err)
 			continue
 		}
 
-		subscriptions = append([]string{}, subscriptions...)
-
-		// Create a map for each topic's subscriptions
-		subMap := make(map[string]*storage.Subscription)
-		for _, subName := range subscriptions {
-			subMap[subName] = &storage.Subscription{
-				Subscription: &pb.Subscription{
-					Name:  subName,
-					Topic: topic,
-				},
-			}
+		// Ensure the topic exists in the map
+		if _, exists := topicSub[topic]; !exists {
+			topicSub[topic] = make(map[string]*storage.Subscription)
 		}
 
-		topicSub[topic] = subMap
+		// Store subscription with autoextend
+		topicSub[topic][subName] = &storage.Subscription{
+			Subscription: &pb.Subscription{
+				Name:       subName,
+				Topic:      topic,
+				AutoExtend: autoExtend, // Now included in memory structure
+			},
+		}
 	}
 
 	return topicSub
