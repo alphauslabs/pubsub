@@ -89,6 +89,10 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
 
+	// Generate unique client ID for this subscription stream
+	clientID := uuid.New().String()
+	glog.Infof("[Subscribe] Assigned client ID %s for subscription %s", clientID, in.Subscription)
+
 	// Validate if subscription exists for the given topic
 	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.Topic)
 	err := s.checkIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
@@ -126,26 +130,66 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// Process each message
 			for _, message := range messages {
-				// Skip if message is already locked by another subscriber
-				if atomic.LoadInt32(&message.Deleted) == 1 || atomic.LoadInt32(&message.Locked) == 1 {
-					glog.Infof("[Subscribe] Message %s is already locked or deleted, skipping...", message.Id)
+				message.Mu.Lock()
+				// Initialize maps if needed
+				if message.ProcessedBy == nil {
+					message.ProcessedBy = make(map[string]bool)
+				}
+				if message.SentToSubs == nil {
+					message.SentToSubs = make(map[string]bool)
+				}
+				message.Mu.Unlock()
+
+				// Skip if this client has already processed this message
+				if message.ProcessedBy[clientID] {
 					continue
 				}
 
-				// Attempt to acquire distributed lock for the message
-				// Default visibility timeout of 30 seconds
-				if err := s.broadcastLock(stream.Context(), message.Id, in.Topic); err != nil {
-					glog.Infof("[Subscribe] Failed to acquire lock for message %s: %v", message.Id, err)
-					continue // Skip if unable to acquire lock
+				// Now check if message is deleted
+				if atomic.LoadInt32(&message.Deleted) == 1 {
+					continue
 				}
-				glog.Infof("[Subscribe] Successfully acquired lock for message %s", message.Id)
 
-				// Stream message to subscriber
+				// Try to acquire lock for this message at subscription level
+				if !message.LockForSubscription(in.Subscription) {
+					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...", 
+						message.Id, in.Subscription)
+					continue
+				}
+
+				// Broadcast lock request to all nodes with subscription info
+				broadcastData := handlers.BroadCastInput{
+					Type: handlers.MsgEvent,
+					Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s:%s", message.Id, in.Topic, in.Subscription, clientID)),
+				}
+				bin, _ := json.Marshal(broadcastData)
+				s.Op.Broadcast(context.Background(), bin)
+
+				// Send the message to the client
 				if err := stream.Send(message.Message); err != nil {
-					// Release lock if sending fails
-					glog.Errorf("[Subscribe] Failed to send message %s to subscriber %s: %v", message.Id, in.Subscription, err)
+					// Release lock and broadcast unlock if sending fails
+					message.UnlockForSubscription(in.Subscription)
+					unlockData := handlers.BroadCastInput{
+						Type: handlers.MsgEvent,
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
+					}
+					unlockBin, _ := json.Marshal(unlockData)
+					s.Op.Broadcast(context.Background(), unlockBin)
+					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v", 
+						message.Id, clientID, in.Subscription, err)
 				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to subscriber %s", message.Id, in.Subscription)
+					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s", 
+						message.Id, clientID, in.Subscription)
+					// Mark this client as having processed the message
+					message.ProcessedBy[clientID] = true
+					// Release lock and broadcast unlock after successful send
+					message.UnlockForSubscription(in.Subscription)
+					unlockData := handlers.BroadCastInput{
+						Type: handlers.MsgEvent,
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
+					}
+					unlockBin, _ := json.Marshal(unlockData)
+					s.Op.Broadcast(context.Background(), unlockBin)
 				}
 			}
 		}
