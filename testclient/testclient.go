@@ -13,6 +13,8 @@ import (
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -143,12 +145,13 @@ func main() {
 					case <-processingDone:
 						ticker.Stop()
 						glog.Infof("[Processing] Completed message %v processing after %d seconds", rec.Id, *processingTime)
+						close(stopExtension) // Stop the visibility extension goroutine
 						break
 					}
 				}
 			}
 
-
+			// Acknowledge the message
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
 				log.Fatalf("Acknowledge failed: %v", err)
