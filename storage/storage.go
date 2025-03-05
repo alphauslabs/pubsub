@@ -205,6 +205,21 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	return subList, nil
 }
 
+// RemoveTopic removes a topic from storage
+func RemoveTopic(topicName string) error {
+	topicMsgMu.Lock()
+	defer topicMsgMu.Unlock()
+
+	if _, exists := TopicMessages[topicName]; !exists {
+		return ErrTopicNotFound
+	}
+
+	delete(TopicMessages, topicName)
+	delete(topicSubs, topicName)
+
+	return nil
+}
+
 // RemoveMessage removes a message from storage
 func RemoveMessage(id string, topicName string) error {
 	topicMsgMu.Lock()

@@ -227,6 +227,16 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 	}
 
 	// Ensure only autoextend-enabled messages get extended
+
+	sub, err := storage.GetSubscribtionsForTopic(subscriberID)
+	if err != nil {
+		glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
+		return
+	}
+	if !sub.Autoextend {
+		glog.Infof("[AutoExtend] Subscription %s does not have autoextend enabled", subscriberID)
+		return
+	}
 	// sub, err := storage.GetSubscription(subscriberID) // todo: commented to fix errros, please uncomment if needed
 	// if err != nil {
 	// 	glog.Errorf("[AutoExtend] Failed to fetch subscription %s: %v", subscriberID, err)
@@ -235,7 +245,7 @@ func (s *server) AutoExtendTimeout(messageID string, subscriberID string, visibi
 	// if !sub.Autoextend {
 	// 	glog.Infof("[AutoExtend] Subscription %s does not have autoextend enabled", subscriberID)
 	// 	return
-	// }
+	//
 
 	// Extend visibility timeout
 	newExpiresAt := time.Now().Add(visibilityTimeout)
