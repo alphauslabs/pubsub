@@ -177,8 +177,8 @@ func main() {
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
 			ackCount++ //increment
+			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 		}
-		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
 
