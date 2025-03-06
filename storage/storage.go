@@ -11,17 +11,14 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked     int32
-	AutoExtend int32
-	Deleted    int32
-	Age        time.Time
-	// Track which clients have processed this message
-	ProcessedBy map[string]bool // map[clientID]bool
-	// Track which subscriptions have received this message
-	SentToSubs map[string]bool // map[subscriptionID]bool
-	// Track which subscriptions have locked this message
-	SubscriptionLocks map[string]int32 // map[subscriptionID]locked
-	Mu                sync.Mutex
+	Locked         int32
+	AutoExtend     int32
+	Deleted        int32
+	Age            time.Time
+	ProcessedCount int32    // count of subscriptions that processed this message (fanout)
+	ProcessedBy    map[string]struct{} // track which clients have processed this message (load balance)
+	ProcessingBy   string   // track which client is currently processing this message
+	Mu             sync.Mutex
 }
 
 type MessageMap struct {
@@ -265,53 +262,69 @@ func RemoveMessage(id string, topicName string) error {
 	return ErrMessageNotFound
 }
 
-// HasBeenSentToSubscription checks if a message has been sent to a specific subscription
-func (m *Message) HasBeenSentToSubscription(subscriptionID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-	return m.SentToSubs[subscriptionID]
+// HasBeenProcessedBySubscription checks if a message has been sent to any subscription (fanout)
+func (m *Message) HasBeenProcessedBySubscription() bool {
+	return atomic.LoadInt32(&m.ProcessedCount) > 0
 }
 
-// MarkSentToSubscription marks a message as sent to a specific subscription
-func (m *Message) MarkSentToSubscription(subscriptionID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-	if m.SentToSubs == nil {
-		m.SentToSubs = make(map[string]bool)
-	}
-	m.SentToSubs[subscriptionID] = true
+// MarkAsProcessedBySubscription marks a message as sent to a subscription (fanout)
+func (m *Message) MarkAsProcessedBySubscription() {
+	atomic.AddInt32(&m.ProcessedCount, 1)
 }
 
-// IsLockedBySubscription checks if a message is locked by a specific subscription
-func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
+// IsBeingProcessed checks if a message is currently being processed by any client
+func (m *Message) IsBeingProcessed() bool {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	if m.SubscriptionLocks == nil {
-		m.SubscriptionLocks = make(map[string]int32)
-	}
-	return m.SubscriptionLocks[subscriptionID] == 1
+	return m.ProcessingBy != ""
 }
 
-// LockForSubscription locks a message for a specific subscription
-func (m *Message) LockForSubscription(subscriptionID string) bool {
+// StartProcessing marks a message as being processed by a specific client
+func (m *Message) StartProcessing(clientID string) bool {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	if m.SubscriptionLocks == nil {
-		m.SubscriptionLocks = make(map[string]int32)
-	}
-	if m.SubscriptionLocks[subscriptionID] == 1 {
+	
+	// If message is already being processed, return false
+	if m.ProcessingBy != "" {
 		return false
 	}
-	m.SubscriptionLocks[subscriptionID] = 1
+	
+	m.ProcessingBy = clientID
 	return true
 }
 
-// UnlockForSubscription unlocks a message for a specific subscription
-func (m *Message) UnlockForSubscription(subscriptionID string) {
+// EndProcessing marks a message as no longer being processed
+func (m *Message) EndProcessing(clientID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	if m.SubscriptionLocks == nil {
-		m.SubscriptionLocks = make(map[string]int32)
+	
+	if m.ProcessingBy == clientID {
+		m.ProcessingBy = ""
 	}
-	m.SubscriptionLocks[subscriptionID] = 0
 }
+// HasBeenProcessedByClient checks if a message has been processed by a specific client (load balance)
+func (m *Message) HasBeenProcessedByClient(clientID string) bool {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	
+	if m.ProcessedBy == nil {
+		m.ProcessedBy = make(map[string]struct{})
+	}
+	
+	_, exists := m.ProcessedBy[clientID]
+	return exists
+}
+
+// MarkAsProcessedByClient marks a message as processed by a specific client (load balance)
+func (m *Message) MarkAsProcessedByClient(clientID string) {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	
+	if m.ProcessedBy == nil {
+		m.ProcessedBy = make(map[string]struct{})
+	}
+	
+	m.ProcessedBy[clientID] = struct{}{}
+	m.ProcessingBy = "" // Clear processing state when marking as processed
+}
+

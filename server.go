@@ -89,12 +89,11 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
 
-	// Generate unique client ID for this subscription stream
+	// Generate a unique client ID for this subscriber
 	clientID := uuid.New().String()
 	glog.Infof("[Subscribe] Assigned client ID %s for subscription %s", clientID, in.Subscription)
 
-	// Validate if subscription exists for the given topic
-	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", in.Topic)
+	// Validate subscription exists for the topic
 	err := s.checkIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
@@ -103,7 +102,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
 
-	// Track last message count to avoid duplicate logs
+	// track last message count to avoid duplicate logs
 	lastMessageCount := 0
 
 	// Continuous loop to stream messages
@@ -114,7 +113,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
-			// Get messages from local storage for the topic
+			// will get messages for the topic
 			messages, err := storage.GetMessagesByTopic(in.Topic)
 			if err != nil {
 				glog.Infof("[Subscribe] Error getting messages: %v", err)
@@ -125,7 +124,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
 				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.Topic)
-				time.Sleep(time.Second) // todo: not sure if this is the best way
+				time.Sleep(time.Second)
 				continue
 			}
 
@@ -137,66 +136,31 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// Process each message
 			for _, message := range messages {
-				message.Mu.Lock()
-				// Initialize maps if needed
-				if message.ProcessedBy == nil {
-					message.ProcessedBy = make(map[string]bool)
-				}
-				if message.SentToSubs == nil {
-					message.SentToSubs = make(map[string]bool)
-				}
-				message.Mu.Unlock()
-
-				// Skip if this client has already processed this message
-				if message.ProcessedBy[clientID] {
+				// Check if message is locked or deleted
+				if atomic.LoadInt32(&message.Locked) == 1 || 
+				   atomic.LoadInt32(&message.Deleted) == 1 {
 					continue
 				}
 
-				// Now check if message is deleted
-				if atomic.LoadInt32(&message.Deleted) == 1 {
-					continue
-				}
+				// Fanout: Check if this subscription has received this message
+				if !message.HasBeenProcessedBySubscription() {
+					// Mark message as sent to this subscription (fanout)
+					message.MarkAsProcessedBySubscription()
+					
+					// Load Balance: Check if this client has processed this message
+					if !message.HasBeenProcessedByClient(clientID) {
+						// Mark message as processed by this client (load balance)
+						message.MarkAsProcessedByClient(clientID)
 
-				// Try to acquire lock for this message at subscription level
-				if !message.LockForSubscription(in.Subscription) {
-					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...",
-						message.Id, in.Subscription)
-					continue
-				}
-
-				// Broadcast lock request to all nodes with subscription info
-				broadcastData := handlers.BroadCastInput{
-					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s:%s", message.Id, in.Topic, in.Subscription, clientID)),
-				}
-				bin, _ := json.Marshal(broadcastData)
-				s.Op.Broadcast(context.Background(), bin)
-
-				// Send the message to the client
-				if err := stream.Send(message.Message); err != nil {
-					// Release lock and broadcast unlock if sending fails
-					message.UnlockForSubscription(in.Subscription)
-					unlockData := handlers.BroadCastInput{
-						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
+						// Send the message to the client
+						if err := stream.Send(message.Message); err != nil {
+							glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v",
+								message.Id, clientID, in.Subscription, err)
+						} else {
+							glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s",
+								message.Id, clientID, in.Subscription)
+						}
 					}
-					unlockBin, _ := json.Marshal(unlockData)
-					s.Op.Broadcast(context.Background(), unlockBin)
-					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v",
-						message.Id, clientID, in.Subscription, err)
-				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s",
-						message.Id, clientID, in.Subscription)
-					// Mark this client as having processed the message
-					message.ProcessedBy[clientID] = true
-					// Release lock and broadcast unlock after successful send
-					message.UnlockForSubscription(in.Subscription)
-					unlockData := handlers.BroadCastInput{
-						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
-					}
-					unlockBin, _ := json.Marshal(unlockData)
-					s.Op.Broadcast(context.Background(), unlockBin)
 				}
 			}
 		}
@@ -344,49 +308,61 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 
 func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "Current topic name is required")
 	}
 	if req.NewName == "" {
-		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "New topic name is required")
 	}
 
-	// todo: delete the old then insert new
-	mutTopic := spanner.Update(TopicsTable,
-		[]string{"name", "updatedAt"},
-		[]interface{}{req.NewName, spanner.CommitTimestamp},
-	)
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
-	}
-
-	// Update all subscriptions referencing the old topic name
-	stmt := spanner.Statement{
-		SQL: `UPDATE Subscriptions
-			  SET topic = @newName,
-			  updatedAt = PENDING_COMMIT_TIMESTAMP()
-			  WHERE topic = @oldName`,
-		Params: map[string]interface{}{
-			"newName": req.NewName,
-			"oldName": req.Name,
-		},
-	}
-	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		_, err := txn.Update(ctx, stmt)
-		if err != nil {
-			return err
+	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// 1) Rename the topic in Topics table
+		stmtTopic := spanner.Statement{
+			SQL: `UPDATE Topics
+				  SET name = @newName,
+					  updatedAt = PENDING_COMMIT_TIMESTAMP()
+				  WHERE name = @oldName`,
+			Params: map[string]interface{}{
+				"oldName": req.Name,
+				"newName": req.NewName,
+			},
 		}
+		rowCount, err := txn.Update(ctx, stmtTopic)
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to rename topic: %v", err)
+		}
+		if rowCount == 0 {
+			return status.Errorf(codes.NotFound, "Topic %q does not exist", req.Name)
+		}
+
+		// 2) Update all Subscriptions referencing the old topic name
+		stmtSubs := spanner.Statement{
+			SQL: `UPDATE Subscriptions
+				  SET topic = @newName,
+					  updatedAt = PENDING_COMMIT_TIMESTAMP()
+				  WHERE topic = @oldName`,
+			Params: map[string]interface{}{
+				"oldName": req.Name,
+				"newName": req.NewName,
+			},
+		}
+		_, err = txn.Update(ctx, stmtSubs)
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to update subscriptions: %v", err)
+		}
+
 		return nil
 	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update subscriptions: %v", err)
+		return nil, err
 	}
-
 	updatedTopic := &pb.Topic{
 		Name: req.NewName,
 	}
+
+	// Notify the leader or cluster if needed
 	go s.notifyLeader(notifleader)
 
+	// Return the updated topic
 	return updatedTopic, nil
 }
 
@@ -396,26 +372,36 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// Delete topic
-		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		// 1) Check if topic exists
+		checkStmt := spanner.Statement{
+			SQL:    `SELECT name FROM Topics WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
+			Params: map[string]interface{}{"name": req.Name},
+		}
+		iter := txn.Query(ctx, checkStmt)
+		defer iter.Stop()
 
-		// Delete all related subscriptions
-		stmt := spanner.Statement{
+		_, err := iter.Next()
+		if err == iterator.Done {
+			return status.Errorf(codes.NotFound, "Topic %q does not exist", req.Name)
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to check topic existence: %v", err)
+		}
+
+		// 2) Delete the topic row
+		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
+			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+		}
+
+		// 3) Delete all related subscriptions referencing this topic
+		delSubs := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
 			Params: map[string]interface{}{
 				"Topic": req.Name,
 			},
 		}
-
-		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
-			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-		}
-
-		iter := txn.Query(ctx, stmt)
-		defer iter.Stop()
-
-		_, err := iter.Next()
-		if err != nil && err != iterator.Done {
+		if _, err := txn.Update(ctx, delSubs); err != nil {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -427,9 +413,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 
-	// Remove from in-memory storage
+	// Remove from in-memory storage (if you maintain a local cache)
 	if err := storage.RemoveTopic(req.Name); err != nil {
-		glog.Infof("Failed to remove topic from memory: %v", err) // Continue to broadcast the deletion
+		glog.Infof("Failed to remove topic from memory: %v", err)
+		// continuing so we can still broadcast the deletion
 	}
 
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
