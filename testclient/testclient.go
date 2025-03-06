@@ -103,6 +103,7 @@ func main() {
 
 		ackCount := 0 //counter for mssges
 
+	messageLoop:
 		for {
 			rec, err := r.Recv()
 			if err == io.EOF {
@@ -116,13 +117,12 @@ func main() {
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
 
-			if *processingTime > 0 { // Set processingTime=0 for instant acknowledgment
+			if *processingTime > 0 { // set processingTime=0 for instant acknowledgment
 				startTime := time.Now()
 				ticker := time.NewTicker(5 * time.Second)
 				extendThreshold := 20 * time.Second // When to request extension
 				processingDone := time.After(time.Duration(*processingTime) * time.Second)
 
-				// Buffered channel to avoid blocking
 				stopExtension := make(chan bool, 1)
 
 				// Handle visibility extension for non-autoextend subscriptions
@@ -159,15 +159,14 @@ func main() {
 						ticker.Stop()
 						glog.Infof("[Processing] Completed message %v processing after %d seconds", rec.Id, *processingTime)
 
-						// Stop extension requests only if it was started
 						if !isAutoExtend && *extendVisibility {
 							select {
-							case stopExtension <- true: // Send stop signal
-							default: // Prevent blocking if goroutine has already exited
+							case stopExtension <- true:
+							default:
 							}
-							close(stopExtension) // Close to ensure cleanup
+							close(stopExtension)
 						}
-						break
+						break messageLoop
 					}
 				}
 			}
