@@ -2,7 +2,6 @@ package leader
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"strconv"
 	"strings"
@@ -22,15 +21,7 @@ func LeaderCallBack(d interface{}, msg []byte) {
 		log.Fatalf("failed to convert string to int: %v", err)
 	}
 	atomic.StoreInt32(&IsLeader, int32(v))
-	in := struct {
-		Type string
-		Msg  []byte
-	}{
-		Type: "leaderliveliness",
-		Msg:  msg,
-	}
-	b, _ := json.Marshal(in)
-	res := o.Op.Broadcast(context.Background(), b)
+	res := o.Op.Broadcast(context.Background(), msg)
 	for _, r := range res {
 		if r.Error != nil {
 			glog.Errorf("Error broadcasting to %s: %v", r.Id, r.Error)
