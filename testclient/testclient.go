@@ -127,25 +127,25 @@ func main() {
 
 				// Handle visibility extension for non-autoextend subscriptions
 				if !isAutoExtend && *extendVisibility {
-					go func() {
+				go func() {
 						defer glog.Infof("[Extension] Stopped extension requests for message %s", rec.Id)
 
-						for {
-							select {
-							case <-time.After(extendThreshold):
-								glog.Infof("Requesting visibility extension for message %s", rec.Id)
-								_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-									Id:             rec.Id,
-									SubscriptionId: sub,
-								})
-								if err != nil {
-									glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
-								}
-							case <-stopExtension:
-								return // Stop requesting visibility extension once processing is done
+					for {
+						select {
+						case <-time.After(extendThreshold):
+							glog.Infof("Requesting visibility extension for message %s", rec.Id)
+							_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+								Id:             rec.Id,
+								SubscriptionId: sub,
+							})
+							if err != nil {
+								glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
 							}
+						case <-stopExtension:
+								return // Stop requesting visibility extension once processing is done
 						}
-					}()
+					}
+				}()
 				}
 
 				// Processing loop
@@ -171,14 +171,18 @@ func main() {
 				}
 			}
 			//Acknowledge the message
+			glog.Infof("[Acknowledge] Attempting to acknowledge message %s", rec.Id)
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
-				log.Fatalf("Acknowledge failed: %v", err)
+				glog.Errorf("[Acknowledge] Failed to acknowledge message %s: %v", rec.Id, err)
+				continue messageLoop // Skip to next message on error
 			}
-			glog.Infof("Acknowledge Response: %v\n", ackres)
+			glog.Infof("[Acknowledge] Successfully acknowledged message %s: %v", rec.Id, ackres)
 			ackCount++ //increment
-			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
-		}
+
+
+			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
+    }
 
 	case "createsubscription":
 
