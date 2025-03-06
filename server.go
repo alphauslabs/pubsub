@@ -391,12 +391,15 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	if err != nil {
 		return nil, err
 	}
+	updatedTopic := &pb.Topic{
+		Name: req.NewName,
+	}
 
 	// Notify the leader or cluster if needed
 	go s.notifyLeader(notifleader)
 
 	// Return the updated topic
-	return &pb.Topic{Name: req.NewName}, nil
+	return updatedTopic, nil
 }
 
 func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
