@@ -137,8 +137,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Process each message
 			for _, message := range messages {
 				// Check if message is locked or deleted
-				if atomic.LoadInt32(&message.Locked) == 1 || 
-				   atomic.LoadInt32(&message.Deleted) == 1 {
+				if atomic.LoadInt32(&message.Locked) == 1 ||
+					atomic.LoadInt32(&message.Deleted) == 1 {
 					continue
 				}
 
@@ -146,7 +146,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				if !message.HasBeenProcessedBySubscription() {
 					// Mark message as sent to this subscription (fanout)
 					message.MarkAsProcessedBySubscription()
-					
+
 					// Load Balance: Check if this client has processed this message
 					if !message.HasBeenProcessedByClient(clientID) {
 						// Mark message as processed by this client (load balance)
