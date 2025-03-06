@@ -159,7 +159,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 				// Try to acquire lock for this message at subscription level
 				if !message.LockForSubscription(in.Subscription) {
-					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...", 
+					glog.V(2).Infof("[Subscribe] Message %s is locked by another client in subscription %s, skipping...",
 						message.Id, in.Subscription)
 					continue
 				}
@@ -182,10 +182,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					}
 					unlockBin, _ := json.Marshal(unlockData)
 					s.Op.Broadcast(context.Background(), unlockBin)
-					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v", 
+					glog.Errorf("[Subscribe] Failed to send message %s to client %s in subscription %s: %v",
 						message.Id, clientID, in.Subscription, err)
 				} else {
-					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s", 
+					glog.Infof("[Subscribe] Successfully sent message %s to client %s in subscription %s",
 						message.Id, clientID, in.Subscription)
 					// Mark this client as having processed the message
 					message.ProcessedBy[clientID] = true
@@ -224,10 +224,8 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
-		glog.Infof("[Acknowledge] Error: Message %s not found in storage: %v", in.Id, err)
-		// assume msg already acknowledged and removed
-		glog.Infof("[Acknowledge] Message %s not found in storage. It may have been removed after acknowledgment: %v", in.Id, err)
-		return &pb.AcknowledgeResponse{Success: true}, nil // Return success
+		// Skip message
+		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
 	}
 
 	// Update the processed status in Spanner
