@@ -121,11 +121,15 @@ func main() {
 				ticker := time.NewTicker(5 * time.Second)
 				extendThreshold := 20 * time.Second // When to request extension
 				processingDone := time.After(time.Duration(*processingTime) * time.Second)
-				stopExtension := make(chan bool)
+
+				// Buffered channel to avoid blocking
+				stopExtension := make(chan bool, 1)
 
 				// Handle visibility extension for non-autoextend subscriptions
 				if !isAutoExtend && *extendVisibility {
 					go func() {
+						defer glog.Infof("[Extension] Stopped extension requests for message %s", rec.Id)
+
 						for {
 							select {
 							case <-time.After(extendThreshold):
@@ -154,8 +158,14 @@ func main() {
 					case <-processingDone:
 						ticker.Stop()
 						glog.Infof("[Processing] Completed message %v processing after %d seconds", rec.Id, *processingTime)
+
+						// Stop extension requests only if it was started
 						if !isAutoExtend && *extendVisibility {
-							stopExtension <- true // Stop extension requests
+							select {
+							case stopExtension <- true: // Send stop signal
+							default: // Prevent blocking if goroutine has already exited
+							}
+							close(stopExtension) // Close to ensure cleanup
 						}
 						break
 					}
