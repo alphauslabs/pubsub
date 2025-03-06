@@ -4,17 +4,12 @@ go 1.23.6
 
 require (
 	cloud.google.com/go/spanner v1.76.1
-	cloud.google.com/go/spanner v1.76.1
 	github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/flowerinthenight/timedoff v1.0.2
 	github.com/golang/glog v1.2.4
 	github.com/google/uuid v1.6.0
-<<<<<<< HEAD
-	google.golang.org/api v0.219.0
-=======
-	google.golang.org/api v0.223.0
->>>>>>> 63239e5c45117b5a6c4c5ab3da83798b3f121273
+	google.golang.org/api v0.222.0
 	google.golang.org/grpc v1.71.0
 )
 
