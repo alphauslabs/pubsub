@@ -195,8 +195,17 @@ func GetMessagesByTopic(topicName string) ([]*Message, error) {
 	if !exists {
 		return nil, nil
 	}
+	allMsgs := topicMsgs.GetAll()
 
-	return topicMsgs.GetAll(), nil
+	// filter messages marked dleted
+	activeMsgs := make([]*Message, 0, len(allMsgs))
+	for _, msg := range allMsgs {
+		if atomic.LoadInt32(&msg.Deleted) == 0 { // filter
+			activeMsgs = append(activeMsgs, msg)
+		}
+	}
+
+	return activeMsgs, nil //ret filtered mssges
 }
 
 func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
