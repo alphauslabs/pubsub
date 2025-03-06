@@ -167,7 +167,6 @@ func main() {
 							close(stopExtension)
 						}
 						goto acknowledge
-						break messageLoop
 					}
 				}
 			}
