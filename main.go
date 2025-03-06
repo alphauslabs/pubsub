@@ -60,8 +60,7 @@ func main() {
 	}
 	defer spannerClient.Close()
 	ap := &app.PubSub{
-		Client:        spannerClient,
-		ConsensusMode: "all",
+		Client: spannerClient,
 		LeaderActive: timedoff.New(60*time.Second, &timedoff.CallbackT{
 			Callback: func(i any) {
 				glog.Errorf("Warning! No leader active after 1 minute")
