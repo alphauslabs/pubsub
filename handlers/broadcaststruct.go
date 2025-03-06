@@ -57,11 +57,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 			Subscription: &pb.Subscription{
 				Name:       subName,
 				Topic:      topic,
-<<<<<<< HEAD
-				Autoextend: autoExtend, // Now included in memory structure
-=======
 				Autoextend: autoExtend,
->>>>>>> 63239e5c45117b5a6c4c5ab3da83798b3f121273
 			},
 		}
 	}
