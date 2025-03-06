@@ -179,8 +179,10 @@ func main() {
 			}
 			glog.Infof("[Acknowledge] Successfully acknowledged message %s: %v", rec.Id, ackres)
 			ackCount++ //increment
+
+
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
-		}
+    }
 
 	case "createsubscription":
 
