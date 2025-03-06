@@ -59,9 +59,9 @@ func main() {
 			log.Fatalf("Delete failed: %v", err)
 		}
 		if r.Success {
-			glog.Infof("Topic ID: %s deleted sucessfully", topic)
+			glog.Infof("Topic name: %s deleted sucessfully", topic)
 		} else {
-			glog.Infof("Topic ID: %s not found", topic)
+			glog.Infof("Topic name: %s not found", topic)
 		}
 	case "updatetopic":
 		_, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
