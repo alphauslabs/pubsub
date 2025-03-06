@@ -11,10 +11,16 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked     int32
-	AutoExtend int32
-	Deleted    int32
-	Age        time.Time
+	Locked        int32
+	AutoExtend    int32
+	Deleted       int32
+	Age           time.Time
+	// Track which clients have processed this message
+	ProcessedBy map[string]bool // map[clientID]bool
+	// Track which subscriptions have received this message
+	SentToSubs map[string]bool // map[subscriptionID]bool
+	// Track which subscriptions have locked this message
+	SubscriptionLocks map[string]int32 // map[subscriptionID]locked
 	Mu         sync.Mutex
 }
 
@@ -205,6 +211,21 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	return subList, nil
 }
 
+// RemoveTopic removes a topic from storage
+func RemoveTopic(topicName string) error {
+	topicMsgMu.Lock()
+	defer topicMsgMu.Unlock()
+
+	if _, exists := TopicMessages[topicName]; !exists {
+		return ErrTopicNotFound
+	}
+
+	delete(TopicMessages, topicName)
+	delete(topicSubs, topicName)
+
+	return nil
+}
+
 // RemoveMessage removes a message from storage
 func RemoveMessage(id string, topicName string) error {
 	topicMsgMu.Lock()
@@ -228,4 +249,55 @@ func RemoveMessage(id string, topicName string) error {
 	}
 
 	return ErrMessageNotFound
+}
+
+// HasBeenSentToSubscription checks if a message has been sent to a specific subscription
+func (m *Message) HasBeenSentToSubscription(subscriptionID string) bool {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	return m.SentToSubs[subscriptionID]
+}
+
+// MarkSentToSubscription marks a message as sent to a specific subscription
+func (m *Message) MarkSentToSubscription(subscriptionID string) {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	if m.SentToSubs == nil {
+		m.SentToSubs = make(map[string]bool)
+	}
+	m.SentToSubs[subscriptionID] = true
+}
+
+// IsLockedBySubscription checks if a message is locked by a specific subscription
+func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	if m.SubscriptionLocks == nil {
+		m.SubscriptionLocks = make(map[string]int32)
+	}
+	return m.SubscriptionLocks[subscriptionID] == 1
+}
+
+// LockForSubscription locks a message for a specific subscription
+func (m *Message) LockForSubscription(subscriptionID string) bool {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	if m.SubscriptionLocks == nil {
+		m.SubscriptionLocks = make(map[string]int32)
+	}
+	if m.SubscriptionLocks[subscriptionID] == 1 {
+		return false
+	}
+	m.SubscriptionLocks[subscriptionID] = 1
+	return true
+}
+
+// UnlockForSubscription unlocks a message for a specific subscription
+func (m *Message) UnlockForSubscription(subscriptionID string) {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	if m.SubscriptionLocks == nil {
+		m.SubscriptionLocks = make(map[string]int32)
+	}
+	m.SubscriptionLocks[subscriptionID] = 0
 }

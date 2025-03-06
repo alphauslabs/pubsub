@@ -11,9 +11,10 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
-
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -84,6 +85,9 @@ func main() {
 		}
 		glog.Infof("Topic Created!\nID: %s\nName: %s\n", topic)
 	case "subscribe":
+		processingTime := flag.Int("processingTime", 10, "Simulated message processing time in seconds")
+		flag.Parse()
+
 		r, err := c.Subscribe(context.Background(), &pb.SubscribeRequest{Topic: topic, Subscription: sub})
 		if err != nil {
 			log.Fatalf("Subscribe failed: %v", err)
@@ -104,18 +108,62 @@ func main() {
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
 
-			// Simulate processing
-			glog.Infof("Processing message: %v\n", rec.Id)
-			time.Sleep(10 * time.Second) // Simulate processing time
+			if *processingTime > 0 { // can set time=0 for instant ack
+				startTime := time.Now()
+				ticker := time.NewTicker(5 * time.Second)
+				extendThreshold := 20 * time.Second // when to request extension
+				processingDone := time.After(time.Duration(*processingTime) * time.Second)
+				stopExtension := make(chan bool)
 
+				// go routine to request visibility extension every "extendThreshold" seconds
+				go func() {
+					for {
+						select {
+						case <-time.After(extendThreshold):
+							glog.Infof("Requesting visibility extension for message %s", rec.Id)
+							_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+								Id:             rec.Id,
+								SubscriptionId: sub,
+								NewTimeout:     30,
+							})
+							if err != nil {
+								glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
+							}
+						case <-stopExtension:
+							return // stop requesting visibility extension once processing is done
+						}
+					}
+				}()
+
+				for {
+					select {
+					case <-ticker.C:
+						elapsed := time.Since(startTime).Seconds()
+						glog.Infof("[Processing] Message %v processing... elapsed time: %.2f seconds", rec.Id, elapsed)
+
+					case <-processingDone:
+						ticker.Stop()
+						glog.Infof("[Processing] Completed message %v processing after %d seconds", rec.Id, *processingTime)
+						close(stopExtension) // Stop the visibility extension goroutine
+						break
+					}
+				}
+			}
+
+			// Acknowledge the message
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
+				if status.Code(err) == codes.NotFound { // match return error code
+					glog.Infof("Acknowledge failed: Message %s not found: %v", rec.Id, err)
+					continue // Skip to the next message
+				}
 				log.Fatalf("Acknowledge failed: %v", err)
 			}
 			glog.Infof("Acknowledge Response: %v\n", ackres)
-			ackCount++ //increment
+			ackCount++
+			glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
+
 		}
-		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
 
 	case "createsubscription":
 
