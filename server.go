@@ -396,26 +396,36 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// Delete topic
-		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		// 1) Check if topic exists
+		checkStmt := spanner.Statement{
+			SQL:    `SELECT name FROM Topics WHERE name = @name LIMIT 1`,
+			Params: map[string]interface{}{"name": req.Name},
+		}
+		iter := txn.Query(ctx, checkStmt)
+		defer iter.Stop()
 
-		// Delete all related subscriptions
-		stmt := spanner.Statement{
+		_, err := iter.Next()
+		if err == iterator.Done {
+			return status.Errorf(codes.NotFound, "Topic %q does not exist", req.Name)
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to check topic existence: %v", err)
+		}
+
+		// 2) Delete the topic row
+		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
+			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+		}
+
+		// 3) Delete all related subscriptions referencing this topic
+		delSubs := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
 			Params: map[string]interface{}{
 				"Topic": req.Name,
 			},
 		}
-
-		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
-			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-		}
-
-		iter := txn.Query(ctx, stmt)
-		defer iter.Stop()
-
-		_, err := iter.Next()
-		if err != nil && err != iterator.Done {
+		if _, err := txn.Update(ctx, delSubs); err != nil {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -427,9 +437,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 
-	// Remove from in-memory storage
+	// Remove from in-memory storage (if you maintain a local cache)
 	if err := storage.RemoveTopic(req.Name); err != nil {
-		glog.Infof("Failed to remove topic from memory: %v", err) // Continue to broadcast the deletion
+		glog.Infof("Failed to remove topic from memory: %v", err)
+		// continuing so we can still broadcast the deletion
 	}
 
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
