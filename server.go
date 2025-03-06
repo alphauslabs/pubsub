@@ -143,14 +143,13 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				}
 
 				// Fanout: Check if this subscription has received this message
-				if !message.HasBeenProcessedBySubscription() {
-					// Mark message as sent to this subscription (fanout)
-					message.MarkAsProcessedBySubscription()
-
+				if !message.HasBeenProcessedBySubscription(in.Subscription) {
 					// Load Balance: Check if this client has processed this message
 					if !message.HasBeenProcessedByClient(clientID) {
 						// Mark message as processed by this client (load balance)
 						message.MarkAsProcessedByClient(clientID)
+						// Mark message as sent to this subscription (fanout)
+						message.MarkAsProcessedBySubscription(in.Subscription)
 
 						// Send the message to the client
 						if err := stream.Send(message.Message); err != nil {
