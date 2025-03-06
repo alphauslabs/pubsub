@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	method = flag.String("method", "", "gRPC method to call")
-	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
+	method           = flag.String("method", "", "gRPC method to call")
+	host             = flag.String("host", "localhost", "gRPC server host")
+	input            = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
+	processingTime   = flag.Int("processingTime", 10, "Simulated message processing time in seconds")
+	extendVisibility = flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
 )
 
 func main() {
@@ -83,10 +85,6 @@ func main() {
 		}
 		glog.Infof("Topic Created!\nName: %s\n", topic)
 	case "subscribe":
-		processingTime := flag.Int("processingTime", 10, "Simulated message processing time in seconds")
-		extendVisibility := flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
-		flag.Parse()
-
 		// Check if subscription is autoextend
 		subDetails, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
 		if err != nil {
@@ -166,19 +164,24 @@ func main() {
 							}
 							close(stopExtension)
 						}
-						break messageLoop
+						goto acknowledge
 					}
 				}
 			}
+		acknowledge:
 			//Acknowledge the message
+			glog.Infof("[Acknowledge] Attempting to acknowledge message %s", rec.Id)
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
 			if err != nil {
-				log.Fatalf("Acknowledge failed: %v", err)
+				glog.Errorf("[Acknowledge] Failed to acknowledge message %s: %v", rec.Id, err)
+				continue messageLoop // Skip to next message on error
 			}
-			glog.Infof("Acknowledge Response: %v\n", ackres)
+			glog.Infof("[Acknowledge] Successfully acknowledged message %s: %v", rec.Id, ackres)
 			ackCount++ //increment
-		}
-		glog.Infof("Total Messages Acknowledged: %v\n", ackCount)
+
+
+			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
+    }
 
 	case "createsubscription":
 
