@@ -641,6 +641,7 @@ func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSu
 	}, nil
 }
 
+// TODO: Fix this not notifying to leader, but if the node is the leader then it notifies itself
 func (s *server) notifyLeader(flag byte) {
 	// Create a simple payload with just the flag
 	data := map[string]interface{}{

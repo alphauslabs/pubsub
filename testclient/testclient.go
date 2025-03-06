@@ -77,13 +77,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("Read Failed: %v", err)
 		}
-		glog.Infof("Topic Found!\nID: %s\nName: %s\n", topic)
+		glog.Infof("Topic Found!\nName: %s\n", topic)
 	case "createtopic":
 		_, err := c.CreateTopic(context.Background(), &pb.CreateTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Create Failed: %v", err)
 		}
-		glog.Infof("Topic Created!\nID: %s\nName: %s\n", topic)
+		glog.Infof("Topic Created!\nName: %s\n", topic)
 	case "subscribe":
 		processingTime := flag.Int("processingTime", 10, "Simulated message processing time in seconds")
 		flag.Parse()
