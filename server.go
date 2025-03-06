@@ -353,7 +353,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	// todo: delete the old then insert new
 	mutTopic := spanner.Update(TopicsTable,
 		[]string{"name", "updatedAt"},
-		[]interface{}{req.NewName, spanner.CommitTimestamp},
+		[]interface{}{req.Name, spanner.CommitTimestamp},
 	)
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
 	if err != nil {
