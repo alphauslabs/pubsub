@@ -71,7 +71,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Update Failed: %v", err)
 		}
-		glog.Infof("Updated!\nID: %s\nPrevious Name:\nNew Name:%s\n", topic, newtopicname)
+		glog.Infof("Updated!\nPrevious Name: %s\nNew Name:%s\n", topic, newtopicname)
 	case "gettopic":
 		_, err := c.GetTopic(context.Background(), &pb.GetTopicRequest{Name: topic})
 		if err != nil {
@@ -179,9 +179,8 @@ func main() {
 			glog.Infof("[Acknowledge] Successfully acknowledged message %s: %v", rec.Id, ackres)
 			ackCount++ //increment
 
-
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
-    }
+		}
 
 	case "createsubscription":
 
