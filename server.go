@@ -344,49 +344,61 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 
 func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "Current topic name is required")
 	}
 	if req.NewName == "" {
-		return nil, status.Error(codes.InvalidArgument, "new topic name is required")
+		return nil, status.Error(codes.InvalidArgument, "New topic name is required")
 	}
 
-	// todo: delete the old then insert new
-	mutTopic := spanner.Update(TopicsTable,
-		[]string{"name", "updatedAt"},
-		[]interface{}{req.NewName, spanner.CommitTimestamp},
-	)
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutTopic})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update topic: %v", err)
-	}
-
-	// Update all subscriptions referencing the old topic name
-	stmt := spanner.Statement{
-		SQL: `UPDATE Subscriptions
-			  SET topic = @newName,
-			  updatedAt = PENDING_COMMIT_TIMESTAMP()
-			  WHERE topic = @oldName`,
-		Params: map[string]interface{}{
-			"newName": req.NewName,
-			"oldName": req.Name,
-		},
-	}
-	_, err = s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		_, err := txn.Update(ctx, stmt)
-		if err != nil {
-			return err
+	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// 1) Rename the topic in Topics table
+		stmtTopic := spanner.Statement{
+			SQL: `UPDATE Topics
+				  SET name = @newName,
+					  updatedAt = PENDING_COMMIT_TIMESTAMP()
+				  WHERE name = @oldName`,
+			Params: map[string]interface{}{
+				"oldName": req.Name,
+				"newName": req.NewName,
+			},
 		}
+		rowCount, err := txn.Update(ctx, stmtTopic)
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to rename topic: %v", err)
+		}
+		if rowCount == 0 {
+			return status.Errorf(codes.NotFound, "Topic %q does not exist", req.Name)
+		}
+
+		// 2) Update all Subscriptions referencing the old topic name
+		stmtSubs := spanner.Statement{
+			SQL: `UPDATE Subscriptions
+				  SET topic = @newName,
+					  updatedAt = PENDING_COMMIT_TIMESTAMP()
+				  WHERE topic = @oldName`,
+			Params: map[string]interface{}{
+				"oldName": req.Name,
+				"newName": req.NewName,
+			},
+		}
+		_, err = txn.Update(ctx, stmtSubs)
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to update subscriptions: %v", err)
+		}
+
 		return nil
 	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update subscriptions: %v", err)
+		return nil, err
 	}
-
 	updatedTopic := &pb.Topic{
 		Name: req.NewName,
 	}
+
+	// Notify the leader or cluster if needed
 	go s.notifyLeader(notifleader)
 
+	// Return the updated topic
 	return updatedTopic, nil
 }
 
@@ -396,26 +408,36 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// Delete topic
-		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		// 1) Check if topic exists
+		checkStmt := spanner.Statement{
+			SQL:    `SELECT name FROM Topics WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
+			Params: map[string]interface{}{"name": req.Name},
+		}
+		iter := txn.Query(ctx, checkStmt)
+		defer iter.Stop()
 
-		// Delete all related subscriptions
-		stmt := spanner.Statement{
+		_, err := iter.Next()
+		if err == iterator.Done {
+			return status.Errorf(codes.NotFound, "Topic %q does not exist", req.Name)
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "Failed to check topic existence: %v", err)
+		}
+
+		// 2) Delete the topic row
+		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
+		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
+			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
+		}
+
+		// 3) Delete all related subscriptions referencing this topic
+		delSubs := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
 			Params: map[string]interface{}{
 				"Topic": req.Name,
 			},
 		}
-
-		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
-			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
-		}
-
-		iter := txn.Query(ctx, stmt)
-		defer iter.Stop()
-
-		_, err := iter.Next()
-		if err != nil && err != iterator.Done {
+		if _, err := txn.Update(ctx, delSubs); err != nil {
 			return status.Errorf(codes.Internal, "failed to delete subscriptions: %v", err)
 		}
 
@@ -427,9 +449,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 
-	// Remove from in-memory storage
+	// Remove from in-memory storage (if you maintain a local cache)
 	if err := storage.RemoveTopic(req.Name); err != nil {
-		glog.Infof("Failed to remove topic from memory: %v", err) // Continue to broadcast the deletion
+		glog.Infof("Failed to remove topic from memory: %v", err)
+		// continuing so we can still broadcast the deletion
 	}
 
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
