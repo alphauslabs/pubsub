@@ -2,26 +2,26 @@ package storage
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
-	//added spanner client
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
 )
 
 type Message struct {
 	*pb.Message
-	Locked        int32
-	AutoExtend    int32
-	Deleted       int32
-	Age           time.Time
+	Locked     int32
+	AutoExtend int32
+	Deleted    int32
+	Age        time.Time
 	// Track which clients have processed this message
 	ProcessedBy map[string]bool // map[clientID]bool
 	// Track which subscriptions have received this message
 	SentToSubs map[string]bool // map[subscriptionID]bool
 	// Track which subscriptions have locked this message
 	SubscriptionLocks map[string]int32 // map[subscriptionID]locked
-	Mu         sync.Mutex
+	Mu                sync.Mutex
 }
 
 type MessageMap struct {
@@ -175,6 +175,11 @@ func GetMessage(id string) (*Message, error) {
 	// we need to search all topics
 	for _, msgs := range TopicMessages {
 		if msg, exists := msgs.Get(id); exists {
+
+			// check if marked deleted
+			if atomic.LoadInt32(&msg.Deleted) == 1 {
+				return nil, ErrMessageNotFound
+			}
 			return msg, nil
 		}
 	}
