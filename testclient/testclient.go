@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -144,6 +145,7 @@ func main() {
 					case <-processingDone:
 						ticker.Stop()
 						glog.Infof("[Processing] Completed message %v processing after %d seconds", rec.Id, *processingTime)
+						close(stopExtension) // Stop the visibility extension goroutine
 						break
 					}
 				}

@@ -103,6 +103,9 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
 
+	// Track last message count to avoid duplicate logs
+	lastMessageCount := 0
+
 	// Continuous loop to stream messages
 	for {
 		select {
@@ -126,7 +129,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				continue
 			}
 
-			glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
+			// Only log if the number of messages has changed
+			if len(messages) != lastMessageCount {
+				glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
+				lastMessageCount = len(messages)
+			}
 
 			// Process each message
 			for _, message := range messages {
