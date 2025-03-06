@@ -189,14 +189,14 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						message.Id, clientID, in.Subscription)
 					// Mark this client as having processed the message
 					message.ProcessedBy[clientID] = true
-					// Release lock and broadcast unlock after successful send
-					message.UnlockForSubscription(in.Subscription)
-					unlockData := handlers.BroadCastInput{
-						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
-					}
-					unlockBin, _ := json.Marshal(unlockData)
-					s.Op.Broadcast(context.Background(), unlockBin)
+					// // Release lock and broadcast unlock after successful send
+					// message.UnlockForSubscription(in.Subscription)
+					// unlockData := handlers.BroadCastInput{
+					// 	Type: handlers.MsgEvent,
+					// 	Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", message.Id, in.Subscription, clientID)),
+					// }
+					// unlockBin, _ := json.Marshal(unlockData)
+					// s.Op.Broadcast(context.Background(), unlockBin)
 				}
 			}
 		}
