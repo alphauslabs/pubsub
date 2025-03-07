@@ -52,7 +52,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("Listing failed: %v", err)
 		}
-		fmt.Printf("r.Topics: %v\n", r.Topics)
+		glog.Infof("====List of Topics====")
+		for _, t := range r.Topics {
+			glog.Infof("\n#%s\nName: %s\n", r, t.Name)
+			glog.Infof("CreatedAt: %s\n", t.CreatedAt)
+			glog.Infof("UpdatedAt: %s\n", t.UpdatedAt)
+			glog.Infof("---------------------")
+		}
 	case "deletetopic":
 		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
 		if err != nil {
@@ -83,7 +89,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Create Failed: %v", err)
 		}
-		glog.Infof("Topic Created!\nName: %s\n", topic)
+		glog.Infof("Topic Created!\nName: %s\nCreated: %s\n", topic)
 	case "subscribe":
 		// Check if subscription is autoextend
 		subDetails, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
