@@ -94,7 +94,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	glog.Infof("[Subscribe] Assigned client ID %s for subscription %s", clientID, in.Subscription)
 
 	// Validate subscription exists for the topic
-	err := s.checkIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
+	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
