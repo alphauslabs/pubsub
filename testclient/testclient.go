@@ -53,8 +53,8 @@ func main() {
 			log.Fatalf("Listing failed: %v", err)
 		}
 		glog.Infof("====List of Topics====")
-		for _, t := range r.Topics {
-			glog.Infof("\n#%s\nName: %s\n", r, t.Name)
+		for i, t := range r.Topics {
+			glog.Infof("\n#%v\nName: %s\n", int(i), t.Name)
 			glog.Infof("CreatedAt: %s\n", t.CreatedAt)
 			glog.Infof("UpdatedAt: %s\n", t.UpdatedAt)
 			glog.Infof("---------------------")
