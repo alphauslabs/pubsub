@@ -11,12 +11,12 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked         int32
-	AutoExtend     int32
-	Deleted        int32
-	Age            time.Time
-	ProcessedSubs  map[string]struct{} // Just tracks which subscriptions have received the message
-	Mu             sync.Mutex
+	Locked        int32
+	AutoExtend    int32
+	Deleted       int32
+	Age           time.Time
+	ProcessedSubs map[string]struct{} // Just tracks which subscriptions have received the message
+	Mu            sync.Mutex
 }
 
 type MessageMap struct {
@@ -170,7 +170,6 @@ func GetMessage(id string) (*Message, error) {
 	// we need to search all topics
 	for _, msgs := range TopicMessages {
 		if msg, exists := msgs.Get(id); exists {
-
 			// check if marked deleted
 			if atomic.LoadInt32(&msg.Deleted) == 1 {
 				return nil, ErrMessageNotFound
@@ -264,11 +263,11 @@ func RemoveMessage(id string, topicName string) error {
 func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	if m.ProcessedSubs == nil {
 		m.ProcessedSubs = make(map[string]struct{})
 	}
-	
+
 	_, exists := m.ProcessedSubs[subscriptionID]
 	return exists
 }
@@ -277,11 +276,11 @@ func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
 func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	if m.ProcessedSubs == nil {
 		return false
 	}
-	
+
 	_, processed := m.ProcessedSubs[subscriptionID]
 	return processed
 }
@@ -290,11 +289,11 @@ func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool
 func (m *Message) MarkAsProcessedByClient(subscriptionID, clientID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	if m.ProcessedSubs == nil {
 		m.ProcessedSubs = make(map[string]struct{})
 	}
-	
+
 	m.ProcessedSubs[subscriptionID] = struct{}{}
 }
 
@@ -307,11 +306,11 @@ func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
 func (m *Message) MarkAsProcessedBySubscription(subscriptionID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	if m.ProcessedSubs == nil {
 		m.ProcessedSubs = make(map[string]struct{})
 	}
-	
+
 	m.ProcessedSubs[subscriptionID] = struct{}{}
 }
 
@@ -327,12 +326,12 @@ func (m *Message) IsBeingProcessed() bool {
 func (m *Message) StartProcessing(clientID string) bool {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	// If message is already being processed, return false
 	if m.ProcessingBy != "" {
 		return false
 	}
-	
+
 	m.ProcessingBy = clientID
 	return true
 }
@@ -341,10 +340,9 @@ func (m *Message) StartProcessing(clientID string) bool {
 func (m *Message) EndProcessing(clientID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
-	
+
 	if m.ProcessingBy == clientID {
 		m.ProcessingBy = ""
 	}
 }
 */
-
