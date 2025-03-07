@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	method = flag.String("method", "", "gRPC method to call")
-	host   = flag.String("host", "localhost", "gRPC server host")
-	input  = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
+	method           = flag.String("method", "", "gRPC method to call")
+	host             = flag.String("host", "localhost", "gRPC server host")
+	input            = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
+	processingTime   = flag.Int("processingTime", 10, "Simulated message processing time in seconds")
+	extendVisibility = flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
 )
 
 func main() {
@@ -57,9 +59,9 @@ func main() {
 			log.Fatalf("Delete failed: %v", err)
 		}
 		if r.Success {
-			glog.Infof("Topic ID: %s deleted sucessfully", topic)
+			glog.Infof("Topic name: %s deleted sucessfully", topic)
 		} else {
-			glog.Infof("Topic ID: %s not found", topic)
+			glog.Infof("Topic name: %s not found", topic)
 		}
 	case "updatetopic":
 		_, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
@@ -69,7 +71,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Update Failed: %v", err)
 		}
-		glog.Infof("Updated!\nID: %s\nPrevious Name:\nNew Name:%s\n", topic, newtopicname)
+		glog.Infof("Updated!\nPrevious Name: %s\nNew Name:%s\n", topic, newtopicname)
 	case "gettopic":
 		_, err := c.GetTopic(context.Background(), &pb.GetTopicRequest{Name: topic})
 		if err != nil {
@@ -83,10 +85,6 @@ func main() {
 		}
 		glog.Infof("Topic Created!\nName: %s\n", topic)
 	case "subscribe":
-		processingTime := flag.Int("processingTime", 10, "Simulated message processing time in seconds")
-		extendVisibility := flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
-		flag.Parse()
-
 		// Check if subscription is autoextend
 		subDetails, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
 		if err != nil {
@@ -127,25 +125,25 @@ func main() {
 
 				// Handle visibility extension for non-autoextend subscriptions
 				if !isAutoExtend && *extendVisibility {
-				go func() {
+					go func() {
 						defer glog.Infof("[Extension] Stopped extension requests for message %s", rec.Id)
 
-					for {
-						select {
-						case <-time.After(extendThreshold):
-							glog.Infof("Requesting visibility extension for message %s", rec.Id)
-							_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-								Id:             rec.Id,
-								SubscriptionId: sub,
-							})
-							if err != nil {
-								glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
-							}
-						case <-stopExtension:
+						for {
+							select {
+							case <-time.After(extendThreshold):
+								glog.Infof("Requesting visibility extension for message %s", rec.Id)
+								_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
+									Id:             rec.Id,
+									SubscriptionId: sub,
+								})
+								if err != nil {
+									glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
+								}
+							case <-stopExtension:
 								return // Stop requesting visibility extension once processing is done
+							}
 						}
-					}
-				}()
+					}()
 				}
 
 				// Processing loop
@@ -166,10 +164,11 @@ func main() {
 							}
 							close(stopExtension)
 						}
-						break messageLoop
+						goto acknowledge
 					}
 				}
 			}
+		acknowledge:
 			//Acknowledge the message
 			glog.Infof("[Acknowledge] Attempting to acknowledge message %s", rec.Id)
 			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
@@ -180,9 +179,8 @@ func main() {
 			glog.Infof("[Acknowledge] Successfully acknowledged message %s: %v", rec.Id, ackres)
 			ackCount++ //increment
 
-
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
-    }
+		}
 
 	case "createsubscription":
 
