@@ -426,7 +426,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 
 		updatedTopic = &pb.Topic{
 			Name:      req.NewName,
-			CreatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
+			CreatedAt: createdAt.Time.Format(time.RFC3339),
 			UpdatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
 		}
 
