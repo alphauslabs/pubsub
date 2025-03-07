@@ -54,9 +54,7 @@ func main() {
 		}
 		glog.Infof("====List of Topics====")
 		for i, t := range r.Topics {
-			glog.Infof("#%v\nName: %s\n", int(i+1), t.Name)
-			glog.Infof("CreatedAt: %s\n", t.CreatedAt)
-			glog.Infof("UpdatedAt: %s\n", t.UpdatedAt)
+			glog.Infof("#%v\nName: %s\nCreated at: %s\nUpdated at: %s", int(i+1), t.Name, t.CreatedAt, t.UpdatedAt)
 			glog.Infof("---------------------")
 		}
 	case "deletetopic":
