@@ -192,27 +192,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
-	glog.Infof("[Acknowledge] Received acknowledgment for message ID: %s", in.Id)
-	// Check if message lock exists and is still valid (within 1 minute)
-	// lockInfo, ok := s.MessageLocks.Load(in.Id)
-	// if !ok {
-	// 	glog.Infof("[Acknowledge] Error: Message lock not found for ID: %s", in.Id)
-	// 	return nil, status.Error(codes.NotFound, "message lock not found")
-	// }
-
-	// info := lockInfo.(handlers.MessageLockInfo)
-	// glog.Infof("[Acknowledge] Found lock info for message %s - Locked: %v, Timeout: %v, NodeID: %s", in.Id, info.Locked, info.Timeout, info.NodeID)
-
-	// // Check if lock is valid and not timed out
-	// if !info.Locked || time.Now().After(info.Timeout) {
-	// 	return nil, status.Error(codes.FailedPrecondition, "message lock expired")
-	// }
-
 	// Check if message exists in storage
 	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
-	msg, err := storage.GetMessage(in.Id)
+	_, err := storage.GetMessage(in.Id)
 	if err != nil {
-		// Skip message
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
 	}
 
@@ -221,26 +204,17 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
-	// Log acknowledgment
-	glog.Infof("Message acknowledged: %s, ID: %s", msg.Payload, in.Id)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin) // broadcast to set deleted
-
-	// Clean up message (processed)
-	// glog.Infof("[Acknowledge] Cleaning up message %s from local state", in.Id)
-	// s.MessageLocks.Delete(in.Id)
-	// if timer, ok := s.MessageTimer.Load(in.Id); ok {
-	// 	glog.Infof("[Acknowledge] Stopping timer for message %s", in.Id)
-	// 	timer.(*time.Timer).Stop()
-	// 	s.MessageTimer.Delete(in.Id)
-	// }
-
-	// // Remove the message from in-memory storage
-	// storage.RemoveMessage(in.Id, "") // RemoveMessage method from Storage
+	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
+	for _, v := range out {
+		if v.Error != nil {
+			glog.Infof("[Acknowledge] Error broadcasting acknowledgment: %v", v.Error)
+		}
+	}
 
 	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
 	return &pb.AcknowledgeResponse{Success: true}, nil
@@ -292,7 +266,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		UpdatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
 	}
 
-	go s.notifyLeader(notifleader)
+	s.notifyLeader(notifleader)
 
 	return topic, nil
 }
@@ -437,7 +411,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	}
 
 	// Notify the leader or cluster if needed
-	go s.notifyLeader(notifleader)
+	s.notifyLeader(notifleader)
 
 	return updatedTopic, nil
 }
@@ -495,15 +469,21 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		// continuing so we can still broadcast the deletion
 	}
 
+	// Note: Might not be needed since we tell leader that a topic is delete.
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
 	broadcastData := handlers.BroadCastInput{
 		Type: "topicdeleted",
 		Msg:  []byte(req.Name),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	s.Op.Broadcast(ctx, bin)
+	out := s.Op.Broadcast(ctx, bin)
+	for _, o := range out {
+		if o.Error != nil {
+			glog.Errorf("Broadcast topic deleted error: %v", err)
+		}
+	}
 
-	go s.notifyLeader(notifleader) // Send flag=1 to indicate an update
+	s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 
 	return &pb.DeleteTopicResponse{Success: true}, nil
 }
@@ -541,7 +521,6 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 	return &pb.ListTopicsResponse{Topics: topics}, nil
 }
 
-// <<<<<<<<< END OF CRUD - TOPICS >>>>>>>>>>>>>
 func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
 	if req.Topic == "" || req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
@@ -566,6 +545,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 
 	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
+	// todo: tell leader
 	return &pb.Subscription{
 		Name:       req.Name,
 		Topic:      req.Topic,
@@ -638,6 +618,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
 	}
 
+	// todo: tell leader
 	return &pb.Subscription{
 		Name:              req.Name,
 		Topic:             existingSub.Topic,
@@ -657,6 +638,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
 	}
 
+	// todo: tell leader
 	return &pb.DeleteSubscriptionResponse{
 		Success:   true,
 		DeletedAt: time.Now().Format(time.RFC3339),
@@ -705,7 +687,6 @@ func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSu
 	}, nil
 }
 
-// TODO: Fix this not notifying to leader, but if the node is the leader then it notifies itself
 func (s *server) notifyLeader(flag byte) {
 	// Create a simple payload with just the flag
 	data := map[string]interface{}{
