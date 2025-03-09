@@ -20,6 +20,7 @@ func RunCheckForExpired(ctx context.Context) {
 					for _, t := range v1.Subscriptions {
 						if atomic.LoadInt32(&t.Deleted) == 1 {
 							count++
+							continue
 						}
 						switch {
 						case time.Since(t.Age) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
