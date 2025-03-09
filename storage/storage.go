@@ -147,7 +147,7 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 }
 
 func MonitorActivity() {
-	ticker := time.NewTicker(2 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {

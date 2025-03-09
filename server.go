@@ -136,6 +136,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					continue // Message has been deleted
 				}
 
+				if message.Subscriptions[in.Subscription].IsDeleted() {
+					continue // Message has been deleted for this subscription
+				}
+
 				if message.Subscriptions[in.Subscription].IsLocked() {
 					continue // Message is already locked by another subscriber
 				}
