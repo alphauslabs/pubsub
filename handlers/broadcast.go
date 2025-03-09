@@ -167,7 +167,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	}
 
 	// Delete from storage
-	atomic.StoreInt32(&m.Subscriptions[""].Deleted, 1)
+	atomic.StoreInt32(&m.Subscriptions[subId].Deleted, 1)
 
 	glog.Info("[Delete] Message successfully removed:", messageID)
 	return nil, nil

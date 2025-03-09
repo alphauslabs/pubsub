@@ -217,7 +217,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
+		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
