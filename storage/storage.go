@@ -222,11 +222,18 @@ func GetMessagesByTopic(topicName, sub string) ([]*Message, error) {
 	// filter messages marked dleted
 	activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
-		if atomic.LoadInt32(&msg.FinalDeleted) == 0 { // filter
-			if !msg.Subscriptions[sub].IsLocked() {
-				activeMsgs = append(activeMsgs, msg)
-			}
+		if atomic.LoadInt32(&msg.FinalDeleted) == 1 { // filter
+			continue
 		}
+
+		if msg.Subscriptions[sub].IsDeleted() {
+			continue
+		}
+
+		if msg.Subscriptions[sub].IsLocked() {
+			continue
+		}
+		activeMsgs = append(activeMsgs, msg)
 	}
 
 	return activeMsgs, nil //ret filtered mssges
