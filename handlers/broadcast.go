@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
@@ -168,7 +167,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	}
 
 	// Delete from storage
-	atomic.StoreInt32(&m.Subscriptions[subId].Deleted, 1)
+	m.Subscriptions[subId].MarkAsDeleted()
 
 	glog.Info("[Delete] Message successfully removed:", messageID)
 	return nil, nil

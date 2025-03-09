@@ -102,6 +102,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	lastMessageCount := 0
 
 	// Continuous loop to stream messages
+loop:
 	for {
 		select {
 		// Check if client has disconnected
@@ -204,10 +205,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 				}
 			}
-			break
+			break loop
 		}
-
 	}
+
+	return nil
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
