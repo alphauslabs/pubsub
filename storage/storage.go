@@ -23,7 +23,7 @@ type Subs struct {
 	Locked         int32
 	Done           int32
 	AutoExtend     int32
-	Mu             sync.Mutex
+	Mu             sync.Mutex // lock
 }
 
 type MessageMap struct {
