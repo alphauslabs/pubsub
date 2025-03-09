@@ -98,7 +98,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Subscribe failed: %v", err)
 		}
-
+		return
 		ackCount := 0 //counter for mssges
 
 	messageLoop:

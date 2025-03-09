@@ -98,6 +98,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
 
+	count := 0
 	// track last message count to avoid duplicate logs
 	lastMessageCount := 0
 
@@ -199,6 +200,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						}
 					}
 				} else {
+					count++
+					glog.Infof("[subscribe] count=%v", count)
 					message.MarkAsProcessedBySubscription(in.Subscription)
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 				}
