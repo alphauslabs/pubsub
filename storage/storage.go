@@ -11,12 +11,19 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked        int32
-	AutoExtend    int32
-	Deleted       int32
-	Age           time.Time
-	ProcessedSubs map[string]struct{} // Just tracks which subscriptions have received the message
 	Mu            sync.Mutex
+	Subscriptions map[string]*Subs
+	FinalDeleted  int32
+}
+
+type Subs struct {
+	SubscriptionID string
+	Age            time.Time
+	Deleted        int32
+	Locked         int32
+	Done           int32
+	AutoExtend     int32
+	Mu             sync.Mutex
 }
 
 type MessageMap struct {
@@ -107,6 +114,21 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
+
+	subs, err := GetSubscribtionsForTopic(msg.Topic)
+	if err != nil {
+		glog.Errorf("[STORAGE] Error retrieving subscriptions for topic %s: %v", msg.Topic, err)
+		return err
+	}
+
+	subss := make(map[string]*Subs)
+	for _, sub := range subs {
+		subss[sub.Name] = &Subs{
+			SubscriptionID: sub.Name,
+		}
+	}
+
+	msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
 	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
@@ -171,7 +193,7 @@ func GetMessage(id string) (*Message, error) {
 	for _, msgs := range TopicMessages {
 		if msg, exists := msgs.Get(id); exists {
 			// check if marked deleted
-			if atomic.LoadInt32(&msg.Deleted) == 1 {
+			if atomic.LoadInt32(&msg.FinalDeleted) == 1 {
 				return nil, ErrMessageNotFound
 			}
 			return msg, nil
@@ -194,7 +216,7 @@ func GetMessagesByTopic(topicName string) ([]*Message, error) {
 	// filter messages marked dleted
 	activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
-		if atomic.LoadInt32(&msg.Deleted) == 0 { // filter
+		if atomic.LoadInt32(&msg.FinalDeleted) == 0 { // filter
 			activeMsgs = append(activeMsgs, msg)
 		}
 	}
@@ -260,46 +282,46 @@ func RemoveMessage(id string, topicName string) error {
 }
 
 // HasBeenProcessedBySubscription checks if this subscription has received the message (fanout check)
-func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
+// func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
+// 	m.Mu.Lock()
+// 	defer m.Mu.Unlock()
 
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
+// 	if m.ProcessedSubs == nil {
+// 		m.ProcessedSubs = make(map[string]struct{})
+// 	}
 
-	_, exists := m.ProcessedSubs[subscriptionID]
-	return exists
-}
+// 	_, exists := m.ProcessedSubs[subscriptionID]
+// 	return exists
+// }
 
 // HasBeenProcessedByClient checks if a client has processed the message (load balance check -client side )
-func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
+// func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool {
+// 	m.Mu.Lock()
+// 	defer m.Mu.Unlock()
 
-	if m.ProcessedSubs == nil {
-		return false
-	}
+// 	if m.ProcessedSubs == nil {
+// 		return false
+// 	}
 
-	_, processed := m.ProcessedSubs[subscriptionID]
-	return processed
-}
+// 	_, processed := m.ProcessedSubs[subscriptionID]
+// 	return processed
+// }
 
 // MarkAsProcessedByClient marks message as processed by client and creates subscription entry if needed
-func (m *Message) MarkAsProcessedByClient(subscriptionID, clientID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
+// func (m *Message) MarkAsProcessedByClient(subscriptionID, clientID string) {
+// 	m.Mu.Lock()
+// 	defer m.Mu.Unlock()
 
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
+// 	if m.ProcessedSubs == nil {
+// 		m.ProcessedSubs = make(map[string]struct{})
+// 	}
 
-	m.ProcessedSubs[subscriptionID] = struct{}{}
-}
+// 	m.ProcessedSubs[subscriptionID] = struct{}{}
+// }
 
 // IsLockedBySubscription checks if message is locked within a specific subscription
 func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
-	return atomic.LoadInt32(&m.Locked) == 1 && m.HasBeenProcessedBySubscription(subscriptionID)
+	return atomic.LoadInt32(&m.Subscriptions[subscriptionID].Locked) == 1
 }
 
 // MarkAsProcessedBySubscription marks message as processed by subscription
@@ -307,42 +329,39 @@ func (m *Message) MarkAsProcessedBySubscription(subscriptionID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
 
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
-
-	m.ProcessedSubs[subscriptionID] = struct{}{}
+	atomic.StoreInt32(&m.Subscriptions[subscriptionID].Done, 1)
 }
 
-// IsBeingProcessed checks if a message is currently being processed by any client
-/*
-func (m *Message) IsBeingProcessed() bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-	return m.ProcessingBy != ""
+func (s *Subs) RenewAge() {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Age = time.Now().UTC()
 }
 
-// StartProcessing marks a message as being processed by a specific client
-func (m *Message) StartProcessing(clientID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	// If message is already being processed, return false
-	if m.ProcessingBy != "" {
-		return false
-	}
-
-	m.ProcessingBy = clientID
-	return true
+func (s *Subs) Lock() {
+	atomic.StoreInt32(&s.Locked, 1)
 }
 
-// EndProcessing marks a message as no longer being processed
-func (m *Message) EndProcessing(clientID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
+func (s *Subs) Unlock() {
+	atomic.StoreInt32(&s.Locked, 0)
+}
 
-	if m.ProcessingBy == clientID {
-		m.ProcessingBy = ""
+func (s *Subs) IsLocked() bool {
+	return atomic.LoadInt32(&s.Locked) == 1
+}
+
+func (s *Subs) IsDeleted() bool {
+	return atomic.LoadInt32(&s.Deleted) == 1
+}
+
+func (s *Subs) MarkAsDeleted() {
+	atomic.StoreInt32(&s.Deleted, 1)
+}
+
+func (s *Subs) SetAutoExtend(autoExtend bool) {
+	if autoExtend {
+		atomic.StoreInt32(&s.AutoExtend, 1)
+	} else {
+		atomic.StoreInt32(&s.AutoExtend, 0)
 	}
 }
-*/

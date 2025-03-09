@@ -14,13 +14,23 @@ func RunCheckForExpired(ctx context.Context) {
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
-				if atomic.LoadInt32(&v1.Deleted) == 0 && atomic.LoadInt32(&v1.Locked) == 1 {
+				if atomic.LoadInt32(&v1.FinalDeleted) == 0 {
 					v1.Mu.Lock()
-					switch {
-					case time.Since(v1.Age) >= 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 0:
-						atomic.StoreInt32(&v1.Locked, 0) // release lock
-					case time.Since(v1.Age) >= 30*time.Second && atomic.LoadInt32(&v1.AutoExtend) == 1:
-						v1.Age = time.Now().UTC() // extend lock
+					count := 0
+					for _, t := range v1.Subscriptions {
+						if atomic.LoadInt32(&t.Deleted) == 1 {
+							count++
+						}
+						switch {
+						case time.Since(t.Age) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
+							atomic.StoreInt32(&t.Locked, 0) // release lock
+						case time.Since(t.Age) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 1:
+							t.RenewAge()
+						}
+					}
+					if count == len(v1.Subscriptions) {
+						atomic.StoreInt32(&v1.FinalDeleted, 1)
+						glog.Info("[sweep] set to final deleted message:", v1.Id)
 					}
 					v1.Mu.Unlock()
 				}
@@ -45,7 +55,7 @@ func RunCheckForDeleted(ctx context.Context) {
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
-				if atomic.LoadInt32(&v1.Deleted) == 1 {
+				if atomic.LoadInt32(&v1.FinalDeleted) == 1 {
 					delete(v.Messages, v1.Id)
 					glog.Info("[sweep] deleted message:", v1.Id)
 				}

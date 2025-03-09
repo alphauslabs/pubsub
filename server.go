@@ -89,10 +89,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
 
-	// Generate a unique client ID for this subscriber
-	clientID := uuid.New().String()
-	glog.Infof("[Subscribe] Assigned client ID %s for subscription %s", clientID, in.Subscription)
-
 	// Validate subscription exists for the topic
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
@@ -136,31 +132,38 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// Process each message
 			for _, message := range messages {
-				// First check if this subscription has received the message
-				if !message.HasBeenProcessedBySubscription(in.Subscription) {
-					// First time for this subscription - send immediately
-					if err := stream.Send(message.Message); err != nil {
-						glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
-							message.Id, in.Subscription, err)
-						continue
-					}
-
-					// Mark subscription as having received the message
-					message.MarkAsProcessedBySubscription(in.Subscription)
-					glog.Infof("[Subscribe] First delivery: sent message %s to subscription %s",
-						message.Id, in.Subscription)
-					continue
+				if atomic.LoadInt32(&message.FinalDeleted) == 1 {
+					continue // Message has been deleted
 				}
 
-				// If we get here, subscription has already received message
-				// Now check deleted and locked for load balancing
-				if atomic.LoadInt32(&message.Deleted) == 1 ||
-					atomic.LoadInt32(&message.Locked) == 1 {
-					continue
+				if message.Subscriptions[in.Subscription].IsLocked() {
+					continue // Message is already locked by another subscriber
 				}
+
+				// if !message.HasBeenProcessedBySubscription(in.Subscription) {
+				// 	// First time for this subscription - send immediately
+				// 	if err := stream.Send(message.Message); err != nil {
+				// 		glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
+				// 			message.Id, in.Subscription, err)
+				// 		continue
+				// 	}
+
+				// 	// Mark subscription as having received the message
+				// 	message.MarkAsProcessedBySubscription(in.Subscription)
+				// 	glog.Infof("[Subscribe] First delivery: sent message %s to subscription %s",
+				// 		message.Id, in.Subscription)
+				// 	continue
+				// }
+
+				// // If we get here, subscription has already received message
+				// // Now check deleted and locked for load balancing
+				// if atomic.LoadInt32(&message.Deleted) == 1 ||
+				// 	atomic.LoadInt32(&message.Locked) == 1 {
+				// 	continue
+				// }
 
 				// Lock it for this client
-				atomic.StoreInt32(&message.Locked, 1)
+				// atomic.StoreInt32(&message.Locked, 1)
 
 				// Broadcast lock status to other nodes
 				broadcastData := handlers.BroadCastInput{
@@ -168,23 +171,31 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					Msg:  []byte(fmt.Sprintf("lock:%s:%s", message.Id, in.Subscription)),
 				}
 				bin, _ := json.Marshal(broadcastData)
-				s.Op.Broadcast(stream.Context(), bin)
+				out := s.Op.Broadcast(stream.Context(), bin)
+				for _, o := range out {
+					if o.Error != nil {
+						glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+						return nil
+					}
+				}
 
 				if err := stream.Send(message.Message); err != nil {
-					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
-						message.Id, in.Subscription, err)
-					atomic.StoreInt32(&message.Locked, 0) // Release lock on error
-
+					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", message.Id, in.Subscription, err)
 					// Broadcast unlock on error
 					broadcastData := handlers.BroadCastInput{
 						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:error", message.Id, in.Subscription)),
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s", message.Id, in.Subscription)),
 					}
 					bin, _ := json.Marshal(broadcastData)
-					s.Op.Broadcast(stream.Context(), bin)
+					out := s.Op.Broadcast(stream.Context(), bin)
+					for _, o := range out {
+						if o.Error != nil {
+							glog.Errorf("[Subscribe] Error broadcasting unlock: %v", o.Error)
+							return nil
+						}
+					}
 				} else {
-					glog.Infof("[Subscribe] Load balanced: sent message %s to subscription %s",
-						message.Id, in.Subscription)
+					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 				}
 			}
 		}
@@ -236,7 +247,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 	// lock the message and reset Age
 	msg.Mu.Lock()
-	msg.Age = time.Now().UTC()
+	msg.Subscriptions[in.SubscriptionId].RenewAge()
 	msg.Mu.Unlock()
 
 	glog.Infof("[Extend Visibility] Visibility Timeout for message %s has been extended.", in.Id)
