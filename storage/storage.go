@@ -156,7 +156,13 @@ func MonitorActivity() {
 
 		topicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
-			topicMsgCounts[topic] = msgs.Count()
+			count := 0
+			for _, msg := range msgs.GetAll() {
+				if atomic.LoadInt32(&msg.FinalDeleted) == 0 {
+					count++
+				}
+			}
+			topicMsgCounts[topic] = count
 		}
 		topicMsgMu.RUnlock()
 
