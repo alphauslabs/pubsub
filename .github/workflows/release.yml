@@ -4,12 +4,37 @@ on:
   push:
     tags:
       - "v*" 
+    branches:
+      - main  # Add main branch to trigger on commits
 
 jobs:
-  build:
-    name: Build and Release
+  check_commit_message:
     runs-on: ubuntu-latest
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    outputs:
+      should_build: ${{ steps.check_message.outputs.should_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need to fetch the commit before the last one
 
+      - name: Check if commit message contains [ci]
+        id: check_message
+        run: |
+          commit_message=$(git log -1 --pretty=format:"%s")
+          echo "Commit message: $commit_message"
+          if [[ "$commit_message" == *"[ci]"* ]]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+  build_tag:
+    name: Build and Create Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,3 +55,77 @@ jobs:
           files: pubsub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_ci:
+    name: Build and Update Latest Release
+    runs-on: ubuntu-latest
+    needs: check_commit_message
+    if: needs.check_commit_message.outputs.should_build == 'true'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.1" 
+
+      - name: Build Linux binary
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o pubsub-latest
+          chmod +x pubsub-latest
+
+      - name: Check if latest release exists
+        id: check_release
+        run: |
+          latest_release=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest" | \
+            jq -r '.id')
+            
+          if [[ "$latest_release" == "null" ]]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "id=$latest_release" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create latest release if it doesn't exist
+        if: steps.check_release.outputs.exists == 'false'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: latest
+          release_name: Latest Build
+          body: |
+            This is an automatically updated release containing the latest build.
+            Last updated on ${{ github.event.head_commit.timestamp }}
+            Commit: ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: true
+      
+      - name: Update latest release if it exists
+        if: steps.check_release.outputs.exists == 'true'
+        run: |
+          RELEASE_ID="${{ steps.check_release.outputs.id }}"
+          curl -X PATCH \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID" \
+            -d '{
+              "body": "This is an automatically updated release containing the latest build.\nLast updated on ${{ github.event.head_commit.timestamp }}\nCommit: ${{ github.event.head_commit.message }}"
+            }'
+
+      - name: Upload or update release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url || format('https://uploads.github.com/repos/{0}/releases/{1}/assets{{?name}}', github.repository, steps.check_release.outputs.id) }}
+          asset_path: ./pubsub-latest
+          asset_name: pubsub
+          asset_content_type: application/octet-stream
