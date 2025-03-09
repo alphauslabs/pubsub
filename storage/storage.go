@@ -21,7 +21,7 @@ type Subs struct {
 	Age            time.Time
 	Deleted        int32
 	Locked         int32
-	Done           int32
+	Dispatched     int32
 	AutoExtend     int32
 	Mu             sync.Mutex // lock
 }
@@ -233,6 +233,11 @@ func GetMessagesByTopic(topicName, sub string) ([]*Message, error) {
 		if msg.Subscriptions[sub].IsLocked() {
 			continue
 		}
+
+		if atomic.LoadInt32(&msg.Subscriptions[sub].Dispatched) == 1 {
+			continue
+		}
+
 		activeMsgs = append(activeMsgs, msg)
 	}
 
@@ -344,7 +349,7 @@ func (m *Message) MarkAsProcessedBySubscription(subscriptionID string) {
 	m.Mu.Lock()
 	defer m.Mu.Unlock()
 
-	atomic.StoreInt32(&m.Subscriptions[subscriptionID].Done, 1)
+	atomic.StoreInt32(&m.Subscriptions[subscriptionID].Dispatched, 1)
 }
 
 func (s *Subs) RenewAge() {

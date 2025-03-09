@@ -199,6 +199,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						}
 					}
 				} else {
+					message.MarkAsProcessedBySubscription(in.Subscription)
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 				}
 			}
