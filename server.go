@@ -102,7 +102,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	lastMessageCount := 0
 
 	// Continuous loop to stream messages
-loop:
 	for {
 		select {
 		// Check if client has disconnected
@@ -111,7 +110,7 @@ loop:
 			return nil
 		default:
 			// will get messages for the topic
-			messages, err := storage.GetMessagesByTopic(in.Topic)
+			messages, err := storage.GetMessagesByTopic(in.Topic, in.Subscription)
 			if err != nil {
 				glog.Infof("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
@@ -133,8 +132,6 @@ loop:
 
 			// Process each message
 			for _, message := range messages {
-				fmt.Printf("message: %v\n", *message)
-				fmt.Printf("message.Subscriptions[in.Subscription]: %v\n", *message.Subscriptions[in.Subscription])
 				if atomic.LoadInt32(&message.FinalDeleted) == 1 {
 					continue // Message has been deleted
 				}
@@ -205,11 +202,9 @@ loop:
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 				}
 			}
-			break loop
 		}
 	}
 
-	return nil
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {

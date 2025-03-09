@@ -209,7 +209,7 @@ func GetMessage(id string) (*Message, error) {
 	return nil, ErrMessageNotFound
 }
 
-func GetMessagesByTopic(topicName string) ([]*Message, error) {
+func GetMessagesByTopic(topicName, sub string) ([]*Message, error) {
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 
@@ -223,7 +223,9 @@ func GetMessagesByTopic(topicName string) ([]*Message, error) {
 	activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
 		if atomic.LoadInt32(&msg.FinalDeleted) == 0 { // filter
-			activeMsgs = append(activeMsgs, msg)
+			if !msg.Subscriptions[sub].IsLocked() {
+				activeMsgs = append(activeMsgs, msg)
+			}
 		}
 	}
 
