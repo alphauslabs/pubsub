@@ -132,6 +132,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// Process each message
 			for _, message := range messages {
+				fmt.Printf("message: %v\n", *message)
+				fmt.Printf("message.Subscriptions[in.Subscription]: %v\n", *message.Subscriptions[in.Subscription])
 				if atomic.LoadInt32(&message.FinalDeleted) == 1 {
 					continue // Message has been deleted
 				}

@@ -49,8 +49,6 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 					}
 				}
 
-				glog.Infof("[BroadcastMessage] Executing query: %s", stmt.SQL)
-
 				iter := spannerClient.Single().Query(ctx, stmt)
 				defer iter.Stop()
 
