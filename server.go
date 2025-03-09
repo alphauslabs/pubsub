@@ -42,7 +42,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"id", "name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
+		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
 		[]interface{}{
 			msgId,
 			in.Topic,
