@@ -143,56 +143,6 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	}
 }
 
-// Immediate broadcast function to send topic-subscription updates instantly.
-// func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-// 	glog.Info("STRUCT-Leader: Immediate broadcast triggered.")
-
-// 	// Ensure this node is the leader before broadcasting
-// 	hasLock, _ := op.HasLock()
-// 	if !hasLock {
-// 		glog.Info("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
-// 		return
-// 	}
-
-// 	// Fetch latest topic-subscription data
-// 	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
-// 	if len(newBroadcasted) == 0 {
-// 		glog.Info("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
-// 		return
-// 	}
-
-// 	// Update last broadcasted structure
-// 	lastBroadcasted = newBroadcasted
-
-// 	// Marshal topic-subscription data
-// 	msgData, err := json.Marshal(lastBroadcasted)
-// 	if err != nil {
-// 		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
-// 		return
-// 	}
-
-// 	broadcastMsg := BroadCastInput{
-// 		Type: Topicsub,
-// 		Msg:  msgData,
-// 	}
-
-// 	// Marshal BroadCastInput
-// 	broadcastData, err := json.Marshal(broadcastMsg)
-// 	if err != nil {
-// 		glog.Infof("STRUCT-Error marshalling BroadCastInput: %v", err)
-// 		return
-// 	}
-
-// 	// Broadcast the message
-// 	for _, r := range op.Broadcast(ctx, broadcastData) {
-// 		if r.Error != nil {
-// 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
-// 		}
-// 	}
-
-// 	glog.Info("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
-// }
-
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	// Send a request to leader to fetch the latest topic-subscription structure
 	broadcastMsg := SendInput{

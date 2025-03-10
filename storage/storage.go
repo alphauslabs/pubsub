@@ -11,12 +11,18 @@ import (
 
 type Message struct {
 	*pb.Message
-	Locked        int32
-	AutoExtend    int32
-	Deleted       int32
-	Age           time.Time
-	ProcessedSubs map[string]struct{} // Just tracks which subscriptions have received the message
 	Mu            sync.Mutex
+	Subscriptions map[string]*Subs
+	FinalDeleted  int32
+}
+
+type Subs struct {
+	SubscriptionID string
+	Age            time.Time
+	Deleted        int32
+	Locked         int32
+	AutoExtend     int32
+	Mu             sync.Mutex // lock
 }
 
 type MessageMap struct {
@@ -107,6 +113,21 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
+
+	subs, err := GetSubscribtionsForTopic(msg.Topic)
+	if err != nil {
+		glog.Errorf("[STORAGE] Error retrieving subscriptions for topic %s: %v", msg.Topic, err)
+		return err
+	}
+
+	subss := make(map[string]*Subs)
+	for _, sub := range subs {
+		subss[sub.Name] = &Subs{
+			SubscriptionID: sub.Name,
+		}
+	}
+
+	msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
 	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
@@ -125,7 +146,7 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 }
 
 func MonitorActivity() {
-	ticker := time.NewTicker(2 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -134,7 +155,13 @@ func MonitorActivity() {
 
 		topicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
-			topicMsgCounts[topic] = msgs.Count()
+			count := 0
+			for _, msg := range msgs.GetAll() {
+				if atomic.LoadInt32(&msg.FinalDeleted) == 0 {
+					count++
+				}
+			}
+			topicMsgCounts[topic] = count
 		}
 		topicMsgMu.RUnlock()
 
@@ -171,7 +198,7 @@ func GetMessage(id string) (*Message, error) {
 	for _, msgs := range TopicMessages {
 		if msg, exists := msgs.Get(id); exists {
 			// check if marked deleted
-			if atomic.LoadInt32(&msg.Deleted) == 1 {
+			if atomic.LoadInt32(&msg.FinalDeleted) == 1 {
 				return nil, ErrMessageNotFound
 			}
 			return msg, nil
@@ -181,7 +208,7 @@ func GetMessage(id string) (*Message, error) {
 	return nil, ErrMessageNotFound
 }
 
-func GetMessagesByTopic(topicName string) ([]*Message, error) {
+func GetMessagesByTopicSub(topicName, sub string) ([]*Message, error) {
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 
@@ -194,9 +221,19 @@ func GetMessagesByTopic(topicName string) ([]*Message, error) {
 	// filter messages marked dleted
 	activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
-		if atomic.LoadInt32(&msg.Deleted) == 0 { // filter
-			activeMsgs = append(activeMsgs, msg)
+		if atomic.LoadInt32(&msg.FinalDeleted) == 1 { // filter
+			continue
 		}
+
+		if msg.Subscriptions[sub].IsDeleted() {
+			continue
+		}
+
+		if msg.Subscriptions[sub].IsLocked() {
+			continue
+		}
+
+		activeMsgs = append(activeMsgs, msg)
 	}
 
 	return activeMsgs, nil //ret filtered mssges
@@ -234,115 +271,45 @@ func RemoveTopic(topicName string) error {
 	return nil
 }
 
-// RemoveMessage removes a message from storage
-func RemoveMessage(id string, topicName string) error {
-	topicMsgMu.Lock()
-	defer topicMsgMu.Unlock()
-
-	// If topicName is provided, we can directly check that topic
-	if topicName != "" {
-		if topicMsgs, exists := TopicMessages[topicName]; exists {
-			if topicMsgs.Delete(id) {
-				return nil
-			}
-		}
-		return ErrMessageNotFound
-	}
-
-	// If topicName is not provided, search all topics
-	for _, msgs := range TopicMessages {
-		if msgs.Delete(id) {
-			return nil
-		}
-	}
-
-	return ErrMessageNotFound
+func (s *Subs) RenewAge() {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Age = time.Now().UTC()
 }
 
-// HasBeenProcessedBySubscription checks if this subscription has received the message (fanout check)
-func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
-
-	_, exists := m.ProcessedSubs[subscriptionID]
-	return exists
+func (s *Subs) Lock() {
+	atomic.StoreInt32(&s.Locked, 1)
 }
 
-// HasBeenProcessedByClient checks if a client has processed the message (load balance check -client side )
-func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	if m.ProcessedSubs == nil {
-		return false
-	}
-
-	_, processed := m.ProcessedSubs[subscriptionID]
-	return processed
+func (s *Subs) Unlock() {
+	atomic.StoreInt32(&s.Locked, 0)
 }
 
-// MarkAsProcessedByClient marks message as processed by client and creates subscription entry if needed
-func (m *Message) MarkAsProcessedByClient(subscriptionID, clientID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
-
-	m.ProcessedSubs[subscriptionID] = struct{}{}
+func (s *Subs) IsLocked() bool {
+	return atomic.LoadInt32(&s.Locked) == 1
 }
 
-// IsLockedBySubscription checks if message is locked within a specific subscription
-func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
-	return atomic.LoadInt32(&m.Locked) == 1 && m.HasBeenProcessedBySubscription(subscriptionID)
+func (s *Subs) IsDeleted() bool {
+	return atomic.LoadInt32(&s.Deleted) == 1
 }
 
-// MarkAsProcessedBySubscription marks message as processed by subscription
-func (m *Message) MarkAsProcessedBySubscription(subscriptionID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	if m.ProcessedSubs == nil {
-		m.ProcessedSubs = make(map[string]struct{})
-	}
-
-	m.ProcessedSubs[subscriptionID] = struct{}{}
+func (s *Subs) MarkAsDeleted() {
+	atomic.StoreInt32(&s.Deleted, 1)
 }
 
-// IsBeingProcessed checks if a message is currently being processed by any client
-/*
-func (m *Message) IsBeingProcessed() bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-	return m.ProcessingBy != ""
-}
-
-// StartProcessing marks a message as being processed by a specific client
-func (m *Message) StartProcessing(clientID string) bool {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	// If message is already being processed, return false
-	if m.ProcessingBy != "" {
-		return false
-	}
-
-	m.ProcessingBy = clientID
-	return true
-}
-
-// EndProcessing marks a message as no longer being processed
-func (m *Message) EndProcessing(clientID string) {
-	m.Mu.Lock()
-	defer m.Mu.Unlock()
-
-	if m.ProcessingBy == clientID {
-		m.ProcessingBy = ""
+func (s *Subs) SetAutoExtend(autoExtend bool) {
+	if autoExtend {
+		atomic.StoreInt32(&s.AutoExtend, 1)
+	} else {
+		atomic.StoreInt32(&s.AutoExtend, 0)
 	}
 }
-*/
+
+func (s *Subs) Reset() {
+	atomic.StoreInt32(&s.Deleted, 0)
+	atomic.StoreInt32(&s.Locked, 0)
+	atomic.StoreInt32(&s.AutoExtend, 0)
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Age = time.Time{}
+}

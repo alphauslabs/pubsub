@@ -42,7 +42,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"id", "name", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
+		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
 		[]interface{}{
 			msgId,
 			in.Topic,
@@ -89,10 +89,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
 
-	// Generate a unique client ID for this subscriber
-	clientID := uuid.New().String()
-	glog.Infof("[Subscribe] Assigned client ID %s for subscription %s", clientID, in.Subscription)
-
 	// Validate subscription exists for the topic
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
@@ -102,6 +98,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
 
+	count := 0
 	// track last message count to avoid duplicate logs
 	lastMessageCount := 0
 
@@ -114,7 +111,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// will get messages for the topic
-			messages, err := storage.GetMessagesByTopic(in.Topic)
+			messages, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
 				glog.Infof("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
@@ -123,7 +120,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
-				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.Topic)
+				glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
 				time.Sleep(time.Second)
 				continue
 			}
@@ -136,31 +133,17 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// Process each message
 			for _, message := range messages {
-				// First check if this subscription has received the message
-				if !message.HasBeenProcessedBySubscription(in.Subscription) {
-					// First time for this subscription - send immediately
-					if err := stream.Send(message.Message); err != nil {
-						glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
-							message.Id, in.Subscription, err)
-						continue
-					}
-
-					// Mark subscription as having received the message
-					message.MarkAsProcessedBySubscription(in.Subscription)
-					glog.Infof("[Subscribe] First delivery: sent message %s to subscription %s",
-						message.Id, in.Subscription)
-					continue
+				if atomic.LoadInt32(&message.FinalDeleted) == 1 {
+					continue // Message has been deleted
 				}
 
-				// If we get here, subscription has already received message
-				// Now check deleted and locked for load balancing
-				if atomic.LoadInt32(&message.Deleted) == 1 ||
-					atomic.LoadInt32(&message.Locked) == 1 {
-					continue
+				if message.Subscriptions[in.Subscription].IsDeleted() {
+					continue // Message has been deleted for this subscription
 				}
 
-				// Lock it for this client
-				atomic.StoreInt32(&message.Locked, 1)
+				if message.Subscriptions[in.Subscription].IsLocked() {
+					continue // Message is already locked by another subscriber
+				}
 
 				// Broadcast lock status to other nodes
 				broadcastData := handlers.BroadCastInput{
@@ -168,32 +151,76 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					Msg:  []byte(fmt.Sprintf("lock:%s:%s", message.Id, in.Subscription)),
 				}
 				bin, _ := json.Marshal(broadcastData)
-				s.Op.Broadcast(stream.Context(), bin)
+				out := s.Op.Broadcast(stream.Context(), bin)
+				for _, o := range out {
+					if o.Error != nil {
+						glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+						return nil
+					}
+				}
 
 				if err := stream.Send(message.Message); err != nil {
-					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
-						message.Id, in.Subscription, err)
-					atomic.StoreInt32(&message.Locked, 0) // Release lock on error
-
+					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", message.Id, in.Subscription, err)
 					// Broadcast unlock on error
 					broadcastData := handlers.BroadCastInput{
 						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:error", message.Id, in.Subscription)),
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s", message.Id, in.Subscription)),
 					}
 					bin, _ := json.Marshal(broadcastData)
-					s.Op.Broadcast(stream.Context(), bin)
+					out := s.Op.Broadcast(stream.Context(), bin)
+					for _, o := range out {
+						if o.Error != nil {
+							glog.Errorf("[Subscribe] Error broadcasting unlock: %v", o.Error)
+							return nil
+						}
+					}
 				} else {
-					glog.Infof("[Subscribe] Load balanced: sent message %s to subscription %s",
-						message.Id, in.Subscription)
+					count++
+					glog.Infof("[subscribe] count=%v", count)
+					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
+
+					// Wait for acknowledgement
+					ch := make(chan struct{})
+					go func() {
+						defer close(ch) // Just close the channel
+
+						ticker := time.NewTicker(100 * time.Millisecond)
+						defer ticker.Stop()
+
+						for {
+							select {
+							case <-ticker.C:
+								m, err := storage.GetMessage(message.Id)
+								if err != nil {
+									glog.Errorf("[Subscribe] Error getting message %s: %v", message.Id, err)
+									return
+								}
+								switch {
+								case m.Subscriptions[in.Subscription].IsDeleted():
+									glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
+									return
+								case !m.Subscriptions[in.Subscription].IsLocked():
+									glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
+									return
+								}
+							case <-stream.Context().Done():
+								// Handle client disconnection
+								glog.Infof("[Subscribe] Client context done while monitoring message %s", message.Id)
+								return
+							}
+						}
+					}()
+
+					<-ch // Wait for the goroutine to signal completion
 				}
 			}
 		}
 	}
+
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 	// Check if message exists in storage
-	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
@@ -206,7 +233,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s", in.Id)),
+		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
@@ -216,7 +243,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		}
 	}
 
-	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
+	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
@@ -236,7 +263,7 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 	// lock the message and reset Age
 	msg.Mu.Lock()
-	msg.Age = time.Now().UTC()
+	msg.Subscriptions[in.SubscriptionId].RenewAge()
 	msg.Mu.Unlock()
 
 	glog.Infof("[Extend Visibility] Visibility Timeout for message %s has been extended.", in.Id)
