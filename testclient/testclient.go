@@ -54,7 +54,7 @@ func main() {
 		}
 		glog.Infof("====List of Topics====")
 		for i, t := range r.Topics {
-			glog.Infof("\n-----------------\n#%v\nName: %s\nCreated at: %s\nUpdated at: %s\n--------------------", int(i+1), t.Name, t.CreatedAt, t.UpdatedAt)
+			glog.Infof("\n-----------------\n#%v\nName: %s\nCreated at: %s\nUpdated at: %s\n--------------------", int(i+1), t.Name, t.CreatedAt, t.UpdatedAt) //TODO: get updated from spanner
 		}
 	case "deletetopic":
 		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
