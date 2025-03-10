@@ -193,6 +193,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								glog.Errorf("[Subscribe] Error getting message %s: %v", msg.Id, err)
 								return
 							}
+							glog.Infof("[Subscribe] Checking message %s | %v", msg.Id, *m.Subscriptions[in.Subscription])
 							switch {
 							case m.Subscriptions[in.Subscription].IsDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
