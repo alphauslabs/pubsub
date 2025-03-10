@@ -304,10 +304,7 @@ func (s *Subs) SetAutoExtend(autoExtend bool) {
 	}
 }
 
-func (s *Subs) Reset() {
-	atomic.StoreInt32(&s.Deleted, 0)
-	atomic.StoreInt32(&s.Locked, 0)
-	atomic.StoreInt32(&s.AutoExtend, 0)
+func (s *Subs) ClearAge() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	s.Age = time.Time{}
