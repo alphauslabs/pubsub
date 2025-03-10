@@ -207,27 +207,36 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					// Wait for acknowledgement
 					ch := make(chan struct{})
 					go func() {
-						defer func() {
-							close(ch)
-							ch <- struct{}{}
-						}()
+						defer close(ch) // Just close the channel
+
+						ticker := time.NewTicker(100 * time.Millisecond)
+						defer ticker.Stop()
+
 						for {
-							m, err := storage.GetMessage(message.Id)
-							if err != nil {
-								glog.Errorf("[Subscribe] Error getting message %s: %v", message.Id, err)
-								return
-							}
-							switch {
-							case m.Subscriptions[in.Subscription].IsDeleted():
-								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
-								return
-							case !m.Subscriptions[in.Subscription].IsLocked():
-								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
+							select {
+							case <-ticker.C:
+								m, err := storage.GetMessage(message.Id)
+								if err != nil {
+									glog.Errorf("[Subscribe] Error getting message %s: %v", message.Id, err)
+									return
+								}
+								switch {
+								case m.Subscriptions[in.Subscription].IsDeleted():
+									glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
+									return
+								case !m.Subscriptions[in.Subscription].IsLocked():
+									glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
+									return
+								}
+							case <-stream.Context().Done():
+								// Handle client disconnection
+								glog.Infof("[Subscribe] Client context done while monitoring message %s", message.Id)
 								return
 							}
 						}
 					}()
-					<-ch
+
+					<-ch // Wait for the goroutine to signal completion
 				}
 			}
 		}
