@@ -205,7 +205,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
 
 					// Wait for acknowledgement
-					var ch chan struct{}
+					ch := make(chan struct{})
 					go func() {
 						defer func() {
 							close(ch)
