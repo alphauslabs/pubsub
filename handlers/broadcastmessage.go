@@ -16,7 +16,7 @@ import (
 
 func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, spannerClient *spanner.Client) {
 	isFirst := true
-	ticker := time.NewTicker(5 * time.Second) // check every 5 seconds
+	ticker := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer ticker.Stop()
 	var lastQueryTime time.Time
 
@@ -52,7 +52,7 @@ func FetchAndBroadcastUnprocessedMessage(ctx context.Context, op *hedge.Op, span
 				iter := spannerClient.Single().Query(ctx, stmt)
 				defer iter.Stop()
 
-				count := 0 // counter for processed messages
+				count := 0 // counter for unprocessed messages
 				for {
 					row, err := iter.Next()
 					if err == iterator.Done {
