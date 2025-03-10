@@ -27,10 +27,10 @@ func RunCheckForExpired(ctx context.Context) {
 							continue
 						}
 						switch {
-						case time.Since(t.Age) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
+						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
 							t.Unlock()
 							t.ClearAge()
-						case time.Since(t.Age) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 1:
+						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 1:
 							t.RenewAge()
 						}
 					}
