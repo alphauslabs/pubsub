@@ -183,7 +183,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						return nil
 					}
 				}
-
+				stream.SendMsg(message.Message)
 				if err := stream.Send(message.Message); err != nil {
 					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", message.Id, in.Subscription, err)
 					// Broadcast unlock on error
@@ -203,6 +203,27 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					count++
 					glog.Infof("[subscribe] count=%v", count)
 					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
+
+					// Wait for acknowledgement
+					var ch chan struct{}
+					go func() {
+						for {
+							m, err := storage.GetMessage(message.Id)
+							if err != nil {
+								glog.Infof("[Subscribe] Error getting message %s: %v", message.Id, err)
+								return
+							}
+							switch {
+							case m.Subscriptions[in.Subscription].IsDeleted():
+								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
+								ch <- struct{}{}
+							case !m.Subscriptions[in.Subscription].IsLocked():
+								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
+								ch <- struct{}{}
+							}
+						}
+					}()
+					<-ch
 				}
 			}
 		}
