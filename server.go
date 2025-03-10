@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -100,7 +99,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 	count := 0
 	// track last message count to avoid duplicate logs
-	lastMessageCount := 0
+	// lastMessageCount := 0
 
 	// Continuous loop to stream messages
 	for {
@@ -110,110 +109,109 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
-			// will get messages for the topic
-			messages, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
+			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
-				glog.Infof("[Subscribe] Error getting messages: %v", err)
+				glog.Infof(err.Error())
 				time.Sleep(time.Second) // Back off on error
 				continue
 			}
 
 			// If no messages, wait before checking again
-			if len(messages) == 0 {
-				glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
-				time.Sleep(time.Second)
-				continue
-			}
+			// if len(messages) == 0 {
+			// 	glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
+			// 	time.Sleep(time.Second)
+			// 	continue
+			// }
 
-			// Only log if the number of messages has changed
-			if len(messages) != lastMessageCount {
-				glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
-				lastMessageCount = len(messages)
-			}
+			// // Only log if the number of messages has changed
+			// if len(messages) != lastMessageCount {
+			// 	glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
+			// 	lastMessageCount = len(messages)
+			// }
 
 			// Process each message
-			for _, message := range messages {
-				if atomic.LoadInt32(&message.FinalDeleted) == 1 {
-					continue // Message has been deleted
-				}
+			// for _, message := range messages {
+			// if atomic.LoadInt32(&message.FinalDeleted) == 1 {
+			// 	continue // Message has been deleted
+			// }
 
-				if message.Subscriptions[in.Subscription].IsDeleted() {
-					continue // Message has been deleted for this subscription
-				}
+			// if message.Subscriptions[in.Subscription].IsDeleted() {
+			// 	continue // Message has been deleted for this subscription
+			// }
 
-				if message.Subscriptions[in.Subscription].IsLocked() {
-					continue // Message is already locked by another subscriber
-				}
+			// if message.Subscriptions[in.Subscription].IsLocked() {
+			// 	continue // Message is already locked by another subscriber
+			// }
 
-				// Broadcast lock status to other nodes
+			// Broadcast lock status to other nodes
+			broadcastData := handlers.BroadCastInput{
+				Type: handlers.MsgEvent,
+				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription)),
+			}
+			bin, _ := json.Marshal(broadcastData)
+			out := s.Op.Broadcast(stream.Context(), bin)
+			for _, o := range out {
+				if o.Error != nil {
+					glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+					return nil
+				}
+			}
+
+			if err := stream.Send(msg.Message); err != nil {
+				glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", msg.Id, in.Subscription, err)
+				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("lock:%s:%s", message.Id, in.Subscription)),
+					Msg:  []byte(fmt.Sprintf("unlock:%s:%s", msg.Id, in.Subscription)),
 				}
 				bin, _ := json.Marshal(broadcastData)
 				out := s.Op.Broadcast(stream.Context(), bin)
 				for _, o := range out {
 					if o.Error != nil {
-						glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+						glog.Errorf("[Subscribe] Error broadcasting unlock: %v", o.Error)
 						return nil
 					}
 				}
+			} else {
+				count++
+				glog.Infof("[subscribe] count=%v", count)
+				glog.Infof("[Subscribe] sent message %s to subscription %s", msg.Id, in.Subscription)
 
-				if err := stream.Send(message.Message); err != nil {
-					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", message.Id, in.Subscription, err)
-					// Broadcast unlock on error
-					broadcastData := handlers.BroadCastInput{
-						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s", message.Id, in.Subscription)),
-					}
-					bin, _ := json.Marshal(broadcastData)
-					out := s.Op.Broadcast(stream.Context(), bin)
-					for _, o := range out {
-						if o.Error != nil {
-							glog.Errorf("[Subscribe] Error broadcasting unlock: %v", o.Error)
-							return nil
-						}
-					}
-				} else {
-					count++
-					glog.Infof("[subscribe] count=%v", count)
-					glog.Infof("[Subscribe] sent message %s to subscription %s", message.Id, in.Subscription)
+				// Wait for acknowledgement
+				ch := make(chan struct{})
+				go func() {
+					defer close(ch) // Just close the channel
 
-					// Wait for acknowledgement
-					ch := make(chan struct{})
-					go func() {
-						defer close(ch) // Just close the channel
+					ticker := time.NewTicker(100 * time.Millisecond)
+					defer ticker.Stop()
 
-						ticker := time.NewTicker(100 * time.Millisecond)
-						defer ticker.Stop()
-
-						for {
-							select {
-							case <-ticker.C:
-								m, err := storage.GetMessage(message.Id)
-								if err != nil {
-									glog.Errorf("[Subscribe] Error getting message %s: %v", message.Id, err)
-									return
-								}
-								switch {
-								case m.Subscriptions[in.Subscription].IsDeleted():
-									glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
-									return
-								case !m.Subscriptions[in.Subscription].IsLocked():
-									glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
-									return
-								}
-							case <-stream.Context().Done():
-								// Handle client disconnection
-								glog.Infof("[Subscribe] Client context done while monitoring message %s", message.Id)
+					for {
+						select {
+						case <-ticker.C:
+							m, err := storage.GetMessage(msg.Id)
+							if err != nil {
+								glog.Errorf("[Subscribe] Error getting message %s: %v", msg.Id, err)
 								return
 							}
+							switch {
+							case m.Subscriptions[in.Subscription].IsDeleted():
+								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
+								return
+							case !m.Subscriptions[in.Subscription].IsLocked():
+								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", msg.Id, in.Subscription)
+								return
+							}
+						case <-stream.Context().Done():
+							// Handle client disconnection
+							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
+							return
 						}
-					}()
+					}
+				}()
 
-					<-ch // Wait for the goroutine to signal completion
-				}
+				<-ch // Wait for the goroutine to signal completion
 			}
+			// }
 		}
 	}
 

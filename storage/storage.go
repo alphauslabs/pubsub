@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -207,7 +208,7 @@ func GetMessage(id string) (*Message, error) {
 	return nil, ErrMessageNotFound
 }
 
-func GetMessagesByTopicSub(topicName, sub string) ([]*Message, error) {
+func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 
@@ -218,7 +219,7 @@ func GetMessagesByTopicSub(topicName, sub string) ([]*Message, error) {
 	allMsgs := topicMsgs.GetAll()
 
 	// filter messages marked dleted
-	activeMsgs := make([]*Message, 0, len(allMsgs))
+	// activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
 		if atomic.LoadInt32(&msg.FinalDeleted) == 1 { // filter
 			continue
@@ -232,10 +233,10 @@ func GetMessagesByTopicSub(topicName, sub string) ([]*Message, error) {
 			continue
 		}
 
-		activeMsgs = append(activeMsgs, msg)
+		return msg, nil
 	}
 
-	return activeMsgs, nil //ret filtered mssges
+	return nil, fmt.Errorf("[Subscribe] no active messages found for topic=%s and sub=%s", topicName, sub)
 }
 
 func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
