@@ -130,7 +130,6 @@ func StoreMessage(msg *Message) error {
 	msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
-	glog.Infof("[STORAGE] Stored message with ID = %s, Topic = %s", msg.Id, msg.Topic)
 	return nil
 }
 
