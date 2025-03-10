@@ -188,17 +188,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					for {
 						select {
 						case <-ticker.C:
-							m, err := storage.GetMessage(msg.Id)
-							if err != nil {
-								glog.Errorf("[Subscribe] Error getting message %s: %v", msg.Id, err)
-								return
-							}
-							glog.Infof("[Subscribe] Checking message %s | %v", msg.Id, *m.Subscriptions[in.Subscription])
 							switch {
-							case m.Subscriptions[in.Subscription].IsDeleted():
+							case msg.Subscriptions[in.Subscription].IsDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
 								return
-							case !m.Subscriptions[in.Subscription].IsLocked():
+							case !msg.Subscriptions[in.Subscription].IsLocked():
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", msg.Id, in.Subscription)
 								return
 							}
