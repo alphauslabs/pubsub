@@ -183,7 +183,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						return nil
 					}
 				}
-				stream.SendMsg(message.Message)
+
 				if err := stream.Send(message.Message); err != nil {
 					glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", message.Id, in.Subscription, err)
 					// Broadcast unlock on error
