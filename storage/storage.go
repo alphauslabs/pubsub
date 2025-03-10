@@ -27,7 +27,7 @@ type Subs struct {
 
 type MessageMap struct {
 	Messages map[string]*Message
-	mu       sync.RWMutex
+	Mu       sync.RWMutex
 }
 
 // NewMessageMap creates a new message map
@@ -39,8 +39,8 @@ func NewMessageMap() *MessageMap {
 
 // Get retrieves a message by ID
 func (mm *MessageMap) Get(id string) (*Message, bool) {
-	mm.mu.RLock()
-	defer mm.mu.RUnlock()
+	mm.Mu.RLock()
+	defer mm.Mu.RUnlock()
 
 	msg, exists := mm.Messages[id]
 	return msg, exists
@@ -48,16 +48,16 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 
 // Put adds or updates a message
 func (mm *MessageMap) Put(id string, msg *Message) {
-	mm.mu.Lock()
-	defer mm.mu.Unlock()
+	mm.Mu.Lock()
+	defer mm.Mu.Unlock()
 
 	mm.Messages[id] = msg
 }
 
 // Delete removes a message
 func (mm *MessageMap) Delete(id string) bool {
-	mm.mu.Lock()
-	defer mm.mu.Unlock()
+	mm.Mu.Lock()
+	defer mm.Mu.Unlock()
 
 	_, exists := mm.Messages[id]
 	if exists {
@@ -68,8 +68,8 @@ func (mm *MessageMap) Delete(id string) bool {
 
 // GetAll returns a copy of all Messages
 func (mm *MessageMap) GetAll() []*Message {
-	mm.mu.RLock()
-	defer mm.mu.RUnlock()
+	mm.Mu.RLock()
+	defer mm.Mu.RUnlock()
 
 	result := make([]*Message, 0, len(mm.Messages))
 	for _, msg := range mm.Messages {
@@ -80,8 +80,8 @@ func (mm *MessageMap) GetAll() []*Message {
 
 // Count returns the number of Messages
 func (mm *MessageMap) Count() int {
-	mm.mu.RLock()
-	defer mm.mu.RUnlock()
+	mm.Mu.RLock()
+	defer mm.Mu.RUnlock()
 
 	return len(mm.Messages)
 }

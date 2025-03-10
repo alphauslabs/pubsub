@@ -13,6 +13,7 @@ func RunCheckForExpired(ctx context.Context) {
 	glog.Info("[sweep] run check for expired messages started")
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
+			v.Mu.Lock()
 			for _, v1 := range v.Messages {
 				if atomic.LoadInt32(&v1.FinalDeleted) == 0 {
 					v1.Mu.Lock()
@@ -39,6 +40,7 @@ func RunCheckForExpired(ctx context.Context) {
 					v1.Mu.Unlock()
 				}
 			}
+			v.Mu.Unlock()
 		}
 	}
 

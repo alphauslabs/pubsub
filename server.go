@@ -572,7 +572,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 
 	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
-	// todo: tell leader
+	s.notifyLeader(notifleader)
 	return &pb.Subscription{
 		Name:       req.Name,
 		Topic:      req.Topic,
@@ -645,7 +645,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
 	}
 
-	// todo: tell leader
+	s.notifyLeader(notifleader)
 	return &pb.Subscription{
 		Name:              req.Name,
 		Topic:             existingSub.Topic,
@@ -665,7 +665,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
 	}
 
-	// todo: tell leader
+	s.notifyLeader(notifleader)
 	return &pb.DeleteSubscriptionResponse{
 		Success:   true,
 		DeletedAt: time.Now().Format(time.RFC3339),

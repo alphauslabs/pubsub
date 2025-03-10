@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
@@ -65,14 +66,14 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 	return topicSub
 }
 
-func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
+func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	var latest map[string]map[string]*storage.Subscription
 	if isStartup {
-		requestTopicSubFetch(ctx, op) // request to the current leader
+		requestTopicSubFetch(ctx, app.Op) // request to the current leader
 		return
 	}
 
-	latest = FetchAllTopicSubscriptions(ctx, client)
+	latest = FetchAllTopicSubscriptions(ctx, app.Client)
 	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
 		glog.Info("STRUCT-Leader: No changes detected in topic-subscription structure.")
 		return
@@ -106,7 +107,7 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	// Broadcast message
-	out := op.Broadcast(ctx, broadcastData)
+	out := app.Op.Broadcast(ctx, broadcastData)
 	for _, r := range out {
 		if r.Error != nil {
 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
@@ -118,8 +119,7 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	glog.Info("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
-// initializes the distributor that periodically checks for updates.
-func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
+func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 	glog.Info("[STRUCT] Starting distribution of topic-sub scription structure...")
 	ticker := time.NewTicker(10 * time.Second) // will adjust to lower interval later
 	defer func() {
@@ -128,7 +128,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	}()
 
 	// perform an initial broadcast of all topic-subscription structures
-	FetchAndBroadcast(ctx, op, client, true) // run startup broadcast
+	FetchAndBroadcast(ctx, app, true) // run startup broadcast
 
 	for {
 		select {
@@ -137,7 +137,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 			return
 		case <-ticker.C:
 			if atomic.LoadInt32(&leader.IsLeader) == 1 {
-				FetchAndBroadcast(ctx, op, client, false)
+				FetchAndBroadcast(ctx, app, false)
 			}
 		}
 	}

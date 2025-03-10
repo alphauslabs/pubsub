@@ -124,9 +124,9 @@ func main() {
 	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.
 	go sweep.RunCheckForDeleted(ctx)
 	// Start our fetching and broadcast routine for topic-subscription structure.
-	go handlers.StartDistributor(ctx, op, spannerClient)
+	go handlers.StartBroadcastTopicSub(ctx, ap)
 	// Start our fetching and broadcast routine for unprocessed messages.
-	go handlers.FetchAndBroadcastUnprocessedMessage(ctx, op, spannerClient)
+	go handlers.StartBroadcastMessages(ctx, ap)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
