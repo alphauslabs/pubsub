@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -189,6 +190,9 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						select {
 						case <-ticker.C:
 							switch {
+							case atomic.LoadInt32(&msg.FinalDeleted) == 1:
+								glog.Infof("[Subscribe] Message %s has been deleted", msg.Id)
+								return
 							case msg.Subscriptions[in.Subscription].IsDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
 								return
