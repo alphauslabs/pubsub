@@ -208,7 +208,7 @@ func GetMessage(id string) (*Message, error) {
 	return nil, ErrMessageNotFound
 }
 
-func GetMessagesByTopic(topicName, sub string) ([]*Message, error) {
+func GetMessagesByTopicSub(topicName, sub string) ([]*Message, error) {
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 

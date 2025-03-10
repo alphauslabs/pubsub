@@ -111,7 +111,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			return nil
 		default:
 			// will get messages for the topic
-			messages, err := storage.GetMessagesByTopic(in.Topic, in.Subscription)
+			messages, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
 				glog.Infof("[Subscribe] Error getting messages: %v", err)
 				time.Sleep(time.Second) // Back off on error
@@ -120,7 +120,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 			// If no messages, wait before checking again
 			if len(messages) == 0 {
-				glog.Infof("[Subscribe] No messages found for topic %s, waiting...", in.Topic)
+				glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
 				time.Sleep(time.Second)
 				continue
 			}
@@ -144,31 +144,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				if message.Subscriptions[in.Subscription].IsLocked() {
 					continue // Message is already locked by another subscriber
 				}
-
-				// if !message.HasBeenProcessedBySubscription(in.Subscription) {
-				// 	// First time for this subscription - send immediately
-				// 	if err := stream.Send(message.Message); err != nil {
-				// 		glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v",
-				// 			message.Id, in.Subscription, err)
-				// 		continue
-				// 	}
-
-				// 	// Mark subscription as having received the message
-				// 	message.MarkAsProcessedBySubscription(in.Subscription)
-				// 	glog.Infof("[Subscribe] First delivery: sent message %s to subscription %s",
-				// 		message.Id, in.Subscription)
-				// 	continue
-				// }
-
-				// // If we get here, subscription has already received message
-				// // Now check deleted and locked for load balancing
-				// if atomic.LoadInt32(&message.Deleted) == 1 ||
-				// 	atomic.LoadInt32(&message.Locked) == 1 {
-				// 	continue
-				// }
-
-				// Lock it for this client
-				// atomic.StoreInt32(&message.Locked, 1)
 
 				// Broadcast lock status to other nodes
 				broadcastData := handlers.BroadCastInput{

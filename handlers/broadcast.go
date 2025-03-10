@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
@@ -107,8 +108,6 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 
 // Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
-	glog.Info("[Lock] Attempting to lock message:", messageID, " for subscription:", subId)
-
 	// retrieve the message from storage
 	msg, err := storage.GetMessage(messageID)
 	if err != nil {
@@ -145,19 +144,33 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	msg.Mu.Lock()
 	msg.Subscriptions[subId].RenewAge()
 	msg.Mu.Unlock()
-	glog.Infof("[Lock] Message %s locked successfully for Subscription: %s", messageID, subId)
 
+	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
 }
 
 func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
-	// todo:
+	// retrieve the message from storage
+	m, err := storage.GetMessage(messageID)
+	if err != nil {
+		glog.Errorf("[Unlock] Error retrieving message %s: %v", messageID, err)
+		return nil, err
+	}
+	if m == nil {
+		glog.Errorf("[Unlock] Message %s not found", messageID)
+		return nil, fmt.Errorf("message not found")
+	}
+
+	m.Subscriptions[subId].SetAutoExtend(false)
+	m.Subscriptions[subId].Unlock()
+	m.Mu.Lock()
+	m.Subscriptions[subId].Age = time.Time{}
+	m.Mu.Unlock()
+
 	return nil, nil
 }
 
 func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
-	glog.Info("[Delete] Removing message:", messageID)
-
 	m, err := storage.GetMessage(messageID)
 	if err != nil {
 		return nil, err
@@ -169,7 +182,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	// Delete from storage
 	m.Subscriptions[subId].MarkAsDeleted()
 
-	glog.Info("[Delete] Message successfully removed:", messageID)
+	glog.Infof("[Delete] Message=%v sucessfully mark as deleted for sub=%v", messageID, subId)
 	return nil, nil
 }
 
@@ -190,8 +203,6 @@ func handleLeaderLiveliness(app *app.PubSub, msg []byte) ([]byte, error) {
 // Handle topic deletion
 func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
 	topicName := string(msg)
-	glog.Infof("[Delete] Received topic deletion notification for topic: %s", topicName)
-
 	// Remove from memory
 	if err := storage.RemoveTopic(topicName); err != nil {
 		glog.Infof("[Delete] Error removing topic from memory: %v", err)
