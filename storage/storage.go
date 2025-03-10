@@ -214,7 +214,7 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 
 	topicMsgs, exists := TopicMessages[topicName]
 	if !exists {
-		return nil, nil
+		return nil, fmt.Errorf("[Subscribe] no active messages found for topic=%s and sub=%s", topicName, sub)
 	}
 	allMsgs := topicMsgs.GetAll()
 
