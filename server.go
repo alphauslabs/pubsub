@@ -207,19 +207,23 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					// Wait for acknowledgement
 					var ch chan struct{}
 					go func() {
+						defer func() {
+							close(ch)
+							ch <- struct{}{}
+						}()
 						for {
 							m, err := storage.GetMessage(message.Id)
 							if err != nil {
-								glog.Infof("[Subscribe] Error getting message %s: %v", message.Id, err)
+								glog.Errorf("[Subscribe] Error getting message %s: %v", message.Id, err)
 								return
 							}
 							switch {
 							case m.Subscriptions[in.Subscription].IsDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", message.Id, in.Subscription)
-								ch <- struct{}{}
+								return
 							case !m.Subscriptions[in.Subscription].IsLocked():
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", message.Id, in.Subscription)
-								ch <- struct{}{}
+								return
 							}
 						}
 					}()
