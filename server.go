@@ -243,7 +243,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		}
 	}
 
-	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%vm, sub=%v", in.Id, in.Subscription)
+	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
