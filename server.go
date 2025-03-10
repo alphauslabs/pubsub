@@ -221,7 +221,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
 	// Check if message exists in storage
-	glog.Infof("[Acknowledge] Retrieving message %s from storage", in.Id)
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
@@ -244,7 +243,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 		}
 	}
 
-	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message %s", in.Id)
+	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%vm, sub=%v", in.Id, in.Subscription)
 	return &pb.AcknowledgeResponse{Success: true}, nil
 }
 
