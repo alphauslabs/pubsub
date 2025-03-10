@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
@@ -161,11 +160,7 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 		return nil, fmt.Errorf("message not found")
 	}
 
-	m.Subscriptions[subId].SetAutoExtend(false)
-	m.Subscriptions[subId].Unlock()
-	m.Mu.Lock()
-	m.Subscriptions[subId].Age = time.Time{}
-	m.Mu.Unlock()
+	m.Reset()
 
 	return nil, nil
 }

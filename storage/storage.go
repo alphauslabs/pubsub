@@ -271,82 +271,6 @@ func RemoveTopic(topicName string) error {
 	return nil
 }
 
-// RemoveMessage removes a message from storage
-func RemoveMessage(id string, topicName string) error {
-	topicMsgMu.Lock()
-	defer topicMsgMu.Unlock()
-
-	// If topicName is provided, we can directly check that topic
-	if topicName != "" {
-		if topicMsgs, exists := TopicMessages[topicName]; exists {
-			if topicMsgs.Delete(id) {
-				return nil
-			}
-		}
-		return ErrMessageNotFound
-	}
-
-	// If topicName is not provided, search all topics
-	for _, msgs := range TopicMessages {
-		if msgs.Delete(id) {
-			return nil
-		}
-	}
-
-	return ErrMessageNotFound
-}
-
-// HasBeenProcessedBySubscription checks if this subscription has received the message (fanout check)
-// func (m *Message) HasBeenProcessedBySubscription(subscriptionID string) bool {
-// 	m.Mu.Lock()
-// 	defer m.Mu.Unlock()
-
-// 	if m.ProcessedSubs == nil {
-// 		m.ProcessedSubs = make(map[string]struct{})
-// 	}
-
-// 	_, exists := m.ProcessedSubs[subscriptionID]
-// 	return exists
-// }
-
-// HasBeenProcessedByClient checks if a client has processed the message (load balance check -client side )
-// func (m *Message) HasBeenProcessedByClient(subscriptionID, clientID string) bool {
-// 	m.Mu.Lock()
-// 	defer m.Mu.Unlock()
-
-// 	if m.ProcessedSubs == nil {
-// 		return false
-// 	}
-
-// 	_, processed := m.ProcessedSubs[subscriptionID]
-// 	return processed
-// }
-
-// MarkAsProcessedByClient marks message as processed by client and creates subscription entry if needed
-// func (m *Message) MarkAsProcessedByClient(subscriptionID, clientID string) {
-// 	m.Mu.Lock()
-// 	defer m.Mu.Unlock()
-
-// 	if m.ProcessedSubs == nil {
-// 		m.ProcessedSubs = make(map[string]struct{})
-// 	}
-
-// 	m.ProcessedSubs[subscriptionID] = struct{}{}
-// }
-
-// IsLockedBySubscription checks if message is locked within a specific subscription
-func (m *Message) IsLockedBySubscription(subscriptionID string) bool {
-	return atomic.LoadInt32(&m.Subscriptions[subscriptionID].Locked) == 1
-}
-
-// // MarkAsProcessedBySubscription marks message as processed by subscription
-// func (m *Message) MarkAsProcessedBySubscription(subscriptionID string) {
-// 	m.Mu.Lock()
-// 	defer m.Mu.Unlock()
-
-// 	atomic.StoreInt32(&m.Subscriptions[subscriptionID].Dispatched, 1)
-// }
-
 func (s *Subs) RenewAge() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -379,4 +303,13 @@ func (s *Subs) SetAutoExtend(autoExtend bool) {
 	} else {
 		atomic.StoreInt32(&s.AutoExtend, 0)
 	}
+}
+
+func (s *Subs) Reset() {
+	atomic.StoreInt32(&s.Deleted, 0)
+	atomic.StoreInt32(&s.Locked, 0)
+	atomic.StoreInt32(&s.AutoExtend, 0)
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Age = time.Time{}
 }
