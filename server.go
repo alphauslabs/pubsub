@@ -36,6 +36,7 @@ const (
 
 // Publish a message to a topic
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
+	glog.Infof("[Publish] New message received - Topic: %s, Payload: %s", in.Topic, in.Payload)
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
