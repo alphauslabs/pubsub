@@ -5,7 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
 )
 
@@ -27,11 +29,11 @@ func RunCheckForExpired(ctx context.Context) {
 							continue
 						}
 						switch {
-						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
+						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
 							glog.Infof("[sweep] message %s subscription %s expired. Unlocking...", v1.Id, s)
 							t.Unlock()
 							t.ClearAge()
-						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 1:
+						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:
 							t.RenewAge()
 						}
 					}
@@ -58,12 +60,17 @@ func RunCheckForExpired(ctx context.Context) {
 	}
 }
 
-func RunCheckForDeleted(ctx context.Context) {
+func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 	glog.Info("[sweep] run check for deleted messages started")
 	sweep := func() {
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
 				if atomic.LoadInt32(&v1.FinalDeleted) == 1 {
+					// Update the processed status in Spanner
+					if err := utils.UpdateMessageProcessedStatus(app.Client, v1.Id); err != nil {
+						glog.Errorf("[sweep] error updating message %s processed status: %v", v1.Id, err)
+					}
+
 					delete(v.Messages, v1.Id)
 					glog.Info("[sweep] deleted message:", v1.Id)
 				}

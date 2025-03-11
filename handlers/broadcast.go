@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
@@ -50,13 +51,15 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	var message storage.Message
+	var message pb.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
+	m := storage.Message{
+		Message: &message,
+	}
 
-	// Store in node queue/memory (not marking as processed yet)
-	if err := storage.StoreMessage(&message); err != nil {
+	if err := storage.StoreMessage(&m); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}
 
@@ -140,9 +143,7 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
 
 	msg.Subscriptions[subId].Lock()
-	msg.Mu.Lock()
 	msg.Subscriptions[subId].RenewAge()
-	msg.Mu.Unlock()
 
 	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
@@ -160,7 +161,8 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 		return nil, fmt.Errorf("message not found")
 	}
 
-	m.Reset()
+	m.Subscriptions[subId].Unlock()
+	m.Subscriptions[subId].ClearAge()
 
 	return nil, nil
 }
@@ -174,7 +176,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// Delete from storage
+	// Delete for this subscription
 	m.Subscriptions[subId].MarkAsDeleted()
 
 	glog.Infof("[Delete] Message=%v sucessfully mark as deleted for sub=%v", messageID, subId)

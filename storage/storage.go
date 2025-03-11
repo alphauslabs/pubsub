@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -8,6 +10,13 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
+)
+
+var (
+	ErrMessageNotFound = errors.New("message not found")
+	ErrInvalidMessage  = errors.New("invalid message")
+	ErrTopicNotFound   = errors.New("topic not found")
+	ErrInvalidTopicSub = errors.New("invalid topic-subscription structure")
 )
 
 type Message struct {
@@ -47,12 +56,13 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 	return msg, exists
 }
 
-// Put adds or updates a message
+// Put adds a message, no op if exists
 func (mm *MessageMap) Put(id string, msg *Message) {
 	mm.Mu.Lock()
 	defer mm.Mu.Unlock()
-
-	mm.Messages[id] = msg
+	if _, ok := mm.Get(id); !ok {
+		mm.Messages[id] = msg
+	}
 }
 
 // Delete removes a message
@@ -110,7 +120,6 @@ func StoreMessage(msg *Message) error {
 	// Lock the topic Messages map for writing
 	topicMsgMu.Lock()
 	defer topicMsgMu.Unlock()
-
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
@@ -121,15 +130,18 @@ func StoreMessage(msg *Message) error {
 		return err
 	}
 
-	subss := make(map[string]*Subs)
-	for _, sub := range subs {
-		subss[sub.Name] = &Subs{
-			SubscriptionID: sub.Name,
+	if _, ok := TopicMessages[msg.Topic].Get(msg.Id); !ok {
+		subss := make(map[string]*Subs)
+		for _, sub := range subs {
+			subss[sub.Name] = &Subs{
+				SubscriptionID: sub.Name,
+			}
 		}
+		msg.Subscriptions = subss
+		TopicMessages[msg.Topic].Put(msg.Id, msg)
+	} else {
+		glog.Infof("[STORAGE] Message: %v already exists, skipping...", msg.Id)
 	}
-
-	msg.Subscriptions = subss
-	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
 	return nil
 }
@@ -145,11 +157,18 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 	return nil
 }
 
-func MonitorActivity() {
-	ticker := time.NewTicker(1 * time.Minute)
+func MonitorActivity(ctx context.Context) {
+	glog.Info("[Storage Monitor] Starting storage activity monitor...")
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	defer func() {
+		glog.Info("[Storage Monitor] Stopping storage activity monitor...")
+		if r := recover(); r != nil {
+			glog.Errorf("[Storage Monitor] Panic recovered: %v", r)
+		}
+	}()
 
-	for range ticker.C {
+	do := func() {
 		var topicMsgCounts = make(map[string]int)
 		var topicSubDetails = make(map[string]int)
 
@@ -185,6 +204,18 @@ func MonitorActivity() {
 			for topic, count := range topicMsgCounts {
 				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
 			}
+		}
+	}
+
+	do()
+	for {
+		glog.Info("[Storage Monitor] Waiting for next tick...")
+		select {
+		case <-ctx.Done():
+			glog.Info("[Storage Monitor] Stopping storage activity monitor...")
+			return
+		case <-ticker.C:
+			do()
 		}
 	}
 }
@@ -245,15 +276,28 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 
 	subs, exists := topicSubs[topicName]
 	if !exists {
+		glog.Errorf("[STORAGE] topic %s not found in storage, current in mem=%v", topicName, getTopicKeys())
 		return nil, ErrTopicNotFound
 	}
 	// Convert map to slice
 	subList := make([]*Subscription, 0, len(subs))
 	for _, sub := range subs {
+		if sub == nil {
+			glog.Errorf("[STORAGE] found nil subscription for topic %s", topicName)
+			continue
+		}
 		subList = append(subList, sub)
 	}
 
 	return subList, nil
+}
+
+func getTopicKeys() []string {
+	keys := make([]string, 0, len(topicSubs))
+	for k := range topicSubs {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // RemoveTopic removes a topic from storage

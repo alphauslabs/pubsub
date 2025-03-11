@@ -118,33 +118,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				continue
 			}
 
-			// If no messages, wait before checking again
-			// if len(messages) == 0 {
-			// 	glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
-			// 	time.Sleep(time.Second)
-			// 	continue
-			// }
-
-			// // Only log if the number of messages has changed
-			// if len(messages) != lastMessageCount {
-			// 	glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
-			// 	lastMessageCount = len(messages)
-			// }
-
-			// Process each message
-			// for _, message := range messages {
-			// if atomic.LoadInt32(&message.FinalDeleted) == 1 {
-			// 	continue // Message has been deleted
-			// }
-
-			// if message.Subscriptions[in.Subscription].IsDeleted() {
-			// 	continue // Message has been deleted for this subscription
-			// }
-
-			// if message.Subscriptions[in.Subscription].IsLocked() {
-			// 	continue // Message is already locked by another subscriber
-			// }
-
 			// Broadcast lock status to other nodes
 			broadcastData := handlers.BroadCastInput{
 				Type: handlers.MsgEvent,
@@ -190,28 +163,30 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					for {
 						select {
 						case <-ticker.C:
+							m, err := storage.GetMessage(msg.Id)
+							if err != nil {
+								glog.Infof("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
+								return
+							}
 							switch {
-							case atomic.LoadInt32(&msg.FinalDeleted) == 1:
-								glog.Infof("[Subscribe] Message %s has been deleted", msg.Id)
+							case atomic.LoadInt32(&m.FinalDeleted) == 1:
+								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
 								return
-							case msg.Subscriptions[in.Subscription].IsDeleted():
-								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
+							case m.Subscriptions[in.Subscription].IsDeleted():
+								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
 								return
-							case !msg.Subscriptions[in.Subscription].IsLocked():
-								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", msg.Id, in.Subscription)
+							case !m.Subscriptions[in.Subscription].IsLocked():
+								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
 						case <-stream.Context().Done():
-							// Handle client disconnection
 							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
 							return
 						}
 					}
 				}()
-
-				<-ch // Wait for the goroutine to signal completion
+				<-ch
 			}
-			// }
 		}
 	}
 
@@ -222,11 +197,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
-	}
-
-	// Update the processed status in Spanner
-	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
-		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
 	broadcastData := handlers.BroadCastInput{
