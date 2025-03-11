@@ -29,11 +29,11 @@ func RunCheckForExpired(ctx context.Context) {
 							continue
 						}
 						switch {
-						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 0:
+						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
 							glog.Infof("[sweep] message %s subscription %s expired. Unlocking...", v1.Id, s)
 							t.Unlock()
 							t.ClearAge()
-						case time.Duration(time.Since(t.Age).Seconds()) >= 30*time.Second && atomic.LoadInt32(&t.AutoExtend) == 1:
+						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:
 							t.RenewAge()
 						}
 					}
