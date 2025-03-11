@@ -157,6 +157,13 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					return nil
 				}
 			}
+			
+			// // Verify lock was successful
+			// verifyMsg, err := storage.GetMessage(msg.Id)
+			// if err != nil || !verifyMsg.Subscriptions[in.Subscription].IsLocked() {
+			// 	glog.Infof("[Subscribe] Lock not acquired for message %s, retrying...", msg.Id)
+			// 	continue // Try next message
+			// }
 
 			if err := stream.Send(msg.Message); err != nil {
 				glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", msg.Id, in.Subscription, err)
@@ -182,6 +189,16 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				ch := make(chan struct{})
 				go func() {
 					defer close(ch) // Just close the channel
+
+					  // first verify lock is establshed befre starting monitoring
+					  for i := 0; i < 5; i++ { // Try up to 5 times
+						m, err := storage.GetMessage(msg.Id)
+						if err == nil && m.Subscriptions[in.Subscription].IsLocked() {
+							break 
+						}
+						time.Sleep(50 * time.Millisecond)
+					}
+			
 
 					ticker := time.NewTicker(100 * time.Millisecond)
 					defer ticker.Stop()
