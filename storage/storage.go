@@ -62,6 +62,8 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	defer mm.Mu.Unlock()
 	if _, ok := mm.Get(id); !ok {
 		mm.Messages[id] = msg
+	} else {
+		glog.Infof("existsss %s", id)
 	}
 }
 
@@ -131,8 +133,13 @@ func StoreMessage(msg *Message) error {
 	}
 
 	if _, ok := TopicMessages[msg.Topic].Get(msg.Id); !ok {
+		glog.Info("storing message in storage...")
 		subss := make(map[string]*Subs)
 		for _, sub := range subs {
+			if sub == nil {
+				glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
+				continue
+			}
 			subss[sub.Name] = &Subs{
 				SubscriptionID: sub.Name,
 			}
