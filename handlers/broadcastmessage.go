@@ -36,32 +36,30 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 
 		var msg pb.Message
 		if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
-			glog.Infof("[AllMessages] Error reading message columns: %v", err)
+			glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
 			continue
 		}
 
+		// Structure
+		messageInfo := struct {
+			ID      string `json:"id"`
+			Topic   string `json:"topic"`
+			Payload string `json:"payload"`
+		}{
+			ID:      msg.Id,
+			Topic:   msg.Topic,
+			Payload: msg.Payload,
+		}
+
 		// Marshal message info
-		data, err := json.Marshal(&msg)
+		data, err := json.Marshal(messageInfo)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
 		}
 
-		// Create broadcast input
-		broadcastInput := BroadCastInput{
-			Type: Message,
-			Msg:  data,
-		}
-
-		// Marshal broadcast input
-		broadcastData, err := json.Marshal(broadcastInput)
-		if err != nil {
-			glog.Infof("[BroadcastMessage] Error marshalling broadcast input: %v", err)
-			continue
-		}
-
 		// Broadcast
-		responses := app.Op.Broadcast(ctx, broadcastData)
+		responses := app.Op.Broadcast(ctx, data)
 		for _, response := range responses {
 			if response.Error != nil {
 				glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)

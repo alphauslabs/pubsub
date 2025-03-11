@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
@@ -51,15 +50,12 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 }
 
 func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
-	var message pb.Message
+	var message storage.Message
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
-	m := storage.Message{
-		Message: &message,
-	}
 
-	if err := storage.StoreMessage(&m); err != nil {
+	if err := storage.StoreMessage(&message); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}
 
