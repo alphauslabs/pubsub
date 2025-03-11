@@ -55,7 +55,6 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 
-	fmt.Printf("message: %v", message)
 	if err := storage.StoreMessage(&message); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}

@@ -26,7 +26,24 @@ var (
 // 3. MessageMap.Mu
 // 4. Message.Mu
 // 5. Subs.Mu
+type Subscription struct {
+	*pb.Subscription
+}
 
+var (
+	// Map for topic subscriptions
+	topicSubs   = make(map[string]map[string]*Subscription)
+	topicSubsMu sync.RWMutex
+
+	// Map for topic Messages
+	TopicMessages = make(map[string]*MessageMap)
+	topicMsgMu    sync.RWMutex
+)
+
+type MessageMap struct {
+	Messages map[string]*Message
+	Mu       sync.RWMutex
+}
 type Message struct {
 	*pb.Message
 	Mu            sync.Mutex
@@ -41,11 +58,6 @@ type Subs struct {
 	Locked         int32
 	AutoExtend     int32
 	Mu             sync.Mutex // lock
-}
-
-type MessageMap struct {
-	Messages map[string]*Message
-	Mu       sync.RWMutex
 }
 
 // NewMessageMap creates a new message map
@@ -106,20 +118,6 @@ func (mm *MessageMap) Count() int {
 
 	return len(mm.Messages)
 }
-
-type Subscription struct {
-	*pb.Subscription
-}
-
-var (
-	// Map for topic subscriptions
-	topicSubs   = make(map[string]map[string]*Subscription)
-	topicSubsMu sync.RWMutex
-
-	// Map for topic Messages
-	TopicMessages = make(map[string]*MessageMap)
-	topicMsgMu    sync.RWMutex
-)
 
 func StoreMessage(msg *Message) error {
 	if msg == nil || msg.Id == "" {

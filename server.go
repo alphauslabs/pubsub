@@ -36,7 +36,6 @@ const (
 
 // Publish a message to a topic
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
-	glog.Infof("[Publish] New message received - Topic: %s, Payload: %s", in.Topic, in.Payload)
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
@@ -80,8 +79,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	for _, v := range out {
 		if v.Error != nil { // for us to know, then do necessary actions if frequent
 			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
-		} else {
-			glog.Infof("[Publish] Message broadcasted successfully to %s", v.Id)
 		}
 	}
 	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", msgId)

@@ -20,7 +20,7 @@ func RunCheckForExpired(ctx context.Context) {
 				if atomic.LoadInt32(&v1.FinalDeleted) == 0 {
 					v1.Mu.Lock()
 					count := 0
-					for s, t := range v1.Subscriptions {
+					for _, t := range v1.Subscriptions {
 						if atomic.LoadInt32(&t.Deleted) == 1 {
 							count++
 							continue
@@ -30,7 +30,6 @@ func RunCheckForExpired(ctx context.Context) {
 						}
 						switch {
 						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
-							glog.Infof("[sweep] message %s subscription %s expired. Unlocking...", v1.Id, s)
 							t.Unlock()
 							t.ClearAge()
 						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:

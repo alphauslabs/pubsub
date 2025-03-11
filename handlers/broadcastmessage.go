@@ -15,7 +15,6 @@ import (
 )
 
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
-	glog.Info("[BroadcastMessage] Broadcasting all messages...")
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload 
 			  FROM Messages where processed = false`,
@@ -149,7 +148,6 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 }
 
 func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
-	glog.Info("[BroadcastMessage] Starting broadcast messages...")
 	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer tick.Stop()
 
