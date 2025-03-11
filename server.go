@@ -189,20 +189,25 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					for {
 						select {
 						case <-ticker.C:
+							m, err := storage.GetMessage(msg.Id)
+							if err != nil {
+								glog.Infof("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
+								return
+							}
 							switch {
-							case atomic.LoadInt32(&msg.FinalDeleted) == 1:
-								glog.Infof("[Subscribe] Message %s has been deleted", msg.Id)
+							case atomic.LoadInt32(&m.FinalDeleted) == 1:
+								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
 								return
 							case msg.Subscriptions[in.Subscription].IsDeleted():
-								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", msg.Id, in.Subscription)
+								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
 								return
 							case !msg.Subscriptions[in.Subscription].IsLocked():
-								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", msg.Id, in.Subscription)
+								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							default:
-								glog.Infof("[Subscribe] msg=%v waiting for unlock/delete.......", msg.Id)
-								glog.Infof("%p", msg)
-								glog.Infof("%p", msg.Subscriptions[in.Subscription])
+								glog.Infof("[Subscribe] msg=%v waiting for unlock/delete.......", m.Id)
+								glog.Infof("%p", m)
+								glog.Infof("%p", m.Subscriptions[in.Subscription])
 							}
 						case <-stream.Context().Done():
 							// Handle client disconnection
