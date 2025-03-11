@@ -65,6 +65,7 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	} else {
 		glog.Infof("existsss %s", id)
 	}
+	glog.Info("done putt")
 }
 
 // Delete removes a message
@@ -146,6 +147,7 @@ func StoreMessage(msg *Message) error {
 		}
 		msg.Subscriptions = subss
 		TopicMessages[msg.Topic].Put(msg.Id, msg)
+		glog.Infof("[STORAGE] Stored message %s in topic %s", msg.Id, msg.Topic)
 	} else {
 		glog.Infof("[STORAGE] Message: %v already exists, skipping...", msg.Id)
 	}

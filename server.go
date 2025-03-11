@@ -80,6 +80,8 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	for _, v := range out {
 		if v.Error != nil { // for us to know, then do necessary actions if frequent
 			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
+		} else {
+			glog.Infof("[Publish] Message broadcasted successfully to %s", v.Id)
 		}
 	}
 	glog.Infof("[Publish] Message successfully broadcasted and wrote to spanner with ID: %s", msgId)
