@@ -151,45 +151,71 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 
 func MonitorActivity() {
 	glog.Info("[Storage Monitor] Starting storage activity monitor...")
+	logStorageState()
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		var topicMsgCounts = make(map[string]int)
-		var topicSubDetails = make(map[string]int)
+		logStorageState()
+	}
+}
 
-		topicMsgMu.RLock()
-		for topic, msgs := range TopicMessages {
-			count := 0
-			for _, msg := range msgs.GetAll() {
-				if atomic.LoadInt32(&msg.FinalDeleted) == 0 {
-					count++
-				}
-			}
-			topicMsgCounts[topic] = count
-		}
-		topicMsgMu.RUnlock()
+func logStorageState() {
+	var topicMsgCounts = make(map[string]int)
+	var topicSubDetails = make(map[string]int)
+	var activeMessageCount, totalMessageCount int
+	var topicCount int
 
-		topicSubsMu.RLock()
-		for topic, subs := range topicSubs {
-			topicSubDetails[topic] = len(subs)
-		}
-		topicSubsMu.RUnlock()
+	// Collect message statistics with proper locking
+	topicMsgMu.RLock()
+	topicCount = len(TopicMessages)
 
-		if len(topicSubDetails) == 0 {
-			glog.Info("[Storage Monitor] No topic-subscription data available")
-		} else {
-			for topic, subCount := range topicSubDetails {
-				glog.Infof("[Storage Monitor] Topic: %s - Subscriptions: %d", topic, subCount)
+	for topic, msgs := range TopicMessages {
+		activeCount := 0
+		totalCount := msgs.Count()
+		totalMessageCount += totalCount
+
+		for _, msg := range msgs.GetAll() {
+			if atomic.LoadInt32(&msg.FinalDeleted) == 0 {
+				activeCount++
 			}
 		}
 
-		if len(topicMsgCounts) == 0 {
-			glog.Info("[Storage Monitor] No Messages available")
-		} else {
-			for topic, count := range topicMsgCounts {
-				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
-			}
+		activeMessageCount += activeCount
+		topicMsgCounts[topic] = activeCount
+	}
+	topicMsgMu.RUnlock()
+
+	// Collect subscription statistics with proper locking
+	topicSubsMu.RLock()
+	subCount := 0
+	for topic, subs := range topicSubs {
+		subCount += len(subs)
+		topicSubDetails[topic] = len(subs)
+	}
+	topicSubsMu.RUnlock()
+
+	// Log overall statistics
+	glog.Infof("[Storage Monitor] Status: %d active messages of %d total, %d topics, %d subscriptions",
+		activeMessageCount, totalMessageCount, topicCount, subCount)
+
+	// Log topic-subscription details
+	glog.Info("[Storage Monitor] Topic-Subscription Structure:")
+	if len(topicSubDetails) == 0 {
+		glog.Info("[Storage Monitor]   No topic-subscription data available")
+	} else {
+		for topic, count := range topicSubDetails {
+			glog.Infof("[Storage Monitor]   Topic: %s - Subscriptions: %d", topic, count)
+		}
+	}
+
+	// Log message distribution
+	glog.Info("[Storage Monitor] Message Distribution:")
+	if len(topicMsgCounts) == 0 {
+		glog.Info("[Storage Monitor]   No messages available")
+	} else {
+		for topic, count := range topicMsgCounts {
+			glog.Infof("[Storage Monitor]   Topic: %s - Messages: %d", topic, count)
 		}
 	}
 }
