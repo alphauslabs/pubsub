@@ -117,33 +117,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				continue
 			}
 
-			// If no messages, wait before checking again
-			// if len(messages) == 0 {
-			// 	glog.Infof("[Subscribe] No messages found for topic=%v, sub=%v, waiting...", in.Topic, in.Subscription)
-			// 	time.Sleep(time.Second)
-			// 	continue
-			// }
-
-			// // Only log if the number of messages has changed
-			// if len(messages) != lastMessageCount {
-			// 	glog.Infof("[Subscribe] Found %d messages for topic %s", len(messages), in.Topic)
-			// 	lastMessageCount = len(messages)
-			// }
-
-			// Process each message
-			// for _, message := range messages {
-			// if atomic.LoadInt32(&message.FinalDeleted) == 1 {
-			// 	continue // Message has been deleted
-			// }
-
-			// if message.Subscriptions[in.Subscription].IsDeleted() {
-			// 	continue // Message has been deleted for this subscription
-			// }
-
-			// if message.Subscriptions[in.Subscription].IsLocked() {
-			// 	continue // Message is already locked by another subscriber
-			// }
-
 			// Broadcast lock status to other nodes
 			broadcastData := handlers.BroadCastInput{
 				Type: handlers.MsgEvent,
@@ -204,22 +177,15 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 							case !m.Subscriptions[in.Subscription].IsLocked():
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
-							default:
-								glog.Infof("[Subscribe] msg=%v waiting for unlock/delete.......", m.Id)
-								glog.Infof("%p", m)
-								glog.Infof("%p", m.Subscriptions[in.Subscription])
 							}
 						case <-stream.Context().Done():
-							// Handle client disconnection
 							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
 							return
 						}
 					}
 				}()
-
-				<-ch // Wait for the goroutine to signal completion
+				<-ch
 			}
-			// }
 		}
 	}
 
