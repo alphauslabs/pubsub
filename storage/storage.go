@@ -161,6 +161,12 @@ func MonitorActivity(ctx context.Context) {
 	glog.Info("[Storage Monitor] Starting storage activity monitor...")
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	defer func() {
+		glog.Info("[Storage Monitor] Stopping storage activity monitor...")
+		if r := recover(); r != nil {
+			glog.Errorf("[Storage Monitor] Panic recovered: %v", r)
+		}
+	}()
 
 	do := func() {
 		var topicMsgCounts = make(map[string]int)
