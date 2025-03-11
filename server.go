@@ -199,6 +199,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 							case !msg.Subscriptions[in.Subscription].IsLocked():
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", msg.Id, in.Subscription)
 								return
+							default:
+								glog.Infof("[Subscribe] msg=%v waiting for unlock/delete.......", msg.Id)
 							}
 						case <-stream.Context().Done():
 							// Handle client disconnection
@@ -221,11 +223,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
-	}
-
-	// Update the processed status in Spanner
-	if err := utils.UpdateMessageProcessedStatus(s.Client, in.Id); err != nil {
-		return nil, status.Error(codes.Internal, "failed to update processed status in Spanner")
 	}
 
 	broadcastData := handlers.BroadCastInput{

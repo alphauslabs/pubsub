@@ -122,7 +122,7 @@ func main() {
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
 	go sweep.RunCheckForExpired(ctx)
 	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.
-	go sweep.RunCheckForDeleted(ctx)
+	go sweep.RunCheckForDeleted(ctx, ap)
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go handlers.StartBroadcastTopicSub(ctx, ap)
 	// Start our fetching and broadcast routine for unprocessed messages.
