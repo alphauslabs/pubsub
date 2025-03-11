@@ -68,8 +68,6 @@ func main() {
 		}),
 	}
 
-	go storage.MonitorActivity()
-
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
@@ -119,6 +117,8 @@ func main() {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
+
+	go storage.MonitorActivity()
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
 	go sweep.RunCheckForExpired(ctx)
 	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.

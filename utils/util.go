@@ -20,7 +20,7 @@ func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 	}
 
 	b, _ := json.Marshal(msg)
-	r, err := hedge.SendToLeader(ctx, op, b, &hedge.SendToLeaderArgs{Retries: 15})
+	r, err := hedge.SendToLeader(ctx, op, b, &hedge.SendToLeaderArgs{Retries: 50})
 	if err != nil {
 		return false, err
 	}
