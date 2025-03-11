@@ -57,9 +57,21 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
 		}
+		// Create broadcast input
+		broadcastInput := BroadCastInput{
+			Type: Message,
+			Msg:  data,
+		}
+
+		// Marshal broadcast input
+		broadcastData, err := json.Marshal(broadcastInput)
+		if err != nil {
+			glog.Infof("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+			continue
+		}
 
 		// Broadcast
-		responses := app.Op.Broadcast(ctx, data)
+		responses := app.Op.Broadcast(ctx, broadcastData)
 		for _, response := range responses {
 			if response.Error != nil {
 				glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)
