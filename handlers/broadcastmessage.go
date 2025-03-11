@@ -112,11 +112,12 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 }
 
 func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
+	currentTime := time.Now().UTC()
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload 
 							  FROM Messages
 							  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
-		Params: map[string]interface{}{"lastQueryTime": t},
+		Params: map[string]interface{}{"lastQueryTime": currentTime},
 	}
 
 	*t = time.Now().UTC()
@@ -180,7 +181,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 	}
-
+	*t = currentTime
 	if count == 0 {
 		glog.Info("[BroadcastMessage] No new unprocessed messages found.")
 	}
