@@ -102,19 +102,8 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			continue
 		}
 
-		// Structure
-		messageInfo := struct {
-			ID      string `json:"id"`
-			Topic   string `json:"topic"`
-			Payload string `json:"payload"`
-		}{
-			ID:      msg.Id,
-			Topic:   msg.Topic,
-			Payload: msg.Payload,
-		}
-
 		// Marshal message info
-		data, err := json.Marshal(messageInfo)
+		data, err := json.Marshal(&msg)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
@@ -147,6 +136,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 }
 
 func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
+	glog.Info("[BroadcastMessage] Starting broadcast messages...")
 	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer tick.Stop()
 

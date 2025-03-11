@@ -150,6 +150,7 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 }
 
 func MonitorActivity() {
+	glog.Info("[Storage Monitor] Starting storage activity monitor...")
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
