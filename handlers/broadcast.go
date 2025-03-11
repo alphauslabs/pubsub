@@ -140,9 +140,7 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
 
 	msg.Subscriptions[subId].Lock()
-	msg.Mu.Lock()
 	msg.Subscriptions[subId].RenewAge()
-	msg.Mu.Unlock()
 
 	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
@@ -160,7 +158,8 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 		return nil, fmt.Errorf("message not found")
 	}
 
-	m.Reset()
+	m.Subscriptions[subId].Unlock()
+	m.Subscriptions[subId].ClearAge()
 
 	return nil, nil
 }
