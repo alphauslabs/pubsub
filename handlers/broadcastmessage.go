@@ -86,7 +86,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		SQL: `SELECT id, topic, payload 
 							  FROM Messages
 							  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
-		Params: map[string]interface{}{"lastQueryTime": *t},
+		Params: map[string]interface{}{"lastQueryTime": t},
 	}
 
 	iter := app.Client.Single().Query(ctx, stmt)
