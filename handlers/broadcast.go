@@ -173,6 +173,8 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	if m == nil {
 		return nil, fmt.Errorf("message not found")
 	}
+	glog.Info("handle delete: ", m.Subscriptions[subId])
+	glog.Info("handle delete: ", m)
 
 	// Delete from storage
 	m.Subscriptions[subId].MarkAsDeleted()

@@ -201,6 +201,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								return
 							default:
 								glog.Infof("[Subscribe] msg=%v waiting for unlock/delete.......", msg.Id)
+								glog.Info(msg)
+								glog.Info(msg.Subscriptions[in.Subscription])
 							}
 						case <-stream.Context().Done():
 							// Handle client disconnection
