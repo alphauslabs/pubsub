@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -149,12 +150,12 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 	return nil
 }
 
-func MonitorActivity() {
+func MonitorActivity(ctx context.Context) {
 	glog.Info("[Storage Monitor] Starting storage activity monitor...")
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	do := func() {
 		var topicMsgCounts = make(map[string]int)
 		var topicSubDetails = make(map[string]int)
 
@@ -190,6 +191,18 @@ func MonitorActivity() {
 			for topic, count := range topicMsgCounts {
 				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
 			}
+		}
+	}
+
+	do()
+	for {
+		glog.Info("[Storage Monitor] Waiting for next tick...")
+		select {
+		case <-ctx.Done():
+			glog.Info("[Storage Monitor] Stopping storage activity monitor...")
+			return
+		case <-ticker.C:
+			do()
 		}
 	}
 }
@@ -253,7 +266,7 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 		return nil, ErrTopicNotFound
 	}
 	// Convert map to slice
-	subList := make([]*Subscription, 0, len(subs))
+	subList := make([]*Subscription, len(subs))
 	for _, sub := range subs {
 		subList = append(subList, sub)
 	}

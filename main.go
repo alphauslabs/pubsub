@@ -118,7 +118,7 @@ func main() {
 		}
 	}()
 
-	go storage.MonitorActivity()
+	go storage.MonitorActivity(ctx)
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
 	go sweep.RunCheckForExpired(ctx)
 	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.
