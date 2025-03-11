@@ -268,6 +268,10 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	// Convert map to slice
 	subList := make([]*Subscription, len(subs))
 	for _, sub := range subs {
+		if sub == nil {
+			glog.Errorf("[STORAGE] found nil subscription for topic %s", topicName)
+			continue
+		}
 		subList = append(subList, sub)
 	}
 
