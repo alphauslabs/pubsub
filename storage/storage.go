@@ -122,15 +122,18 @@ func StoreMessage(msg *Message) error {
 		return err
 	}
 
-	subss := make(map[string]*Subs)
-	for _, sub := range subs {
-		subss[sub.Name] = &Subs{
-			SubscriptionID: sub.Name,
+	if _, ok := TopicMessages[msg.Topic].Get(msg.Id); !ok {
+		subss := make(map[string]*Subs)
+		for _, sub := range subs {
+			subss[sub.Name] = &Subs{
+				SubscriptionID: sub.Name,
+			}
 		}
+		msg.Subscriptions = subss
+		TopicMessages[msg.Topic].Put(msg.Id, msg)
+	} else {
+		glog.Infof("[STORAGE] Message: %v already exists, skipping...", msg.Id)
 	}
-
-	msg.Subscriptions = subss
-	TopicMessages[msg.Topic].Put(msg.Id, msg)
 
 	return nil
 }
