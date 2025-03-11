@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
@@ -65,14 +66,14 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 	return topicSub
 }
 
-func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client, isStartup bool) {
+func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	var latest map[string]map[string]*storage.Subscription
 	if isStartup {
-		requestTopicSubFetch(ctx, op) // request to the current leader
+		requestTopicSubFetch(ctx, app.Op) // request to the current leader
 		return
 	}
 
-	latest = FetchAllTopicSubscriptions(ctx, client)
+	latest = FetchAllTopicSubscriptions(ctx, app.Client)
 	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
 		glog.Info("STRUCT-Leader: No changes detected in topic-subscription structure.")
 		return
@@ -106,7 +107,7 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	}
 
 	// Broadcast message
-	out := op.Broadcast(ctx, broadcastData)
+	out := app.Op.Broadcast(ctx, broadcastData)
 	for _, r := range out {
 		if r.Error != nil {
 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
@@ -118,8 +119,7 @@ func FetchAndBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client
 	glog.Info("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
-// initializes the distributor that periodically checks for updates.
-func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client) {
+func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 	glog.Info("[STRUCT] Starting distribution of topic-sub scription structure...")
 	ticker := time.NewTicker(10 * time.Second) // will adjust to lower interval later
 	defer func() {
@@ -128,7 +128,7 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 	}()
 
 	// perform an initial broadcast of all topic-subscription structures
-	FetchAndBroadcast(ctx, op, client, true) // run startup broadcast
+	FetchAndBroadcast(ctx, app, true) // run startup broadcast
 
 	for {
 		select {
@@ -137,61 +137,11 @@ func StartDistributor(ctx context.Context, op *hedge.Op, client *spanner.Client)
 			return
 		case <-ticker.C:
 			if atomic.LoadInt32(&leader.IsLeader) == 1 {
-				FetchAndBroadcast(ctx, op, client, false)
+				FetchAndBroadcast(ctx, app, false)
 			}
 		}
 	}
 }
-
-// Immediate broadcast function to send topic-subscription updates instantly.
-// func ImmediateBroadcast(ctx context.Context, op *hedge.Op, client *spanner.Client) {
-// 	glog.Info("STRUCT-Leader: Immediate broadcast triggered.")
-
-// 	// Ensure this node is the leader before broadcasting
-// 	hasLock, _ := op.HasLock()
-// 	if !hasLock {
-// 		glog.Info("STRUCT-Leader: Skipping immediate broadcast because this node is not the leader.")
-// 		return
-// 	}
-
-// 	// Fetch latest topic-subscription data
-// 	newBroadcasted := FetchAllTopicSubscriptions(ctx, client)
-// 	if len(newBroadcasted) == 0 {
-// 		glog.Info("STRUCT-Leader: No updated topic-subscription data found, skipping immediate broadcast.")
-// 		return
-// 	}
-
-// 	// Update last broadcasted structure
-// 	lastBroadcasted = newBroadcasted
-
-// 	// Marshal topic-subscription data
-// 	msgData, err := json.Marshal(lastBroadcasted)
-// 	if err != nil {
-// 		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
-// 		return
-// 	}
-
-// 	broadcastMsg := BroadCastInput{
-// 		Type: Topicsub,
-// 		Msg:  msgData,
-// 	}
-
-// 	// Marshal BroadCastInput
-// 	broadcastData, err := json.Marshal(broadcastMsg)
-// 	if err != nil {
-// 		glog.Infof("STRUCT-Error marshalling BroadCastInput: %v", err)
-// 		return
-// 	}
-
-// 	// Broadcast the message
-// 	for _, r := range op.Broadcast(ctx, broadcastData) {
-// 		if r.Error != nil {
-// 			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
-// 		}
-// 	}
-
-// 	glog.Info("STRUCT-Leader: Immediate topic-subscription structure broadcast completed.")
-// }
 
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	// Send a request to leader to fetch the latest topic-subscription structure

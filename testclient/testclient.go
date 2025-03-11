@@ -105,12 +105,12 @@ func main() {
 		for {
 			rec, err := r.Recv()
 			if err == io.EOF {
-				break
+				break messageLoop
 			}
 
 			if err != nil {
 				glog.Infof("Error: %v", err)
-				break
+				break messageLoop
 			}
 
 			glog.Infof("rec.Payload: %v\n", rec.Payload)
