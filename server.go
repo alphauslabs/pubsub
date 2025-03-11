@@ -198,10 +198,10 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 							case atomic.LoadInt32(&m.FinalDeleted) == 1:
 								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
 								return
-							case msg.Subscriptions[in.Subscription].IsDeleted():
+							case m.Subscriptions[in.Subscription].IsDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
 								return
-							case !msg.Subscriptions[in.Subscription].IsLocked():
+							case !m.Subscriptions[in.Subscription].IsLocked():
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							default:
