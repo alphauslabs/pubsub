@@ -47,12 +47,13 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 	return msg, exists
 }
 
-// Put adds or updates a message
+// Put adds a message, no op if exists
 func (mm *MessageMap) Put(id string, msg *Message) {
 	mm.Mu.Lock()
 	defer mm.Mu.Unlock()
-
-	mm.Messages[id] = msg
+	if _, ok := mm.Get(id); !ok {
+		mm.Messages[id] = msg
+	}
 }
 
 // Delete removes a message

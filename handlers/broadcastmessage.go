@@ -81,36 +81,6 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 	glog.Info("[BroadcastMessage] All messages broadcast completed.")
 }
 
-func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
-	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
-	defer tick.Stop()
-
-	broadcastMsg := SendInput{
-		Type: initialmsgsfetch,
-		Msg:  []byte{},
-	}
-
-	// Ask the leader to trigger a broadcast of all messages
-	bin, _ := json.Marshal(broadcastMsg)
-	_, err := app.Op.Send(ctx, bin)
-	if err != nil {
-		glog.Errorf("[Broadcast messages] sending request to leader: %v", err)
-		return
-	}
-
-	lastQueryTime := time.Now().UTC()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-			if atomic.LoadInt32(&leader.IsLeader) == 1 { // Check if leader
-				LatestMessages(ctx, app, &lastQueryTime)
-			}
-		}
-	}
-}
-
 func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload 
@@ -182,5 +152,35 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	}
 	if count == 0 {
 		glog.Info("[BroadcastMessage] No new unprocessed messages found.")
+	}
+}
+
+func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
+	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
+	defer tick.Stop()
+
+	broadcastMsg := SendInput{
+		Type: initialmsgsfetch,
+		Msg:  []byte{},
+	}
+
+	// Ask the leader to trigger a broadcast of all messages
+	bin, _ := json.Marshal(broadcastMsg)
+	_, err := app.Op.Send(ctx, bin)
+	if err != nil {
+		glog.Errorf("[Broadcast messages] sending request to leader: %v", err)
+		return
+	}
+
+	lastQueryTime := time.Now().UTC()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if atomic.LoadInt32(&leader.IsLeader) == 1 { // Check if leader
+				LatestMessages(ctx, app, &lastQueryTime)
+			}
+		}
 	}
 }
