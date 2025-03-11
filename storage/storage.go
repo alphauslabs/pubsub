@@ -19,6 +19,14 @@ var (
 	ErrInvalidTopicSub = errors.New("invalid topic-subscription structure")
 )
 
+// Notes: Lock acquisition order to prevent deadlocks
+// Always acquire locks in this order:
+// 1. topicSubsMu
+// 2. topicMsgMu
+// 3. MessageMap.Mu
+// 4. Message.Mu
+// 5. Subs.Mu
+
 type Message struct {
 	*pb.Message
 	Mu            sync.Mutex
@@ -119,30 +127,33 @@ func StoreMessage(msg *Message) error {
 		return ErrInvalidMessage
 	}
 
-	// Lock the topic Messages map for writing
-	topicMsgMu.Lock()
-	defer topicMsgMu.Unlock()
-	if _, exists := TopicMessages[msg.Topic]; !exists {
-		TopicMessages[msg.Topic] = NewMessageMap()
+	topicSubsMu.RLock()
+	subs, exists := topicSubs[msg.Topic]
+	topicSubsMu.RUnlock()
+
+	if !exists {
+		glog.Errorf("[STORAGE] topic %s not found in storage", msg.Topic)
+		return ErrTopicNotFound
 	}
 
-	subs, err := GetSubscribtionsForTopic(msg.Topic)
-	if err != nil {
-		glog.Errorf("[STORAGE] Error retrieving subscriptions for topic %s: %v", msg.Topic, err)
-		return err
-	}
-
-	glog.Info("storing message in storage...")
 	subss := make(map[string]*Subs)
-	for _, sub := range subs {
+	for subName, sub := range subs {
 		if sub == nil {
 			glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
 			continue
 		}
-		subss[sub.Name] = &Subs{
-			SubscriptionID: sub.Name,
+		subss[subName] = &Subs{
+			SubscriptionID: subName,
 		}
 	}
+
+	topicMsgMu.Lock()
+	defer topicMsgMu.Unlock()
+
+	if _, exists := TopicMessages[msg.Topic]; !exists {
+		TopicMessages[msg.Topic] = NewMessageMap()
+	}
+
 	msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
