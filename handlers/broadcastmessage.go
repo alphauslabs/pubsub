@@ -192,6 +192,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer tick.Stop()
+	lastQueryTime := time.Now().UTC()
 
 	broadcastMsg := SendInput{
 		Type: initialmsgsfetch,
@@ -212,21 +213,21 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 			return
 		case <-tick.C:
 			if atomic.LoadInt32(&leader.IsLeader) == 1 { // Check if leader
-				LatestMessages(ctx, app)
+				LatestMessages(ctx, app, &lastQueryTime)
 			}
 		}
 	}
 }
 
-func LatestMessages(ctx context.Context, app *app.PubSub) {
-	var lastQueryTime time.Time
+func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload 
 							  FROM Messages
 							  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
-		Params: map[string]interface{}{"lastQueryTime": lastQueryTime},
+		Params: map[string]interface{}{"lastQueryTime": t},
 	}
 
+	*t = time.Now().UTC()
 	iter := app.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -286,11 +287,6 @@ func LatestMessages(ctx context.Context, app *app.PubSub) {
 				glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 			}
 		}
-	}
-
-	// Update lastQueryTime
-	if count > 0 {
-		lastQueryTime = time.Now().UTC()
 	}
 
 	if count == 0 {
