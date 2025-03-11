@@ -60,12 +60,11 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 func (mm *MessageMap) Put(id string, msg *Message) {
 	mm.Mu.Lock()
 	defer mm.Mu.Unlock()
-	if _, ok := mm.Get(id); !ok {
+
+	_, exists := mm.Messages[id]
+	if !exists {
 		mm.Messages[id] = msg
-	} else {
-		glog.Infof("existsss %s", id)
 	}
-	glog.Info("done putt")
 }
 
 // Delete removes a message
@@ -133,25 +132,19 @@ func StoreMessage(msg *Message) error {
 		return err
 	}
 
-	if _, ok := TopicMessages[msg.Topic].Get(msg.Id); !ok {
-		glog.Info("storing message in storage...")
-		subss := make(map[string]*Subs)
-		for _, sub := range subs {
-			if sub == nil {
-				glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
-				continue
-			}
-			subss[sub.Name] = &Subs{
-				SubscriptionID: sub.Name,
-			}
+	glog.Info("storing message in storage...")
+	subss := make(map[string]*Subs)
+	for _, sub := range subs {
+		if sub == nil {
+			glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
+			continue
 		}
-		msg.Subscriptions = subss
-		TopicMessages[msg.Topic].Put(msg.Id, msg)
-		glog.Infof("[STORAGE] Stored message %s in topic %s", msg.Id, msg.Topic)
-	} else {
-		glog.Infof("[STORAGE] Message: %v already exists, skipping...", msg.Id)
+		subss[sub.Name] = &Subs{
+			SubscriptionID: sub.Name,
+		}
 	}
-
+	msg.Subscriptions = subss
+	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }
 
