@@ -39,7 +39,6 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		if err != nil {
 			log.Fatalf("STRUCT-Fatal error iterating Spanner rows: %v", err)
 		}
-
 		var topic string
 		var subName string
 		var autoExtend bool

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -9,6 +10,13 @@ import (
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/golang/glog"
+)
+
+var (
+	ErrMessageNotFound = errors.New("message not found")
+	ErrInvalidMessage  = errors.New("invalid message")
+	ErrTopicNotFound   = errors.New("topic not found")
+	ErrInvalidTopicSub = errors.New("invalid topic-subscription structure")
 )
 
 type Message struct {
@@ -112,7 +120,6 @@ func StoreMessage(msg *Message) error {
 	// Lock the topic Messages map for writing
 	topicMsgMu.Lock()
 	defer topicMsgMu.Unlock()
-
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
@@ -263,10 +270,11 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 
 	subs, exists := topicSubs[topicName]
 	if !exists {
+		glog.Errorf("[STORAGE] topic %s not found in storage, current in mem=%v", topicName, getTopicKeys())
 		return nil, ErrTopicNotFound
 	}
 	// Convert map to slice
-	subList := make([]*Subscription, len(subs))
+	subList := make([]*Subscription, 0, len(subs))
 	for _, sub := range subs {
 		if sub == nil {
 			glog.Errorf("[STORAGE] found nil subscription for topic %s", topicName)
@@ -276,6 +284,14 @@ func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	}
 
 	return subList, nil
+}
+
+func getTopicKeys() []string {
+	keys := make([]string, 0, len(topicSubs))
+	for k := range topicSubs {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // RemoveTopic removes a topic from storage
