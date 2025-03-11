@@ -15,6 +15,7 @@ import (
 )
 
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
+	glog.Info("[BroadcastMessage] Broadcasting all messages...")
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload 
 			  FROM Messages where processed = false`,
@@ -38,19 +39,9 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			glog.Infof("[AllMessages] Error reading message columns: %v", err)
 			continue
 		}
-		// Structure
-		messageInfo := struct {
-			ID      string `json:"id"`
-			Topic   string `json:"topic"`
-			Payload string `json:"payload"`
-		}{
-			ID:      msg.Id,
-			Topic:   msg.Topic,
-			Payload: msg.Payload,
-		}
 
 		// Marshal message info
-		data, err := json.Marshal(messageInfo)
+		data, err := json.Marshal(&msg)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
