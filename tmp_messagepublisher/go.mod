@@ -3,12 +3,13 @@ module message_publisher
 go 1.23.1
 
 require (
-	github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652
+	github.com/alphauslabs/pubsub-proto v0.0.1
 	github.com/golang/glog v1.2.3
 	google.golang.org/grpc v1.70.0
 )
 
 require (
+	github.com/golang/protobuf v1.5.4 // indirect
 	golang.org/x/net v0.32.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect

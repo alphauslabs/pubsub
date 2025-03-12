@@ -25,6 +25,9 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubSe
 	msg := &pb.PublishRequest{
 		Payload: fmt.Sprintf("Message %d for topic=%v", id, topic),
 		Topic:   topic,
+		Attributes: map[string]string{
+			fmt.Sprintf("key%v", id): fmt.Sprintf("value%v", id),
+		},
 	}
 
 	ctx := context.Background()

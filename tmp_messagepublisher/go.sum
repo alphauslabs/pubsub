@@ -1,5 +1,5 @@
-github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652 h1:ySy3KVn9ZtMya2voGAMwN6vANpMgeQ34J0SjESG+cD4=
-github.com/alphauslabs/pubsub-proto v0.0.0-20250303051749-1f1780cc8652/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
+github.com/alphauslabs/pubsub-proto v0.0.1 h1:9gmlBPs9ylonFTj+5b/fmjJcgrJ02rlD2XELYke8D6I=
+github.com/alphauslabs/pubsub-proto v0.0.1/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
