@@ -125,6 +125,8 @@ func main() {
 	go sweep.RunCheckForDeleted(ctx, ap)
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go handlers.StartBroadcastTopicSub(ctx, ap)
+
+	time.Sleep(3 * time.Second)
 	// Start our fetching and broadcast routine for unprocessed messages.
 	go handlers.StartBroadcastMessages(ctx, ap)
 
