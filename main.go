@@ -80,11 +80,11 @@ func main() {
 			ap,
 			leader.LeaderCallBack,
 		),
-		hedge.WithLeaderHandler( // if leader only, handles Send()
+		hedge.WithLeaderHandler(
 			ap,
 			handlers.Send,
 		),
-		hedge.WithBroadcastHandler( // handles Broadcast()
+		hedge.WithBroadcastHandler(
 			ap,
 			handlers.Broadcast,
 		),

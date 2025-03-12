@@ -88,18 +88,6 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	}
 }
 
-// Delete removes a message
-func (mm *MessageMap) Delete(id string) bool {
-	mm.Mu.Lock()
-	defer mm.Mu.Unlock()
-
-	_, exists := mm.Messages[id]
-	if exists {
-		delete(mm.Messages, id)
-	}
-	return exists
-}
-
 // GetAll returns a copy of all Messages
 func (mm *MessageMap) GetAll() []*Message {
 	mm.Mu.RLock()
@@ -110,14 +98,6 @@ func (mm *MessageMap) GetAll() []*Message {
 		result = append(result, msg)
 	}
 	return result
-}
-
-// Count returns the number of Messages
-func (mm *MessageMap) Count() int {
-	mm.Mu.RLock()
-	defer mm.Mu.RUnlock()
-
-	return len(mm.Messages)
 }
 
 func StoreMessage(msg *Message) error {
@@ -250,10 +230,8 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 	}
 	allMsgs := topicMsgs.GetAll()
 
-	// filter messages marked dleted
-	// activeMsgs := make([]*Message, 0, len(allMsgs))
 	for _, msg := range allMsgs {
-		if atomic.LoadInt32(&msg.FinalDeleted) == 1 { // filter
+		if atomic.LoadInt32(&msg.FinalDeleted) == 1 {
 			continue
 		}
 
