@@ -42,27 +42,25 @@ func main() {
 
 	switch *method {
 	case "publish":
-		r, err := c.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: payload})
+		attr := make(map[string]string)
+		attr["sampleattrkey"] = "sampleattrvalue"
+		r, err := c.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: payload, Attributes: attr})
 		if err != nil {
 			log.Fatalf("Publish failed: %v", err)
 		}
 		glog.Infof("Message Published!\nID: %s", r.MessageId)
 	case "listtopics":
-		r, err := c.ListTopics(context.Background(), &pb.Empty{})
+		r, err := c.ListTopics(context.Background(), &pb.ListTopicsRequest{})
 		if err != nil {
 			log.Fatalf("Listing failed: %v", err)
 		}
 		fmt.Printf("r.Topics: %v\n", r.Topics)
 	case "deletetopic":
-		r, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
+		_, err := c.DeleteTopic(context.Background(), &pb.DeleteTopicRequest{Name: topic})
 		if err != nil {
 			log.Fatalf("Delete failed: %v", err)
 		}
-		if r.Success {
-			glog.Infof("Topic name: %s deleted sucessfully", topic)
-		} else {
-			glog.Infof("Topic name: %s not found", topic)
-		}
+		glog.Info("Sucessfully deleted topic")
 	case "updatetopic":
 		_, err := c.UpdateTopic(context.Background(), &pb.UpdateTopicRequest{
 			Name:    topic,
@@ -90,7 +88,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get subscription details: %v", err)
 		}
-		isAutoExtend := subDetails.Autoextend // check if the subscription has autoextend enabled
+		isAutoExtend := subDetails.Subscription.AutoExtend
 
 		glog.Infof("[Subscribe] Subscription: %s, AutoExtend: %t, ExtendVisibilityFlag: %t", sub, isAutoExtend, *extendVisibility)
 
@@ -113,7 +111,7 @@ func main() {
 				break messageLoop
 			}
 
-			glog.Infof("rec.Payload: %v\n", rec.Payload)
+			glog.Infof("Payload=%v, Attributes=%v", rec.Payload, rec.Attributes)
 
 			if *processingTime > 0 { // set processingTime=0 for instant acknowledgment
 				startTime := time.Now()
@@ -132,9 +130,9 @@ func main() {
 							select {
 							case <-time.After(extendThreshold):
 								glog.Infof("Requesting visibility extension for message %s", rec.Id)
-								_, err := c.ModifyVisibilityTimeout(context.Background(), &pb.ModifyVisibilityTimeoutRequest{
-									Id:             rec.Id,
-									SubscriptionId: sub,
+								_, err := c.ExtendVisibilityTimeout(context.Background(), &pb.ExtendVisibilityTimeoutRequest{
+									Id:           rec.Id,
+									Subscription: sub,
 								})
 								if err != nil {
 									glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
@@ -188,8 +186,7 @@ func main() {
 
 	case "updatesubscription":
 		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
-			Name:                    sub,
-			ModifyVisibilityTimeout: 60,
+			Name: sub,
 			//			Autoextend:              true,
 		})
 		if err != nil {
@@ -198,18 +195,13 @@ func main() {
 		glog.Infof("Subscription Updated!\nID: %s\n", sub)
 
 	case "deletesubscription":
-		r, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
+		_, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
 		if err != nil {
 			log.Fatalf("DeleteSubscription failed: %v", err)
 		}
-		if r.Success {
-			glog.Infof("Subscription ID: %s deleted successfully", sub)
-		} else {
-			glog.Infof("Subscription ID: %s not found", sub)
-		}
-
+		glog.Info("Succesfully deleted subscription")
 	case "listsubscriptions":
-		r, err := c.ListSubscriptions(context.Background(), &pb.Empty{})
+		r, err := c.ListSubscriptions(context.Background(), &pb.ListSubscriptionsRequest{})
 		if err != nil {
 			log.Fatalf("ListSubscriptions failed: %v", err)
 		}

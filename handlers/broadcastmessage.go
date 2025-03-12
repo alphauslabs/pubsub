@@ -16,7 +16,7 @@ import (
 
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 	stmt := spanner.Statement{
-		SQL: `SELECT id, topic, payload 
+		SQL: `SELECT id, topic, payload, attributes
 			  FROM Messages where processed = false`,
 	}
 
@@ -34,24 +34,31 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		}
 
 		var msg pb.Message
-		if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
-			glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
+
+		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
+		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
+		// 	continue
+		// }
+
+		err = row.ToStruct(&msg)
+		if err != nil {
+			glog.Error(err)
 			continue
 		}
 
 		// Structure
-		messageInfo := struct {
-			ID      string `json:"id"`
-			Topic   string `json:"topic"`
-			Payload string `json:"payload"`
-		}{
-			ID:      msg.Id,
-			Topic:   msg.Topic,
-			Payload: msg.Payload,
-		}
+		// messageInfo := struct {
+		// 	ID      string `json:"id"`
+		// 	Topic   string `json:"topic"`
+		// 	Payload string `json:"payload"`
+		// }{
+		// 	ID:      msg.Id,
+		// 	Topic:   msg.Topic,
+		// 	Payload: msg.Payload,
+		// }
 
 		// Marshal message info
-		data, err := json.Marshal(messageInfo)
+		data, err := json.Marshal(&msg)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
@@ -83,9 +90,9 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 
 func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	stmt := spanner.Statement{
-		SQL: `SELECT id, topic, payload 
-							  FROM Messages
-							  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
+		SQL: `SELECT id, topic, payload, attributes
+			  FROM Messages
+			  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
 		Params: map[string]interface{}{"lastQueryTime": t},
 	}
 
@@ -106,11 +113,15 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		count++
 
 		var msg pb.Message
-		if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload); err != nil {
-			glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
+		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
+		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
+		// 	continue
+		// }
+		err = row.ToStruct(&msg)
+		if err != nil {
+			glog.Error(err)
 			continue
 		}
-
 		// Marshal message info
 		data, err := json.Marshal(&msg)
 		if err != nil {
@@ -140,7 +151,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		}
 	}
 	if count > 0 {
-		*t = time.Now().UTC() // update if nay new unprov msg
+		*t = time.Now().UTC() // update if msgs are present
 	}
 	if count == 0 {
 		glog.Info("[BroadcastMessage] No new unprocessed messages found.")

@@ -132,7 +132,7 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 
 	// Check if this subscription enabled autoextend
 	autoExtend := false
-	if sub, exists := subscriptionsMap[subId]; exists && sub.Subscription.Autoextend {
+	if sub, exists := subscriptionsMap[subId]; exists && sub.Subscription.AutoExtend {
 		autoExtend = true
 	}
 

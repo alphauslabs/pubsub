@@ -57,7 +57,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 			Subscription: &pb.Subscription{
 				Name:       subName,
 				Topic:      topic,
-				Autoextend: autoExtend,
+				AutoExtend: autoExtend,
 			},
 		}
 	}

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type server struct {
@@ -39,17 +40,18 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
 	}
+	b, _ := json.Marshal(in.Attributes)
 	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
+		[]string{"id", "topic", "payload", "attributes", "createdAt", "updatedAt", "processed"},
 		[]any{
 			msgId,
 			in.Topic,
 			in.Payload,
+			string(b),
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
-			nil,   // Explicitly set visibilityTimeout as NULL
 			false, // Default to unprocessed
 		},
 	)
@@ -67,7 +69,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			Payload: in.Payload,
 		},
 	}
-	b, _ := json.Marshal(&m)
+	b, _ = json.Marshal(&m)
 
 	// broadcast message
 	bcastin := handlers.BroadCastInput{
@@ -191,7 +193,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 }
 
-func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*pb.AcknowledgeResponse, error) {
+func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	// Check if message exists in storage
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
@@ -211,12 +213,11 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*p
 	}
 
 	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
-	return &pb.AcknowledgeResponse{Success: true}, nil
+	return &emptypb.Empty{}, nil
 }
 
-// ModifyVisibilityTimeout resets the age of the message to extend visibility timeout
-func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisibilityTimeoutRequest) (*pb.ModifyVisibilityTimeoutResponse, error) {
-	glog.Infof("[Extend Visibility] Request to modify visibility for message: %s, Subscription: %s, New Timeout: %d seconds", in.Id, in.SubscriptionId, in.NewTimeout)
+func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisibilityTimeoutRequest) (*emptypb.Empty, error) {
+	glog.Infof("[Extend Visibility] Request to modify visibility for message: %s, Subscription: %s", in.Id, in.Subscription)
 
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
@@ -230,15 +231,14 @@ func (s *server) ModifyVisibilityTimeout(ctx context.Context, in *pb.ModifyVisib
 
 	// lock the message and reset Age
 	msg.Mu.Lock()
-	msg.Subscriptions[in.SubscriptionId].RenewAge()
+	msg.Subscriptions[in.Subscription].RenewAge()
 	msg.Mu.Unlock()
 
 	glog.Infof("[Extend Visibility] Visibility Timeout for message %s has been extended.", in.Id)
-	return &pb.ModifyVisibilityTimeoutResponse{Success: true}, nil
+	return &emptypb.Empty{}, nil
 }
 
-// <<<<<<<< CRUD - TOPICS >>>>>>>>>>>>>
-func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*pb.Topic, error) {
+func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*emptypb.Empty, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Topic name is required")
 	}
@@ -254,18 +254,12 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
 
-	topic := &pb.Topic{
-		Name:      req.Name,
-		CreatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
-		UpdatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
-	}
-
 	s.notifyLeader(notifleader)
 
-	return topic, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Topic, error) {
+func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.GetTopicResponse, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic ID is required")
 	}
@@ -294,14 +288,16 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 		return nil, status.Errorf(codes.Internal, "failed to parse topic data: %v", err)
 	}
 
-	return &pb.Topic{
-		Name:      name,
-		CreatedAt: createdAt.String(),
-		UpdatedAt: createdAt.String(),
+	return &pb.GetTopicResponse{
+		Topic: &pb.Topic{
+			Name:      name,
+			CreatedAt: createdAt.String(),
+			UpdatedAt: updatedAt.String(),
+		},
 	}, nil
 }
 
-func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.Topic, error) {
+func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*pb.UpdateTopicResponse, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Current topic name is required")
 	}
@@ -407,10 +403,12 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	// Notify the leader or cluster if needed
 	s.notifyLeader(notifleader)
 
-	return updatedTopic, nil
+	return &pb.UpdateTopicResponse{
+		Topic: updatedTopic,
+	}, nil
 }
 
-func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.DeleteTopicResponse, error) {
+func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*emptypb.Empty, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic is required")
 	}
@@ -479,10 +477,10 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 
 	s.notifyLeader(notifleader) // Send flag=1 to indicate an update
 
-	return &pb.DeleteTopicResponse{Success: true}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsResponse, error) {
+func (s *server) ListTopics(ctx context.Context, in *pb.ListTopicsRequest) (*pb.ListTopicsResponse, error) {
 	stmt := spanner.Statement{SQL: `SELECT name, createdAt, updatedAt FROM Topics`}
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
@@ -515,15 +513,14 @@ func (s *server) ListTopics(ctx context.Context, _ *pb.Empty) (*pb.ListTopicsRes
 	return &pb.ListTopicsResponse{Topics: topics}, nil
 }
 
-func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
+func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*emptypb.Empty, error) {
 	if req.Topic == "" || req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Topic and Subscription name are required")
 	}
 
-	// Default autoextend to false if not provided
-	autoExtend := false
-	if req.Autoextend != nil {
-		autoExtend = *req.Autoextend
+	autoExtend := true
+	if req.NoAutoExtend {
+		autoExtend = false
 	}
 
 	m := spanner.Insert(
@@ -540,14 +537,10 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
 	s.notifyLeader(notifleader)
-	return &pb.Subscription{
-		Name:       req.Name,
-		Topic:      req.Topic,
-		Autoextend: autoExtend,
-	}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.Subscription, error) {
+func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.GetSubscriptionResponse, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
 	}
@@ -577,14 +570,16 @@ func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionReq
 		return nil, status.Errorf(codes.Internal, "Failed to parse subscription data: %v", err)
 	}
 
-	return &pb.Subscription{
-		Name:       name,
-		Topic:      topic,
-		Autoextend: autoExtend,
+	return &pb.GetSubscriptionResponse{
+		Subscription: &pb.Subscription{
+			Name:       name,
+			Topic:      topic,
+			AutoExtend: autoExtend,
+		},
 	}, nil
 }
 
-func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscriptionRequest) (*pb.Subscription, error) {
+func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscriptionRequest) (*pb.UpdateSubscriptionResponse, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
 	}
@@ -601,8 +596,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		[]string{"name", "visibility_timeout", "autoextend", "updatedAt"},
 		[]any{
 			req.Name,
-			req.ModifyVisibilityTimeout,
-			req.Autoextend,
+			req.NoAutoExtend,
 			spanner.CommitTimestamp,
 		},
 	)
@@ -613,15 +607,17 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 	}
 
 	s.notifyLeader(notifleader)
-	return &pb.Subscription{
-		Name:              req.Name,
-		Topic:             existingSub.Topic,
-		VisibilityTimeout: req.ModifyVisibilityTimeout,
-		Autoextend:        req.GetAutoextend(),
+	return &pb.UpdateSubscriptionResponse{
+		Subscription: &pb.Subscription{
+			Name:       req.Name,
+			Topic:      existingSub.Subscription.Topic,
+			AutoExtend: req.NoAutoExtend,
+		},
 	}, nil
+
 }
 
-func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscriptionRequest) (*pb.DeleteSubscriptionResponse, error) {
+func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscriptionRequest) (*emptypb.Empty, error) {
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
 	}
@@ -633,13 +629,10 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 	}
 
 	s.notifyLeader(notifleader)
-	return &pb.DeleteSubscriptionResponse{
-		Success:   true,
-		DeletedAt: time.Now().Format(time.RFC3339),
-	}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSubscriptionsResponse, error) {
+func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
 	stmt := spanner.Statement{
 		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM Subscriptions`,
 	}
@@ -669,10 +662,9 @@ func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSu
 		}
 
 		subscriptions = append(subscriptions, &pb.Subscription{
-			Name:              name,
-			Topic:             topic,
-			VisibilityTimeout: visibilityTimeout,
-			Autoextend:        autoextend,
+			Name:       name,
+			Topic:      topic,
+			AutoExtend: autoextend,
 		})
 	}
 
