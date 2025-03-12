@@ -126,7 +126,7 @@ func main() {
 	// Start our fetching and broadcast routine for topic-subscription structure.
 	go handlers.StartBroadcastTopicSub(ctx, ap)
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(10 * time.Second) // to be improve later
 	// Start our fetching and broadcast routine for unprocessed messages.
 	go handlers.StartBroadcastMessages(ctx, ap)
 
