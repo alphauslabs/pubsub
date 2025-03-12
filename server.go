@@ -32,7 +32,6 @@ const (
 	MessagesTable = "Messages"
 	TopicsTable   = "Topics"
 	SubsTable     = "Subscriptions"
-	notifleader   = 1
 )
 
 // Publish a message to a topic
@@ -95,8 +94,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 // Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	glog.Infof("[Subscribe] New subscription request received - Topic: %s, Subscription: %s", in.Topic, in.Subscription)
-
+	glog.Infof("[Subscribe] New subscription request received for Topic=%s, Subscription=%s", in.Topic, in.Subscription)
 	// Validate subscription exists for the topic
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
@@ -105,12 +103,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	}
 
 	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
-
-	count := 0
-	// track last message count to avoid duplicate logs
-	// lastMessageCount := 0
-
-	// Continuous loop to stream messages
 	for {
 		select {
 		// Check if client has disconnected
@@ -155,10 +147,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					}
 				}
 			} else {
-				count++
-				glog.Infof("[subscribe] count=%v", count)
-				glog.Infof("[Subscribe] sent message %s to subscription %s", msg.Id, in.Subscription)
-
 				// Wait for acknowledgement
 				ch := make(chan struct{})
 				go func() {
@@ -260,7 +248,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
 
-	s.notifyLeader(notifleader)
+	s.notifyLeader(ctx)
 
 	return &emptypb.Empty{}, nil
 }
@@ -407,7 +395,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	}
 
 	// Notify the leader or cluster if needed
-	s.notifyLeader(notifleader)
+	s.notifyLeader(ctx)
 
 	return &pb.UpdateTopicResponse{
 		Topic: updatedTopic,
@@ -481,7 +469,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		}
 	}
 
-	s.notifyLeader(notifleader) // Send flag=1 to indicate an update
+	s.notifyLeader(ctx)
 
 	return &emptypb.Empty{}, nil
 }
@@ -542,7 +530,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 
 	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
-	s.notifyLeader(notifleader)
+	s.notifyLeader(ctx)
 	return &emptypb.Empty{}, nil
 }
 
@@ -612,7 +600,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
 	}
 
-	s.notifyLeader(notifleader)
+	s.notifyLeader(ctx)
 	return &pb.UpdateSubscriptionResponse{
 		Subscription: &pb.Subscription{
 			Name:       req.Name,
@@ -634,7 +622,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
 	}
 
-	s.notifyLeader(notifleader)
+	s.notifyLeader(ctx)
 	return &emptypb.Empty{}, nil
 }
 
@@ -679,39 +667,20 @@ func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptions
 	}, nil
 }
 
-func (s *server) notifyLeader(flag byte) {
-	// Create a simple payload with just the flag
-	data := map[string]any{
-		"flag": flag,
-	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		glog.Infof("Error marshaling data: %v", err)
-		return
-	}
-
-	// Create SendInput with topicsubupdates type
+func (s *server) notifyLeader(ctx context.Context) {
 	input := handlers.SendInput{
 		Type: "topicsubupdates",
-		Msg:  jsonData,
+		Msg:  []byte{},
 	}
 
-	// Serialize the SendInput
 	inputData, err := json.Marshal(input)
 	if err != nil {
 		glog.Infof("Error marshaling send input: %v", err)
 		return
 	}
 
-	// Send to leader with timeout
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	_, err = s.Op.Send(timeoutCtx, inputData)
+	_, err = s.Op.Send(ctx, inputData)
 	if err != nil {
 		glog.Infof("Failed to send to leader: %v", err)
-	} else {
-		glog.Infof("Successfully notified leader with flag: %d", flag)
 	}
 }
