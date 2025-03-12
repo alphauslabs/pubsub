@@ -666,7 +666,7 @@ func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptions
 }
 
 func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQueueRequest) (*pb.GetMessagesInQueueResponse, error) {
-	count, err := storage.GetMessagesCountBySubscription("", "")
+	count, err := storage.GetSubscriptionQueueDepths()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
 	}

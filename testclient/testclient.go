@@ -211,9 +211,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("GetMessagesInQueue failed: %v", err)
 		}
-
 		for _, sub := range r.InQueue {
-			glog.Infof("Subscription: %s, MessagesInQueue: %d \n", sub.Subscription, sub.Total)
+			glog.Infof("Sub=%s, Msgs=%d \n", sub.Subscription, sub.Total)
 		}
 	default:
 		fmt.Println("Invalid method, try again...")

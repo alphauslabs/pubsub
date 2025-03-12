@@ -362,11 +362,9 @@ type MessageCount struct {
 // GetMessagesCountBySubscription returns counts of messages for all subscriptions
 // The results can be filtered by topic and/or subscription if provided
 func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]MessageCount, error) {
-	// Take a read lock on the topic messages map
 	topicMsgMu.RLock()
 	defer topicMsgMu.RUnlock()
 
-	// Take a read lock on topic subscriptions to get the subscription structure
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
 
@@ -375,7 +373,6 @@ func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]M
 	// Initialize counters for all topic-subscription pairs
 	counters := make(map[string]map[string]*MessageCount)
 
-	// First build the structure of all topics and subscriptions
 	for topic, subscriptions := range topicSubs {
 		// Skip if filtering by topic and this isn't the requested topic
 		if filterTopic != "" && filterTopic != topic {
