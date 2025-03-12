@@ -14,6 +14,13 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+type Raw struct {
+	Id         string `spanner:"id"`
+	Topic      string `spanner:"topic"`
+	Payload    string `spanner:"payload"`
+	Attributes string `spanner:"attributes"`
+}
+
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload, attributes
@@ -33,7 +40,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			continue
 		}
 
-		var msg pb.Message
+		var msg Raw
 
 		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
 		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
@@ -44,6 +51,20 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		if err != nil {
 			glog.Error(err)
 			continue
+		}
+
+		attr := make(map[string]string)
+		err = json.Unmarshal([]byte(msg.Attributes), &attr)
+		if err != nil {
+			glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
+			continue
+		}
+
+		m := pb.Message{
+			Id:         msg.Id,
+			Topic:      msg.Topic,
+			Payload:    msg.Payload,
+			Attributes: attr,
 		}
 
 		// Structure
@@ -58,7 +79,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		// }
 
 		// Marshal message info
-		data, err := json.Marshal(&msg)
+		data, err := json.Marshal(&m)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
@@ -112,7 +133,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		}
 		count++
 
-		var msg pb.Message
+		var msg Raw
 		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
 		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
 		// 	continue
@@ -122,8 +143,22 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			glog.Error(err)
 			continue
 		}
+
+		attr := make(map[string]string)
+		err = json.Unmarshal([]byte(msg.Attributes), &attr)
+		if err != nil {
+			glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
+			continue
+		}
+
+		m := pb.Message{
+			Id:         msg.Id,
+			Topic:      msg.Topic,
+			Payload:    msg.Payload,
+			Attributes: attr,
+		}
 		// Marshal message info
-		data, err := json.Marshal(&msg)
+		data, err := json.Marshal(&m)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
