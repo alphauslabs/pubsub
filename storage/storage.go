@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -169,15 +170,8 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 }
 
 func MonitorActivity(ctx context.Context) {
-	glog.Info("[Storage Monitor] Starting storage activity monitor...")
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	defer func() {
-		glog.Info("[Storage Monitor] Stopping storage activity monitor...")
-		if r := recover(); r != nil {
-			glog.Errorf("[Storage Monitor] Panic recovered: %v", r)
-		}
-	}()
 
 	do := func() {
 		var topicMsgCounts = make(map[string]int)
@@ -204,26 +198,22 @@ func MonitorActivity(ctx context.Context) {
 		if len(topicSubDetails) == 0 {
 			glog.Info("[Storage Monitor] No topic-subscription data available")
 		} else {
-			for topic, subCount := range topicSubDetails {
-				glog.Infof("[Storage Monitor] Topic: %s - Subscriptions: %d", topic, subCount)
-			}
+			b, _ := json.Marshal(topicSubDetails)
+			glog.Infof("[Storage Monitor] Topic-Subscription data: %s", string(b))
 		}
 
 		if len(topicMsgCounts) == 0 {
 			glog.Info("[Storage Monitor] No Messages available")
 		} else {
-			for topic, count := range topicMsgCounts {
-				glog.Infof("[Storage Monitor] Topic: %s - Messages: %d", topic, count)
-			}
+			b, _ := json.Marshal(topicMsgCounts)
+			glog.Infof("[Storage Monitor] Topic-Messages data: %s", string(b))
 		}
 	}
 
 	do()
 	for {
-		glog.Info("[Storage Monitor] Waiting for next tick...")
 		select {
 		case <-ctx.Done():
-			glog.Info("[Storage Monitor] Stopping storage activity monitor...")
 			return
 		case <-ticker.C:
 			do()

@@ -43,7 +43,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
 		[]string{"id", "topic", "payload", "createdAt", "updatedAt", "visibilityTimeout", "processed"},
-		[]interface{}{
+		[]any{
 			msgId,
 			in.Topic,
 			in.Payload,
@@ -246,7 +246,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 	m := spanner.Insert(
 		TopicsTable,
 		[]string{"name", "createdAt", "updatedAt"},
-		[]interface{}{req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
+		[]any{req.Name, spanner.CommitTimestamp, spanner.CommitTimestamp},
 	)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
@@ -272,7 +272,7 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Top
 
 	stmt := spanner.Statement{
 		SQL:    `SELECT name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
-		Params: map[string]interface{}{"name": req.Name},
+		Params: map[string]any{"name": req.Name},
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
@@ -315,7 +315,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		// 1. Get the existing topic with its createdAt timestamp
 		stmtGet := spanner.Statement{
 			SQL: `SELECT createdAt FROM Topics WHERE name = @name`,
-			Params: map[string]interface{}{
+			Params: map[string]any{
 				"name": req.Name,
 			},
 		}
@@ -338,7 +338,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		// 2. Delete the old topic
 		stmtDelete := spanner.Statement{
 			SQL: `DELETE FROM Topics WHERE name = @name`,
-			Params: map[string]interface{}{
+			Params: map[string]any{
 				"name": req.Name,
 			},
 		}
@@ -354,7 +354,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		mutation := spanner.Insert(
 			"Topics",
 			[]string{"name", "createdAt", "updatedAt"},
-			[]interface{}{req.NewName, createdAt.Time, spanner.CommitTimestamp},
+			[]any{req.NewName, createdAt.Time, spanner.CommitTimestamp},
 		)
 		if err := txn.BufferWrite([]*spanner.Mutation{mutation}); err != nil {
 			return status.Errorf(codes.Internal, "Failed to create new topic: %v", err)
@@ -366,7 +366,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
                   SET topic = @newName,
                       updatedAt = PENDING_COMMIT_TIMESTAMP()
                   WHERE topic = @oldName`,
-			Params: map[string]interface{}{
+			Params: map[string]any{
 				"oldName": req.Name,
 				"newName": req.NewName,
 			},
@@ -382,7 +382,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
                   SET topic = @newName,
                       updatedAt = PENDING_COMMIT_TIMESTAMP()
                   WHERE topic = @oldName`,
-			Params: map[string]interface{}{
+			Params: map[string]any{
 				"oldName": req.Name,
 				"newName": req.NewName,
 			},
@@ -419,7 +419,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		// 1) Check if topic exists
 		checkStmt := spanner.Statement{
 			SQL:    `SELECT name FROM Topics WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
-			Params: map[string]interface{}{"name": req.Name},
+			Params: map[string]any{"name": req.Name},
 		}
 		iter := txn.Query(ctx, checkStmt)
 		defer iter.Stop()
@@ -441,7 +441,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		// 3) Delete all related subscriptions referencing this topic
 		delSubs := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
-			Params: map[string]interface{}{
+			Params: map[string]any{
 				"Topic": req.Name,
 			},
 		}
@@ -529,7 +529,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 	m := spanner.Insert(
 		SubsTable,
 		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
-		[]interface{}{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
+		[]any{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
 	)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
@@ -554,7 +554,7 @@ func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionReq
 
 	stmt := spanner.Statement{
 		SQL: `SELECT name, topic, autoextend FROM Subscriptions WHERE name = @name`,
-		Params: map[string]interface{}{
+		Params: map[string]any{
 			"name": req.Name,
 		},
 	}
@@ -599,7 +599,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 	m := spanner.Update(
 		SubsTable,
 		[]string{"name", "visibility_timeout", "autoextend", "updatedAt"},
-		[]interface{}{
+		[]any{
 			req.Name,
 			req.ModifyVisibilityTimeout,
 			req.Autoextend,
@@ -683,7 +683,7 @@ func (s *server) ListSubscriptions(ctx context.Context, _ *pb.Empty) (*pb.ListSu
 
 func (s *server) notifyLeader(flag byte) {
 	// Create a simple payload with just the flag
-	data := map[string]interface{}{
+	data := map[string]any{
 		"flag": flag,
 	}
 

@@ -78,14 +78,6 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 		return
 	}
 
-	//log message to see the broadcasted message
-	glog.Info("STRUCT-Leader: Broadcasting updated topic-subscription structure with AutoExtend.")
-	for topic, subs := range latest {
-		for subName, sub := range subs {
-			glog.Infof("STRUCT-Leader: %s -> %s (AutoExtend: %t)", topic, subName, sub.Subscription.Autoextend)
-		}
-	}
-
 	// Marshal topic-subscription data into JSON
 	msgData, err := json.Marshal(latest)
 	if err != nil {
@@ -114,12 +106,9 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 			lastBroadcasted = latest
 		}
 	}
-
-	glog.Info("STRUCT-Leader: Topic-subscription structure broadcast completed.")
 }
 
 func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
-	glog.Info("[STRUCT] Starting distribution of topic-sub scription structure...")
 	ticker := time.NewTicker(10 * time.Second) // will adjust to lower interval later
 	defer func() {
 		ticker.Stop()
@@ -166,6 +155,8 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	if err != nil {
 		glog.Infof("STRUCT-Error storing topic-subscription data: %v", err)
 	}
+
+	glog.Infof("[RequestStructFromLeader] topic-subscription data from leader: %v", string(out))
 }
 
 // Compare two topic-subscription maps for equality.
