@@ -15,10 +15,10 @@ import (
 )
 
 type Raw struct {
-	Id         string `spanner:"id"`
-	Topic      string `spanner:"topic"`
-	Payload    string `spanner:"payload"`
-	Attributes string `spanner:"attributes"`
+	Id         string             `spanner:"id"`
+	Topic      string             `spanner:"topic"`
+	Payload    string             `spanner:"payload"`
+	Attributes spanner.NullString `spanner:"attributes"`
 }
 
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
@@ -54,7 +54,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		}
 
 		attr := make(map[string]string)
-		err = json.Unmarshal([]byte(msg.Attributes), &attr)
+		err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
 			continue
@@ -145,7 +145,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		}
 
 		attr := make(map[string]string)
-		err = json.Unmarshal([]byte(msg.Attributes), &attr)
+		err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 		if err != nil {
 			glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
 			continue
