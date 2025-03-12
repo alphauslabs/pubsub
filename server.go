@@ -221,7 +221,7 @@ func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisib
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// Reset Age
+	// Reset age
 	msg.Mu.Lock()
 	msg.Subscriptions[in.Subscription].RenewAge()
 	msg.Mu.Unlock()

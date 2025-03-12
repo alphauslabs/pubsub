@@ -54,7 +54,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		}
 
 		attr := make(map[string]string)
-		if msg.Attributes.Valid {
+		if msg.Attributes.Valid && msg.Attributes.StringVal != "" {
 			err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 			if err != nil {
 				glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
@@ -147,7 +147,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		}
 
 		attr := make(map[string]string)
-		if msg.Attributes.Valid {
+		if msg.Attributes.Valid && msg.Attributes.StringVal != "" {
 			err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 			if err != nil {
 				glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
