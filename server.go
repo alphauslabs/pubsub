@@ -665,6 +665,23 @@ func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptions
 	}, nil
 }
 
+func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQueueRequest) (*pb.GetMessagesInQueueResponse, error) {
+	count, err := storage.GetMessagesCountBySubscription("", "")
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
+	}
+	r := make([]*pb.InQueue, 0)
+	for _, c := range count {
+		r = append(r, &pb.InQueue{
+			Subscription: c.Subscription,
+			Total:        int32(c.Available),
+		})
+	}
+	return &pb.GetMessagesInQueueResponse{
+		InQueue: r,
+	}, nil
+}
+
 func (s *server) notifyLeader(ctx context.Context) {
 	input := handlers.SendInput{
 		Type: "topicsubupdates",

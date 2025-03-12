@@ -4,7 +4,7 @@ go 1.23.6
 
 require (
 	cloud.google.com/go/spanner v1.76.1
-	github.com/alphauslabs/pubsub-proto v0.0.1
+	github.com/alphauslabs/pubsub-proto v0.0.2
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/flowerinthenight/timedoff v1.0.2
 	github.com/golang/glog v1.2.4
@@ -37,7 +37,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/google/s2a-go v0.1.9 // indirect

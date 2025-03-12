@@ -206,7 +206,12 @@ func main() {
 			log.Fatalf("ListSubscriptions failed: %v", err)
 		}
 		fmt.Printf("r.Subscriptions: %v\n", r.Subscriptions)
-
+	case "getnummessages":
+		r, err := c.GetMessagesInQueue(context.Background(), &pb.GetMessagesInQueueRequest{})
+		if err != nil {
+			log.Fatalf("GetMessagesInQueue failed: %v", err)
+		}
+		fmt.Printf("r.NumMessages: %v\n", r.InQueue)
 	default:
 		fmt.Println("Invalid method, try again...")
 	}

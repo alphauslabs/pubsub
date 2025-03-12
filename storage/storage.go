@@ -341,3 +341,198 @@ func (s *Subs) ClearAge() {
 	defer s.Mu.Unlock()
 	s.Age = time.Time{}
 }
+
+type InQueue struct {
+	Subscription string `json:"subscription"`
+	Total        int    `json:"total"`
+	Available    int    `json:"available"`
+	Locked       int    `json:"locked"`
+}
+
+// MessageCount represents the count of messages for a subscription
+type MessageCount struct {
+	Topic        string `json:"topic"`
+	Subscription string `json:"subscription"`
+	Total        int    `json:"total"`     // Total messages
+	Locked       int    `json:"locked"`    // Messages locked
+	Available    int    `json:"available"` // Messages available for processing
+	Deleted      int    `json:"deleted"`   // Messages marked as deleted
+}
+
+// GetMessagesCountBySubscription returns counts of messages for all subscriptions
+// The results can be filtered by topic and/or subscription if provided
+func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]MessageCount, error) {
+	// Take a read lock on the topic messages map
+	topicMsgMu.RLock()
+	defer topicMsgMu.RUnlock()
+
+	// Take a read lock on topic subscriptions to get the subscription structure
+	topicSubsMu.RLock()
+	defer topicSubsMu.RUnlock()
+
+	var results []MessageCount
+
+	// Initialize counters for all topic-subscription pairs
+	counters := make(map[string]map[string]*MessageCount)
+
+	// First build the structure of all topics and subscriptions
+	for topic, subscriptions := range topicSubs {
+		// Skip if filtering by topic and this isn't the requested topic
+		if filterTopic != "" && filterTopic != topic {
+			continue
+		}
+
+		counters[topic] = make(map[string]*MessageCount)
+
+		for subName := range subscriptions {
+			// Skip if filtering by subscription and this isn't the requested one
+			if filterSubscription != "" && filterSubscription != subName {
+				continue
+			}
+
+			counters[topic][subName] = &MessageCount{
+				Topic:        topic,
+				Subscription: subName,
+				Total:        0,
+				Locked:       0,
+				Available:    0,
+				Deleted:      0,
+			}
+		}
+	}
+
+	// Now count messages for each topic-subscription pair
+	for topic, msgMap := range TopicMessages {
+		// Skip if filtering by topic and this isn't the requested topic
+		if filterTopic != "" && filterTopic != topic {
+			continue
+		}
+
+		// Skip if this topic has no subscriptions we're tracking
+		topicCounters, exists := counters[topic]
+		if !exists {
+			continue
+		}
+
+		// Get all messages for this topic
+		allMsgs := msgMap.GetAll()
+
+		// Count each message for relevant subscriptions
+		for _, msg := range allMsgs {
+			// Skip if the message is marked as final deleted
+			if msg.IsFinalDeleted() {
+				continue
+			}
+
+			// Check each subscription for this message
+			for subName, sub := range msg.Subscriptions {
+				// Skip if filtering by subscription and this isn't the requested one
+				if filterSubscription != "" && filterSubscription != subName {
+					continue
+				}
+
+				// Skip if we're not tracking this subscription
+				counter, exists := topicCounters[subName]
+				if !exists {
+					continue
+				}
+
+				// Count this message
+				counter.Total++
+
+				// Update specific counters based on message state
+				if sub.IsDeleted() {
+					counter.Deleted++
+				} else if sub.IsLocked() {
+					counter.Locked++
+				} else {
+					counter.Available++
+				}
+			}
+		}
+	}
+
+	// Convert the map to a flat slice
+	for _, topicCounters := range counters {
+		for _, counter := range topicCounters {
+			results = append(results, *counter)
+		}
+	}
+
+	return results, nil
+}
+
+// GetMessagesStatsByTopic returns aggregated statistics grouped by topic
+func GetMessagesStatsByTopic() (map[string]struct {
+	Subscriptions     int `json:"subscriptions"`
+	TotalMessages     int `json:"total_messages"`
+	AvailableMessages int `json:"available_messages"`
+}, error) {
+	counts, err := GetMessagesCountBySubscription("", "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Group by topic
+	stats := make(map[string]struct {
+		Subscriptions     int `json:"subscriptions"`
+		TotalMessages     int `json:"total_messages"`
+		AvailableMessages int `json:"available_messages"`
+	})
+
+	// Count unique subscriptions per topic
+	subsByTopic := make(map[string]map[string]bool)
+
+	for _, count := range counts {
+		if _, exists := stats[count.Topic]; !exists {
+			stats[count.Topic] = struct {
+				Subscriptions     int `json:"subscriptions"`
+				TotalMessages     int `json:"total_messages"`
+				AvailableMessages int `json:"available_messages"`
+			}{
+				Subscriptions:     0,
+				TotalMessages:     0,
+				AvailableMessages: 0,
+			}
+			subsByTopic[count.Topic] = make(map[string]bool)
+		}
+
+		// Count unique subscriptions
+		subsByTopic[count.Topic][count.Subscription] = true
+
+		// Update stats
+		entry := stats[count.Topic]
+		entry.TotalMessages += count.Total
+		entry.AvailableMessages += count.Available
+		stats[count.Topic] = entry
+	}
+
+	// Set subscription counts
+	for topic, subs := range subsByTopic {
+		entry := stats[topic]
+		entry.Subscriptions = len(subs)
+		stats[topic] = entry
+	}
+
+	return stats, nil
+}
+
+// GetSubscriptionQueueDepths returns queue depths for monitoring purposes
+func GetSubscriptionQueueDepths() ([]InQueue, error) {
+	counts, err := GetMessagesCountBySubscription("", "")
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]InQueue, 0, len(counts))
+	for _, count := range counts {
+		results = append(results, InQueue{
+			Subscription: count.Topic + ":" + count.Subscription,
+			Total:        count.Total,
+			Available:    count.Available,
+			Locked:       count.Locked,
+		})
+	}
+
+	return results, nil
+}
