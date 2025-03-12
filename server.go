@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -95,7 +94,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 // Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	glog.Infof("[Subscribe] New subscription request received for Topic=%s, Subscription=%s", in.Topic, in.Subscription)
-	// Validate subscription exists for the topic
+
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
@@ -164,7 +163,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								return
 							}
 							switch {
-							case atomic.LoadInt32(&m.FinalDeleted) == 1:
+							case m.IsFinalDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
 								return
 							case m.Subscriptions[in.Subscription].IsDeleted():
@@ -184,7 +183,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			}
 		}
 	}
-
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
@@ -223,7 +221,7 @@ func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisib
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// lock the message and reset Age
+	// Reset Age
 	msg.Mu.Lock()
 	msg.Subscriptions[in.Subscription].RenewAge()
 	msg.Mu.Unlock()

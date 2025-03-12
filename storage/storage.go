@@ -52,6 +52,14 @@ type Message struct {
 	FinalDeleted  int32
 }
 
+func (m *Message) MarkAsFinalDeleted() {
+	atomic.StoreInt32(&m.FinalDeleted, 1)
+}
+
+func (m *Message) IsFinalDeleted() bool {
+	return atomic.LoadInt32(&m.FinalDeleted) == 1
+}
+
 type Subs struct {
 	SubscriptionID string
 	Age            time.Time
@@ -161,7 +169,7 @@ func MonitorActivity(ctx context.Context) {
 		for topic, msgs := range TopicMessages {
 			count := 0
 			for _, msg := range msgs.GetAll() {
-				if atomic.LoadInt32(&msg.FinalDeleted) == 0 {
+				if !msg.IsFinalDeleted() {
 					count++
 				}
 			}
@@ -210,7 +218,7 @@ func GetMessage(id string) (*Message, error) {
 	for _, msgs := range TopicMessages {
 		if msg, exists := msgs.Get(id); exists {
 			// check if marked deleted
-			if atomic.LoadInt32(&msg.FinalDeleted) == 1 {
+			if msg.IsFinalDeleted() {
 				return nil, ErrMessageNotFound
 			}
 			return msg, nil
@@ -231,7 +239,7 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 	allMsgs := topicMsgs.GetAll()
 
 	for _, msg := range allMsgs {
-		if atomic.LoadInt32(&msg.FinalDeleted) == 1 {
+		if msg.IsFinalDeleted() {
 			continue
 		}
 
