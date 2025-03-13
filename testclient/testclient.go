@@ -180,6 +180,7 @@ func main() {
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
 		}
 	case "createsubscription":
+		panic("testing panic")
 		// todo:
 	case "getsubscription":
 		// todo:
