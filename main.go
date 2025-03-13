@@ -41,7 +41,7 @@ func main() {
 	}
 	defer client.Close()
 
-	logger := client.Logger("pubsub-crash:")
+	logger := client.Logger("pubsub-crash-")
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Log(logging.Entry{
