@@ -128,6 +128,17 @@ func main() {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Log(logging.Entry{
+					Severity: logging.Critical, // Ensure it's an error-level log
+					Payload: map[string]interface{}{
+						"message":    fmt.Sprintf("Recovered from panic: %v", r),
+						"stacktrace": string(debug.Stack()), // Ensure stack trace is included
+					},
+				})
+			}
+		}()
 		if err := run(ctx, &server{PubSub: ap}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
