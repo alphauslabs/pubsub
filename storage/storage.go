@@ -308,11 +308,10 @@ type MessageCount struct {
 // GetMessagesCountBySubscription returns counts of messages for all subscriptions
 // The results can be filtered by topic and/or subscription if provided
 func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]MessageCount, error) {
-	topicMsgMu.RLock()
-	defer topicMsgMu.RUnlock()
-
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
+	topicMsgMu.RLock()
+	defer topicMsgMu.RUnlock()
 
 	var results []MessageCount
 
