@@ -9,9 +9,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/logging"
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
@@ -33,9 +35,22 @@ var (
 )
 
 func main() {
+	client, err := logging.NewClient(context.Background(), "labs-169405")
+	if err != nil {
+		log.Fatalf("Failed to create Google Cloud Logging client: %v", err)
+	}
+	defer client.Close()
+
+	logger := client.Logger("pubsub-crash:")
 	defer func() {
 		if r := recover(); r != nil {
-			glog.Infof("[Panic] Recovered in main: %v", r)
+			logger.Log(logging.Entry{
+				Severity: logging.Critical, // Ensure it's an error-level log
+				Payload: map[string]interface{}{
+					"message":    fmt.Sprintf("Recovered from panic: %v", r),
+					"stacktrace": string(debug.Stack()), // Ensure stack trace is included
+				},
+			})
 		}
 	}()
 	flag.Set("logtostderr", "true")
