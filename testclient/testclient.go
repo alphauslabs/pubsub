@@ -179,11 +179,10 @@ func main() {
 
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
 		}
-
 	case "createsubscription":
-
+		// todo:
 	case "getsubscription":
-
+		// todo:
 	case "updatesubscription":
 		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
 			Name: sub,
@@ -193,7 +192,6 @@ func main() {
 			log.Fatalf("UpdateSubscription failed: %v", err)
 		}
 		glog.Infof("Subscription Updated!\nID: %s\n", sub)
-
 	case "deletesubscription":
 		_, err := c.DeleteSubscription(context.Background(), &pb.DeleteSubscriptionRequest{Name: sub})
 		if err != nil {
