@@ -205,7 +205,7 @@ func main() {
 		}
 		fmt.Printf("r.Subscriptions: %v\n", r.Subscriptions)
 	case "getnummessages":
-		r, err := c.GetMessagesInQueue(context.Background(), &pb.GetMessagesInQueueRequest{})
+		r, err := c.GetMessagesInQueue(context.Background(), &pb.GetMessagesInQueueRequest{Subscription: sub})
 		if err != nil {
 			log.Fatalf("GetMessagesInQueue failed: %v", err)
 		}
