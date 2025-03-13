@@ -406,7 +406,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	}
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// 1) Check if topic exists
+		// Check if topic exists
 		checkStmt := spanner.Statement{
 			SQL:    `SELECT name FROM Topics WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
 			Params: map[string]any{"name": req.Name},
@@ -422,13 +422,13 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 			return status.Errorf(codes.Internal, "Failed to check topic existence: %v", err)
 		}
 
-		// 2) Delete the topic row
+		// Delete the topic row
 		topicMutation := spanner.Delete(TopicsTable, spanner.Key{req.Name})
 		if err := txn.BufferWrite([]*spanner.Mutation{topicMutation}); err != nil {
 			return status.Errorf(codes.Internal, "failed to delete topic: %v", err)
 		}
 
-		// 3) Delete all related subscriptions referencing this topic
+		// Delete all related subscriptions referencing this topic
 		delSubs := spanner.Statement{
 			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
 			Params: map[string]any{
@@ -447,13 +447,12 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		return nil, err
 	}
 
-	// Remove from in-memory storage (if you maintain a local cache)
 	if err := storage.RemoveTopic(req.Name); err != nil {
 		glog.Infof("Failed to remove topic from memory: %v", err)
 		// continuing so we can still broadcast the deletion
 	}
 
-	// Note: Might not be needed since we tell leader that a topic is delete.
+	// todo: Might not be needed since we tell leader that a topic is delete.
 	glog.Infof("Broadcasting topic deletion for %s", req.Name)
 	broadcastData := handlers.BroadCastInput{
 		Type: "topicdeleted",
