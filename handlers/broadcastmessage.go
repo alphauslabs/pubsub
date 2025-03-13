@@ -42,11 +42,6 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 
 		var msg Raw
 
-		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
-		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
-		// 	continue
-		// }
-
 		err = row.ToStruct(&msg)
 		if err != nil {
 			glog.Error(err)
@@ -68,17 +63,6 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			Payload:    msg.Payload,
 			Attributes: attr,
 		}
-
-		// Structure
-		// messageInfo := struct {
-		// 	ID      string `json:"id"`
-		// 	Topic   string `json:"topic"`
-		// 	Payload string `json:"payload"`
-		// }{
-		// 	ID:      msg.Id,
-		// 	Topic:   msg.Topic,
-		// 	Payload: msg.Payload,
-		// }
 
 		// Marshal message info
 		data, err := json.Marshal(&m)
@@ -136,10 +120,6 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		count++
 
 		var msg Raw
-		// if err := row.Columns(&msg.Id, &msg.Topic, &msg.Payload, &msg.Attributes); err != nil {
-		// 	glog.Infof("[BroadcastMessage] Error reading message columns: %v", err)
-		// 	continue
-		// }
 		err = row.ToStruct(&msg)
 		if err != nil {
 			glog.Error(err)
