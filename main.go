@@ -58,7 +58,8 @@ func main() {
 	defer glog.Flush()
 
 	go serveHealthChecks() // _handle health checks from our LB
-	panic("test panic")
+	var arr []string
+	fmt.Println(arr[1])
 
 	spconf := spanner.ClientConfig{
 		SessionPoolConfig: spanner.SessionPoolConfig{
