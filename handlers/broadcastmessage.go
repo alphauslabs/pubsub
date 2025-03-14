@@ -98,7 +98,30 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 
 		if numErrors == len(responses) {
 			glog.Errorf("[BroadcastMessage] No success replies received for message %s", msg.Id)
-			continue
+			m := storage.Message{
+				Message: &pb.Message{
+					Id:         msg.Id,
+					Topic:      msg.Topic,
+					Payload:    msg.Payload,
+					Attributes: attr,
+				},
+			}
+
+			subs, err := storage.GetSubscribtionsForTopic(msg.Topic)
+			if err != nil {
+				glog.Errorf("[BroadcastMessage] Topic %s not found in subscriptions", msg.Topic)
+				continue
+			}
+
+			subss := make(map[string]*storage.Subs)
+			for _, sub := range subs {
+				subss[sub.Subscription.Name] = &storage.Subs{
+					SubscriptionID: sub.Subscription.Name,
+				}
+			}
+
+			m.Subscriptions = subss
+			r = m
 		}
 
 		// Marshal message info
