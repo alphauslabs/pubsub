@@ -10,6 +10,7 @@ import (
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
 )
@@ -36,7 +37,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			break
 		}
 		if err != nil {
-			glog.Infof("[AllMessages] Error reading message: %v", err)
+			glog.Errorf("[AllMessages] Error reading message: %v", err)
 			continue
 		}
 
@@ -52,24 +53,61 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		if msg.Attributes.Valid && msg.Attributes.StringVal != "" {
 			err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 			if err != nil {
-				glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
+				glog.Errorf("[BroadcastMessage] Error unmarshalling attributes: %v", err)
 				continue
 			}
 		}
 
-		m := pb.Message{
-			Id:         msg.Id,
-			Topic:      msg.Topic,
-			Payload:    msg.Payload,
-			Attributes: attr,
+		// m := storage.Message{
+		// 	Message: &pb.Message{
+		// 		Id:         msg.Id,
+		// 		Topic:      msg.Topic,
+		// 		Payload:    msg.Payload,
+		// 		Attributes: attr,
+		// 	},
+		// }
+
+		idb, _ := json.Marshal(msg.Id)
+		bin := BroadCastInput{
+			Type: MsgStatus,
+			Msg:  idb,
+		}
+
+		bData, err := json.Marshal(bin)
+		if err != nil {
+			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+			continue
+		}
+
+		// Ask others the status of this message
+		numErrors := 0
+		var r storage.Message
+		responses := app.Op.Broadcast(ctx, bData)
+		for _, response := range responses {
+			if response.Error != nil {
+				numErrors++
+				glog.Errorf("[BroadcastMessage] Error reply from broadcasting message: %v", response.Error)
+			} else {
+				err := json.Unmarshal(response.Reply, &r)
+				if err != nil {
+					glog.Errorf("[BroadcastMessage] Error unmarshalling message status: %v", err)
+					continue
+				}
+			}
+		}
+
+		if numErrors == len(responses) {
+			glog.Errorf("[BroadcastMessage] No success replies received for message %s", msg.Id)
+			continue
 		}
 
 		// Marshal message info
-		data, err := json.Marshal(&m)
+		data, err := json.Marshal(&r)
 		if err != nil {
-			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
+			glog.Errorf("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
 		}
+
 		// Create broadcast input
 		broadcastInput := BroadCastInput{
 			Type: Message,
@@ -79,15 +117,15 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		// Marshal broadcast input
 		broadcastData, err := json.Marshal(broadcastInput)
 		if err != nil {
-			glog.Infof("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 			continue
 		}
 
 		// Broadcast
-		responses := app.Op.Broadcast(ctx, broadcastData)
+		responses = app.Op.Broadcast(ctx, broadcastData)
 		for _, response := range responses {
 			if response.Error != nil {
-				glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)
+				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 			}
 		}
 	}
@@ -130,21 +168,39 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		if msg.Attributes.Valid && msg.Attributes.StringVal != "" {
 			err = json.Unmarshal([]byte(msg.Attributes.StringVal), &attr)
 			if err != nil {
-				glog.Infof("[BroadcastMessage] Error unmarshalling attributes: %v", err)
+				glog.Errorf("[BroadcastMessage] Error unmarshalling attributes: %v", err)
 				continue
 			}
 		}
 
-		m := pb.Message{
-			Id:         msg.Id,
-			Topic:      msg.Topic,
-			Payload:    msg.Payload,
-			Attributes: attr,
+		// Fill in the subscription details
+		subs, err := storage.GetSubscribtionsForTopic(msg.Topic)
+		if err != nil {
+			glog.Errorf("[BroadcastMessage] Topic %s not found in subscriptions", msg.Topic)
+			continue
 		}
+
+		subss := make(map[string]*storage.Subs)
+		for _, sub := range subs {
+			subss[sub.Subscription.Name] = &storage.Subs{
+				SubscriptionID: sub.Subscription.Name,
+			}
+		}
+
+		m := storage.Message{
+			Message: &pb.Message{
+				Id:         msg.Id,
+				Topic:      msg.Topic,
+				Payload:    msg.Payload,
+				Attributes: attr,
+			},
+			Subscriptions: subss,
+		}
+
 		// Marshal message info
 		data, err := json.Marshal(&m)
 		if err != nil {
-			glog.Infof("[BroadcastMessage] Error marshalling message: %v", err)
+			glog.Errorf("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
 		}
 
@@ -157,7 +213,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		// Marshal broadcast input
 		broadcastData, err := json.Marshal(broadcastInput)
 		if err != nil {
-			glog.Infof("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 			continue
 		}
 
@@ -165,7 +221,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		responses := app.Op.Broadcast(ctx, broadcastData)
 		for _, response := range responses {
 			if response.Error != nil {
-				glog.Infof("[BroadcastMessage] Error broadcasting message: %v", response.Error)
+				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 			}
 		}
 	}

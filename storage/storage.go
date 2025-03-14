@@ -113,7 +113,7 @@ func StoreMessage(msg *Message) error {
 	}
 
 	topicSubsMu.RLock()
-	subs, exists := topicSubs[msg.Topic]
+	_, exists := topicSubs[msg.Topic]
 	topicSubsMu.RUnlock()
 
 	if !exists {
@@ -121,16 +121,16 @@ func StoreMessage(msg *Message) error {
 		return ErrTopicNotFound
 	}
 
-	subss := make(map[string]*Subs)
-	for subName, sub := range subs {
-		if sub == nil {
-			glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
-			continue
-		}
-		subss[subName] = &Subs{
-			SubscriptionID: subName,
-		}
-	}
+	// subss := make(map[string]*Subs)
+	// for subName, sub := range subs {
+	// 	if sub == nil {
+	// 		glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
+	// 		continue
+	// 	}
+	// 	subss[subName] = &Subs{
+	// 		SubscriptionID: subName,
+	// 	}
+	// }
 
 	topicMsgMu.Lock()
 	defer topicMsgMu.Unlock()
@@ -139,7 +139,7 @@ func StoreMessage(msg *Message) error {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
 
-	msg.Subscriptions = subss
+	// msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }

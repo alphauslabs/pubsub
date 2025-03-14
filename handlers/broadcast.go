@@ -16,6 +16,7 @@ const (
 	LeaderLiveliness = "leaderliveliness"
 	MsgEvent         = "msgEvent"
 	TopicDeleted     = "topicdeleted"
+	MsgStatus        = "msgstatus"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -35,6 +36,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
 	LeaderLiveliness: handleLeaderLiveliness,
 	TopicDeleted:     handleTopicDeleted,
+	MsgStatus:        handleMsgStatus,
 }
 
 // Root handler for op.Broadcast()
@@ -204,4 +206,24 @@ func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	glog.Infof("[Delete] Successfully removed topic %s from memory", topicName)
 	return nil, nil
+}
+
+func handleMsgStatus(app *app.PubSub, msg []byte) ([]byte, error) {
+	msgId := string(msg)
+	m, err := storage.GetMessage(msgId)
+	if err != nil {
+		glog.Errorf("[Status] Error retrieving message %s: %v", msgId, err)
+		return nil, err
+	}
+	if m == nil {
+		glog.Errorf("[Status] Message %s not found", msgId)
+		return nil, fmt.Errorf("message not found")
+	}
+
+	b, err := json.Marshal(m)
+	if err != nil {
+		glog.Errorf("[Status] Error marshalling message status: %v", err)
+		return nil, err
+	}
+	return b, nil
 }
