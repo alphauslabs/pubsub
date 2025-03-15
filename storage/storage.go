@@ -93,7 +93,11 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	_, exists := mm.Messages[id]
 	if !exists {
 		mm.Messages[id] = msg
+	} else {
+		glog.Infof("[STORAGE] Message %s already exists", id)
 	}
+	b, _ = json.Marshal(mm.Messages[id])
+	glog.Infof("[STORAGE] Put %v", string(b))
 }
 
 // GetAll returns a copy of all Messages
@@ -123,17 +127,6 @@ func StoreMessage(msg *Message) error {
 		return ErrTopicNotFound
 	}
 
-	// subss := make(map[string]*Subs)
-	// for subName, sub := range subs {
-	// 	if sub == nil {
-	// 		glog.Errorf("[STORAGE] found nil subscription for topic %s", msg.Topic)
-	// 		continue
-	// 	}
-	// 	subss[subName] = &Subs{
-	// 		SubscriptionID: subName,
-	// 	}
-	// }
-
 	TopicMsgMu.Lock()
 	defer TopicMsgMu.Unlock()
 
@@ -141,7 +134,6 @@ func StoreMessage(msg *Message) error {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
 
-	// msg.Subscriptions = subss
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }
