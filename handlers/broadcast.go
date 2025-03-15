@@ -55,8 +55,8 @@ func handleBroadcastedMsg(app *app.PubSub, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &message); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
 	}
-	b, _ := json.Marshal(&message)
-	glog.Infof("[Broadcast] Message=%s", string(b))
+
+	glog.Infof("[Broadcast] Message=%s", message.Subscriptions)
 	if err := storage.StoreMessage(&message); err != nil {
 		return nil, fmt.Errorf("failed to store message: %w", err)
 	}
