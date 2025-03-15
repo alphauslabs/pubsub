@@ -45,22 +45,35 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		attr = string(b)
 	}
 
+	subs, err := storage.GetSubscribtionsForTopic(in.Topic)
+	if err != nil {
+		glog.Errorf("Failed to get subscriptions for topic=%v", in.Topic)
+		return nil, err
+	}
+
+	subStatus := make(map[string]bool)
+	for _, s := range subs {
+		subStatus[s.Name] = false
+	}
+	b, _ := json.Marshal(subStatus)
+
 	msgId := uuid.New().String()
 	mutation := spanner.InsertOrUpdate(
 		MessagesTable,
-		[]string{"id", "topic", "payload", "attributes", "createdAt", "updatedAt", "processed"},
+		[]string{"id", "topic", "payload", "attributes", "subStatus", "createdAt", "updatedAt", "processed"},
 		[]any{
 			msgId,
 			in.Topic,
 			in.Payload,
 			attr,
+			string(b),
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
 			false, // Default to unprocessed
 		},
 	)
 
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
 		glog.Infof("Error writing to Spanner: %v", err)
 		return nil, err
@@ -73,7 +86,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			Payload: in.Payload,
 		},
 	}
-	b, _ := json.Marshal(&m)
+	b, _ = json.Marshal(&m)
 
 	// broadcast message
 	bcastin := handlers.BroadCastInput{
