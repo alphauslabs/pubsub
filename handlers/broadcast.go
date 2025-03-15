@@ -7,6 +7,7 @@ import (
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
 )
 
@@ -16,7 +17,6 @@ const (
 	LeaderLiveliness = "leaderliveliness"
 	MsgEvent         = "msgEvent"
 	TopicDeleted     = "topicdeleted"
-	MsgStatus        = "msgstatus"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -36,7 +36,6 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
 	LeaderLiveliness: handleLeaderLiveliness,
 	TopicDeleted:     handleTopicDeleted,
-	MsgStatus:        handleMsgStatus,
 }
 
 // Root handler for op.Broadcast()
@@ -176,6 +175,12 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 
 	// Delete for this subscription
 	m.Subscriptions[subId].MarkAsDeleted()
+	// Update the message status in Spanner
+	err = utils.UpdateMessageProcessedStatusForSub(app.Client, messageID, subId)
+	if err != nil {
+		glog.Errorf("[Delete] Error updating message status for sub %s: %v", subId, err)
+		return nil, err
+	}
 
 	glog.Infof("[Delete] Message=%v sucessfully mark as deleted for sub=%v", messageID, subId)
 	return nil, nil
@@ -206,24 +211,4 @@ func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	glog.Infof("[Delete] Successfully removed topic %s from memory", topicName)
 	return nil, nil
-}
-
-func handleMsgStatus(app *app.PubSub, msg []byte) ([]byte, error) {
-	msgId := string(msg)
-	m, err := storage.GetMessage(msgId)
-	if err != nil {
-		glog.Errorf("[Status] Error retrieving message %s: %v", msgId, err)
-		return nil, err
-	}
-	if m == nil {
-		glog.Errorf("[Status] Message %s not found", msgId)
-		return nil, fmt.Errorf("message not found")
-	}
-
-	b, err := json.Marshal(m)
-	if err != nil {
-		glog.Errorf("[Status] Error marshalling message status: %v", err)
-		return nil, err
-	}
-	return b, nil
 }

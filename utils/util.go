@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"cloud.google.com/go/spanner"
-	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
 	"github.com/golang/glog"
@@ -14,7 +13,10 @@ import (
 )
 
 func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
-	msg := handlers.SendInput{
+	msg := struct {
+		Type string
+		Msg  []byte
+	}{
 		Type: "checkleader",
 		Msg:  []byte("PING"),
 	}
@@ -49,6 +51,59 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 	}
 
 	glog.Infof("[Acknowledge]: Updated message processed status in Spanner for ID: %s, Processed: %v", id, true)
+	return nil
+}
+
+func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub string) error {
+	if id == "" {
+		glog.Info("[Acknowledge]: Received invalid message ID")
+		return nil
+	}
+
+	// Query first to get the current status
+	query := spanner.NewStatement("SELECT subStatus FROM Messages WHERE id = @id and processed = false")
+	query.Params["id"] = id
+	iter := spannerClient.Single().Query(context.Background(), query)
+	defer iter.Stop()
+	var subStatus map[string]bool
+	var temp string
+
+	for {
+		row, err := iter.Next()
+		if err != nil {
+			if spanner.ErrCode(err) == codes.NotFound {
+				glog.Errorf("[Acknowledge]: Message with ID %s not found in Spanner", id)
+				return nil
+			}
+			glog.Infof("[Acknowledge]: Error querying message status: %v", err)
+			return err
+		}
+
+		if err := row.Columns(&temp); err != nil {
+			glog.Errorf("[Acknowledge]: Error reading message status: %v", err)
+			return err
+		}
+
+		if err := json.Unmarshal([]byte(temp), &subStatus); err != nil {
+			glog.Errorf("[Acknowledge]: Error unmarshalling message status: %v", err)
+			return err
+		}
+		break
+	}
+
+	subStatus[sub] = true
+	b, _ := json.Marshal(subStatus)
+
+	// Update the message processed status in Spanner
+	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
+		spanner.Update("Messages", []string{"id", "processed", "subStatus", "updatedAt"}, []any{id, true, string(b), spanner.CommitTimestamp}),
+	})
+	if err != nil {
+		glog.Errorf("[Acknowledge]: Failed to update message sub status in Spanner: %v", err)
+		return err
+	}
+
+	glog.Infof("[Acknowledge]: Updated message sub status in spanner with msgId=%s, subStatus=%v", id, string(b))
 	return nil
 }
 

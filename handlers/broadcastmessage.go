@@ -20,11 +20,12 @@ type Raw struct {
 	Topic      string             `spanner:"topic"`
 	Payload    string             `spanner:"payload"`
 	Attributes spanner.NullString `spanner:"attributes"`
+	SubStatus  spanner.NullString `spanner:"subStatus"`
 }
 
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 	stmt := spanner.Statement{
-		SQL: `SELECT id, topic, payload, attributes
+		SQL: `SELECT id, topic, payload, attributes, subStatus
 			  FROM Messages where processed = false`,
 	}
 
@@ -58,74 +59,39 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			}
 		}
 
-		// m := storage.Message{
-		// 	Message: &pb.Message{
-		// 		Id:         msg.Id,
-		// 		Topic:      msg.Topic,
-		// 		Payload:    msg.Payload,
-		// 		Attributes: attr,
-		// 	},
-		// }
-
-		idb, _ := json.Marshal(msg.Id)
-		bin := BroadCastInput{
-			Type: MsgStatus,
-			Msg:  idb,
-		}
-
-		bData, err := json.Marshal(bin)
-		if err != nil {
-			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
-			continue
-		}
-
-		// Ask others the status of this message
-		numErrors := 0
-		var r storage.Message
-		responses := app.Op.Broadcast(ctx, bData)
-		for _, response := range responses {
-			if response.Error != nil {
-				numErrors++
-				glog.Errorf("[BroadcastMessage] Error reply from broadcasting message: %v", response.Error)
-			} else {
-				err := json.Unmarshal(response.Reply, &r)
-				if err != nil {
-					glog.Errorf("[BroadcastMessage] Error unmarshalling message status: %v", err)
-					continue
-				}
-			}
-		}
-
-		if numErrors == len(responses) {
-			glog.Errorf("[BroadcastMessage] No success replies received for message %s", msg.Id)
-			m := storage.Message{
-				Message: &pb.Message{
-					Id:         msg.Id,
-					Topic:      msg.Topic,
-					Payload:    msg.Payload,
-					Attributes: attr,
-				},
-			}
-
-			subs, err := storage.GetSubscribtionsForTopic(msg.Topic)
+		subStatus := make(map[string]bool)
+		if msg.SubStatus.Valid && msg.SubStatus.StringVal != "" {
+			err = json.Unmarshal([]byte(msg.SubStatus.StringVal), &subStatus)
 			if err != nil {
-				glog.Errorf("[BroadcastMessage] Topic %s not found in subscriptions", msg.Topic)
+				glog.Errorf("[BroadcastMessage] Error unmarshalling subStatus: %v", err)
 				continue
 			}
+		}
 
-			subss := make(map[string]*storage.Subs)
-			for _, sub := range subs {
-				subss[sub.Subscription.Name] = &storage.Subs{
-					SubscriptionID: sub.Subscription.Name,
-				}
+		subss := make(map[string]*storage.Subs)
+		for k, v := range subStatus {
+			var done int32
+			if v {
+				done = 1
 			}
+			subss[k] = &storage.Subs{
+				SubscriptionID: k,
+				Deleted:        done,
+			}
+		}
 
-			m.Subscriptions = subss
-			r = m
+		m := storage.Message{
+			Message: &pb.Message{
+				Id:         msg.Id,
+				Topic:      msg.Topic,
+				Payload:    msg.Payload,
+				Attributes: attr,
+			},
+			Subscriptions: subss,
 		}
 
 		// Marshal message info
-		data, err := json.Marshal(&r)
+		data, err := json.Marshal(&m)
 		if err != nil {
 			glog.Errorf("[BroadcastMessage] Error marshalling message: %v", err)
 			continue
@@ -145,7 +111,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		}
 
 		// Broadcast
-		responses = app.Op.Broadcast(ctx, broadcastData)
+		responses := app.Op.Broadcast(ctx, broadcastData)
 		for _, response := range responses {
 			if response.Error != nil {
 				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
@@ -158,7 +124,7 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 
 func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	stmt := spanner.Statement{
-		SQL: `SELECT id, topic, payload, attributes
+		SQL: `SELECT id, topic, payload, attributes, subStatus
 			  FROM Messages
 			  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
 		Params: map[string]interface{}{"lastQueryTime": t},
@@ -196,17 +162,24 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 
-		// Fill in the subscription details
-		subs, err := storage.GetSubscribtionsForTopic(msg.Topic)
-		if err != nil {
-			glog.Errorf("[BroadcastMessage] Topic %s not found in subscriptions", msg.Topic)
-			continue
+		subStatus := make(map[string]bool)
+		if msg.SubStatus.Valid && msg.SubStatus.StringVal != "" {
+			err = json.Unmarshal([]byte(msg.SubStatus.StringVal), &subStatus)
+			if err != nil {
+				glog.Errorf("[BroadcastMessage] Error unmarshalling subStatus: %v", err)
+				continue
+			}
 		}
 
 		subss := make(map[string]*storage.Subs)
-		for _, sub := range subs {
-			subss[sub.Subscription.Name] = &storage.Subs{
-				SubscriptionID: sub.Subscription.Name,
+		for k, v := range subStatus {
+			var done int32
+			if v {
+				done = 1
+			}
+			subss[k] = &storage.Subs{
+				SubscriptionID: k,
+				Deleted:        done,
 			}
 		}
 
