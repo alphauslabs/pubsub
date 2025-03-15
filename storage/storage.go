@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -87,7 +88,8 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 func (mm *MessageMap) Put(id string, msg *Message) {
 	mm.Mu.Lock()
 	defer mm.Mu.Unlock()
-
+	b, _ := json.Marshal(msg)
+	glog.Infof("[STORAGE] Put message %s", id, string(b))
 	_, exists := mm.Messages[id]
 	if !exists {
 		mm.Messages[id] = msg
