@@ -19,7 +19,7 @@ var (
 	method           = flag.String("method", "", "gRPC method to call")
 	host             = flag.String("host", "localhost", "gRPC server host")
 	input            = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
-	processingTime   = flag.Int("processingTime", 10, "Simulated message processing time in seconds")
+	processingTime   = flag.Float64("processingTime", 10, "Simulated message processing time in seconds")
 	extendVisibility = flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
 )
 
