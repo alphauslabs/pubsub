@@ -123,16 +123,16 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 }
 
 func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
+	*t = time.Now().UTC()
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload, attributes, subStatus
 			  FROM Messages
 			  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
-		Params: map[string]interface{}{"lastQueryTime": t},
+		Params: map[string]any{"lastQueryTime": t},
 	}
 
 	iter := app.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	*t = time.Now().UTC()
 
 	count := 0 // counter for unprocessed messages
 	for {
@@ -220,9 +220,6 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 			}
 		}
-	}
-	if count > 0 {
-		*t = time.Now().UTC() // update if msgs are present
 	}
 	if count == 0 {
 		glog.Info("[BroadcastMessage] No new unprocessed messages found.")
