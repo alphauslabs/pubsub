@@ -79,27 +79,27 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, err
 	}
 
-	m := storage.Message{
-		Message: &pb.Message{
-			Id:      msgId,
-			Topic:   in.Topic,
-			Payload: in.Payload,
-		},
-	}
-	b, _ = json.Marshal(&m)
+	// m := storage.Message{
+	// 	Message: &pb.Message{
+	// 		Id:      msgId,
+	// 		Topic:   in.Topic,
+	// 		Payload: in.Payload,
+	// 	},
+	// }
+	// b, _ = json.Marshal(&m)
 
-	// broadcast message
-	bcastin := handlers.BroadCastInput{
-		Type: handlers.Message,
-		Msg:  b,
-	}
-	bin, _ := json.Marshal(bcastin)
-	out := s.Op.Broadcast(ctx, bin)
-	for _, v := range out {
-		if v.Error != nil { // for us to know, then do necessary actions if frequent
-			glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
-		}
-	}
+	// // broadcast message
+	// bcastin := handlers.BroadCastInput{
+	// 	Type: handlers.Message,
+	// 	Msg:  b,
+	// }
+	// bin, _ := json.Marshal(bcastin)
+	// out := s.Op.Broadcast(ctx, bin)
+	// for _, v := range out {
+	// 	if v.Error != nil { // for us to know, then do necessary actions if frequent
+	// 		glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
+	// 	}
+	// }
 
 	return &pb.PublishResponse{MessageId: msgId}, nil
 }

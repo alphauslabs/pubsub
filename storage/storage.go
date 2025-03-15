@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -88,16 +87,13 @@ func (mm *MessageMap) Get(id string) (*Message, bool) {
 func (mm *MessageMap) Put(id string, msg *Message) {
 	mm.Mu.Lock()
 	defer mm.Mu.Unlock()
-	b, _ := json.Marshal(msg)
-	glog.Infof("[STORAGE] Put message %s", id, string(b))
+
 	_, exists := mm.Messages[id]
 	if !exists {
 		mm.Messages[id] = msg
 	} else {
-		glog.Infof("[STORAGE] Message %s already exists", id)
+		glog.Infof("[STORAGE] Message %s already exists, no op", id)
 	}
-	b, _ = json.Marshal(mm.Messages[id])
-	glog.Infof("[STORAGE] Put %v", string(b))
 }
 
 // GetAll returns a copy of all Messages
@@ -133,7 +129,6 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
-	fmt.Printf("msg.Subscriptions: %v\n", len(msg.Subscriptions))
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }
