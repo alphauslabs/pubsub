@@ -16,7 +16,7 @@ func MonitorActivity(ctx context.Context) {
 		var topicMsgCounts = make(map[string]int)
 		var topicSubDetails = make(map[string]int)
 
-		topicMsgMu.RLock()
+		TopicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
 			count := 0
 			for _, msg := range msgs.GetAll() {
@@ -26,7 +26,7 @@ func MonitorActivity(ctx context.Context) {
 			}
 			topicMsgCounts[topic] = count
 		}
-		topicMsgMu.RUnlock()
+		TopicMsgMu.RUnlock()
 
 		topicSubsMu.RLock()
 		for topic, subs := range topicSubs {

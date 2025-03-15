@@ -37,7 +37,7 @@ var (
 
 	// Map for topic Messages
 	TopicMessages = make(map[string]*MessageMap)
-	topicMsgMu    sync.RWMutex
+	TopicMsgMu    sync.RWMutex
 )
 
 type MessageMap struct {
@@ -134,8 +134,8 @@ func StoreMessage(msg *Message) error {
 	// 	}
 	// }
 
-	topicMsgMu.Lock()
-	defer topicMsgMu.Unlock()
+	TopicMsgMu.Lock()
+	defer TopicMsgMu.Unlock()
 
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
@@ -158,8 +158,8 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 }
 
 func GetMessage(id string) (*Message, error) {
-	topicMsgMu.RLock()
-	defer topicMsgMu.RUnlock()
+	TopicMsgMu.RLock()
+	defer TopicMsgMu.RUnlock()
 
 	// Since we don't know which topic this message belongs to,
 	// we need to search all topics
@@ -177,8 +177,8 @@ func GetMessage(id string) (*Message, error) {
 }
 
 func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
-	topicMsgMu.RLock()
-	defer topicMsgMu.RUnlock()
+	TopicMsgMu.RLock()
+	defer TopicMsgMu.RUnlock()
 
 	topicMsgs, exists := TopicMessages[topicName]
 	if !exists {
@@ -237,8 +237,8 @@ func getTopicKeys() []string {
 
 // RemoveTopic removes a topic from storage
 func RemoveTopic(topicName string) error {
-	topicMsgMu.Lock()
-	defer topicMsgMu.Unlock()
+	TopicMsgMu.Lock()
+	defer TopicMsgMu.Unlock()
 
 	if _, exists := TopicMessages[topicName]; !exists {
 		return ErrTopicNotFound
@@ -312,8 +312,8 @@ type MessageCount struct {
 func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]MessageCount, error) {
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
-	topicMsgMu.RLock()
-	defer topicMsgMu.RUnlock()
+	TopicMsgMu.RLock()
+	defer TopicMsgMu.RUnlock()
 
 	var results []MessageCount
 

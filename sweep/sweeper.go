@@ -14,6 +14,8 @@ import (
 func RunCheckForExpired(ctx context.Context) {
 	glog.Info("[sweep] check for expired messages started")
 	sweep := func() {
+		storage.TopicMsgMu.RLock()
+		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
 			v.Mu.Lock()
 			for _, v1 := range v.Messages {
@@ -62,6 +64,8 @@ func RunCheckForExpired(ctx context.Context) {
 func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 	glog.Info("[sweep] check for deleted messages started")
 	sweep := func() {
+		storage.TopicMsgMu.RLock()
+		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
 			for _, v1 := range v.Messages {
 				if v1.IsFinalDeleted() {
