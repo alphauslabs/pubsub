@@ -60,6 +60,11 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 		return nil
 	}
 
+	if sub == "" {
+		glog.Info("[Acknowledge]: Received invalid subscription ID")
+		return nil
+	}
+
 	// Query first to get the current status
 	query := spanner.NewStatement("SELECT subStatus FROM Messages WHERE id = @id and processed = false")
 	query.Params["id"] = id
@@ -96,7 +101,7 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"id", "processed", "subStatus", "updatedAt"}, []any{id, true, string(b), spanner.CommitTimestamp}),
+		spanner.Update("Messages", []string{"id", "subStatus", "updatedAt"}, []any{id, string(b), spanner.CommitTimestamp}),
 	})
 	if err != nil {
 		glog.Errorf("[Acknowledge]: Failed to update message sub status in Spanner: %v", err)
