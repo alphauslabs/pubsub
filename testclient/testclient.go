@@ -19,7 +19,7 @@ var (
 	method           = flag.String("method", "", "gRPC method to call")
 	host             = flag.String("host", "localhost", "gRPC server host")
 	input            = flag.String("input", "", "input data: fmt: {topicName}|{SubscriptionName}|{payload}|{newtopicname}|{extendVisibility} , Please leave empty if not needed, don't remove | separator")
-	processingTime   = flag.Float64("processingTime", 10, "Simulated message processing time in seconds")
+	processingTime   = flag.Int64("processingTime", 10, "Simulated message processing time in seconds")
 	extendVisibility = flag.Bool("extendVisibility", false, "Enable manual visibility extension for non-autoextend subscriptions")
 )
 
@@ -117,7 +117,7 @@ func main() {
 				startTime := time.Now()
 				ticker := time.NewTicker(5 * time.Second)
 				extendThreshold := 20 * time.Second // When to request extension
-				processingDone := time.After(time.Duration(*processingTime) * time.Second)
+				processingDone := time.After(time.Duration(*processingTime) * time.Millisecond)
 
 				stopExtension := make(chan bool, 1)
 
