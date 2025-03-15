@@ -133,7 +133,7 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
-
+	fmt.Printf("msg.Subscriptions: %v\n", len(msg.Subscriptions))
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }

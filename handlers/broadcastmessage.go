@@ -227,6 +227,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	if count == 0 {
 		glog.Info("[BroadcastMessage] No new unprocessed messages found.")
 	}
+	glog.Info("count=", count)
 }
 
 func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
