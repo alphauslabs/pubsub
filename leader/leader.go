@@ -14,7 +14,7 @@ import (
 
 var IsLeader int32
 
-func LeaderCallBack(d interface{}, msg []byte) {
+func LeaderCallBack(d any, msg []byte) {
 	o := d.(*app.PubSub)
 	s := strings.Split(string(msg), "")
 	v, err := strconv.Atoi(s[0])

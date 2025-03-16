@@ -131,7 +131,7 @@ func main() {
 			if r := recover(); r != nil {
 				logger.Log(logging.Entry{
 					Severity: logging.Critical, // Ensure it's an error-level log
-					Payload: map[string]interface{}{
+					Payload: map[string]any{
 						"message":    fmt.Sprintf("Recovered from panic: %v", r),
 						"stacktrace": string(debug.Stack()), // Ensure stack trace is included
 					},
