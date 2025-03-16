@@ -67,6 +67,7 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
+			v.Mu.Lock()
 			for _, v1 := range v.Messages {
 				if v1.IsFinalDeleted() {
 					// Update the processed status in Spanner
@@ -78,6 +79,7 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 					glog.Info("[sweep] deleted message:", v1.Id)
 				}
 			}
+			v.Mu.Unlock()
 		}
 	}
 
