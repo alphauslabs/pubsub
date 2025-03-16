@@ -84,15 +84,13 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 // Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	glog.Infof("[Subscribe] New subscription request received for Topic=%s, Subscription=%s", in.Topic, in.Subscription)
-
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
 		glog.Infof("[Subscribe] Error validating subscription: %v", err)
 		return err
 	}
 
-	glog.Infof("[Subscribe] Starting subscription stream for ID: %s", in.Subscription)
+	glog.Infof("[Subscribe] Starting subscription stream for topic=%v, sub=%v", in.Topic, in.Subscription)
 	for {
 		select {
 		// Check if client has disconnected
@@ -137,7 +135,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					}
 				}
 			} else {
-				// Wait for acknowledgement
+				// Wait for acknowledgement before doing another send.
 				ch := make(chan struct{})
 				go func() {
 					defer close(ch) // Just close the channel
@@ -200,7 +198,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 }
 
 func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisibilityTimeoutRequest) (*emptypb.Empty, error) {
-	glog.Infof("[Extend Visibility] Request to modify visibility for message: %s, Subscription: %s", in.Id, in.Subscription)
+	glog.Infof("[Extend Visibility] Request to extend visibility for message: %s, Subscription: %s", in.Id, in.Subscription)
 
 	msg, err := storage.GetMessage(in.Id)
 	if err != nil {
