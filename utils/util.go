@@ -38,7 +38,7 @@ func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 
 func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) error {
 	if id == "" {
-		glog.Info("[Acknowledge]: Received invalid message ID")
+		glog.Error("[Acknowledge]: Received invalid message ID")
 		return nil
 	}
 
@@ -47,7 +47,7 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 		spanner.Update("Messages", []string{"id", "processed", "updatedAt"}, []any{id, true, spanner.CommitTimestamp}),
 	})
 	if err != nil {
-		glog.Infof("[Acknowledge]: Failed to update message processed status in Spanner: %v", err)
+		glog.Errorf("[Acknowledge]: Failed to update message processed status in Spanner: %v", err)
 		return err
 	}
 
@@ -57,12 +57,12 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 
 func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub string) error {
 	if id == "" {
-		glog.Info("[Acknowledge]: Received invalid message ID")
+		glog.Error("[Acknowledge]: Received invalid message ID")
 		return nil
 	}
 
 	if sub == "" {
-		glog.Info("[Acknowledge]: Received invalid subscription ID")
+		glog.Error("[Acknowledge]: Received invalid subscription ID")
 		return nil
 	}
 
@@ -80,7 +80,7 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 			glog.Errorf("[Acknowledge]: Message with ID %s not found in Spanner", id)
 			return nil
 		}
-		glog.Infof("[Acknowledge]: Error querying message status: %v", err)
+		glog.Errorf("[Acknowledge]: Error querying message status: %v", err)
 		return err
 	}
 
@@ -114,7 +114,7 @@ func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 	subs, err := storage.GetSubscribtionsForTopic(topicID)
 
 	if err != nil {
-		glog.Infof("[Subscribe] Topic %s not found in storage", topicID)
+		glog.Errorf("[Subscribe] Topic %s not found in storage", topicID)
 		return status.Errorf(codes.NotFound, "Topic %s not found", topicID)
 	}
 

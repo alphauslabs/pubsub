@@ -53,7 +53,7 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	topicsub := FetchAllTopicSubscriptions(ctx, app.Client) // trigger topic-subscription fetch
 	msgData, err := json.Marshal(topicsub)
 	if err != nil {
-		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
+		glog.Errorf("STRUCT-Error marshalling topicSub: %v", err)
 		return nil, err
 	}
 

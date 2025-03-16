@@ -185,7 +185,6 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 		return nil, err
 	}
 
-	glog.Infof("[Delete] Message=%v sucessfully mark as deleted for sub=%v", messageID, subId)
 	return nil, nil
 }
 
@@ -202,7 +201,6 @@ func handleExtendMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	m.Subscriptions[subId].RenewAge()
 	m.Mu.Unlock()
 
-	glog.Infof("[Extend] Message=%v sucessfully extended timeout for sub=%v", messageID, subId)
 	return nil, nil
 }
 
@@ -220,7 +218,7 @@ func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
 	topicName := string(msg)
 	// Remove from memory
 	if err := storage.RemoveTopic(topicName); err != nil {
-		glog.Infof("[Delete] Error removing topic from memory: %v", err)
+		glog.Errorf("[Delete] Error removing topic from memory: %v", err)
 		return nil, fmt.Errorf("failed to remove topic from memory: %w", err)
 	}
 

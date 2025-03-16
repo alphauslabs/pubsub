@@ -75,7 +75,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	if err != nil {
-		glog.Infof("Error writing to Spanner: %v", err)
+		glog.Errorf("Error writing to Spanner: %v", err)
 		return nil, err
 	}
 
@@ -86,7 +86,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
-		glog.Infof("[Subscribe] Error validating subscription: %v", err)
+		glog.Errorf("[Subscribe] Error validating subscription: %v", err)
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 		default:
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
-				glog.Info(err.Error())
+				glog.Errorf(err.Error())
 				time.Sleep(time.Second) // Back off on error
 				continue
 			}
@@ -148,7 +148,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						case <-ticker.C:
 							m, err := storage.GetMessage(msg.Id)
 							if err != nil {
-								glog.Infof("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
+								glog.Errorf("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
 								return
 							}
 							switch {
@@ -189,7 +189,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
 	for _, v := range out {
 		if v.Error != nil {
-			glog.Infof("[Acknowledge] Error broadcasting acknowledgment: %v", v.Error)
+			glog.Errorf("[Acknowledge] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
 		}
 	}
 
@@ -198,16 +198,10 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 }
 
 func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisibilityTimeoutRequest) (*emptypb.Empty, error) {
-	glog.Infof("[Extend Visibility] Request to extend visibility for message: %s, Subscription: %s", in.Id, in.Subscription)
-
-	msg, err := storage.GetMessage(in.Id)
+	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		glog.Errorf("[Extend Visibility] Error retrieving message %s: %v", in.Id, err)
 		return nil, err
-	}
-	if msg == nil {
-		glog.Errorf("[Extend Visibility] Message %s not found", in.Id)
-		return nil, fmt.Errorf("message not found")
 	}
 
 	broadcastData := handlers.BroadCastInput{
@@ -218,11 +212,11 @@ func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisib
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
 	for _, v := range out {
 		if v.Error != nil {
-			glog.Infof("[Acknowledge] Error broadcasting acknowledgment: %v", v.Error)
+			glog.Errorf("[Extend Visibility] Error in extending timeout for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
 		}
 	}
 
-	glog.Infof("[Extend Visibility] Visibility Timeout for message %s has been extended.", in.Id)
+	glog.Infof("[Extend Visibility] Visibility Timeout for msg=%s, sub=%v has been extended.", in.Id, in.Subscription)
 	return &emptypb.Empty{}, nil
 }
 
@@ -388,7 +382,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		return nil, err
 	}
 
-	// Notify the leader or cluster if needed
+	// Notify the leader
 	s.notifyLeader(ctx)
 
 	return &pb.UpdateTopicResponse{
@@ -439,13 +433,12 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	})
 
 	if err != nil {
-		glog.Infof("Failed to delete topic and subscriptions: %v", err)
+		glog.Errorf("Failed to delete topic and subscriptions: %v", err)
 		return nil, err
 	}
 
 	if err := storage.RemoveTopic(req.Name); err != nil {
-		glog.Infof("Failed to remove topic from memory: %v", err)
-		// continuing so we can still broadcast the deletion
+		glog.Errorf("Failed to remove topic from memory: %v", err)
 	}
 
 	// todo: Might not be needed since we tell leader that a topic is delete.
@@ -688,12 +681,12 @@ func (s *server) notifyLeader(ctx context.Context) {
 
 	inputData, err := json.Marshal(input)
 	if err != nil {
-		glog.Infof("Error marshaling send input: %v", err)
+		glog.Errorf("Error marshaling send input: %v", err)
 		return
 	}
 
 	_, err = s.Op.Send(ctx, inputData)
 	if err != nil {
-		glog.Infof("Failed to send to leader: %v", err)
+		glog.Errorf("Failed to send to leader: %v", err)
 	}
 }

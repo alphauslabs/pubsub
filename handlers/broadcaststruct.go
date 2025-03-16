@@ -43,7 +43,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 		var subName string
 		var autoExtend bool
 		if err := row.Columns(&topic, &subName, &autoExtend); err != nil {
-			glog.Infof("STRUCT-Error reading row: %v", err)
+			glog.Errorf("STRUCT-Error reading row: %v", err)
 			continue
 		}
 
@@ -81,7 +81,7 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	// Marshal topic-subscription data into JSON
 	msgData, err := json.Marshal(latest)
 	if err != nil {
-		glog.Infof("STRUCT-Error marshalling topicSub: %v", err)
+		glog.Errorf("STRUCT-Error marshalling topicSub: %v", err)
 		return
 	}
 
@@ -93,7 +93,7 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	// Marshal BroadCastInput
 	broadcastData, err := json.Marshal(broadcastMsg)
 	if err != nil {
-		glog.Infof("STRUCT-Error marshalling BroadCastInput: %v", err)
+		glog.Errorf("STRUCT-Error marshalling BroadCastInput: %v", err)
 		return
 	}
 
@@ -101,7 +101,7 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	out := app.Op.Broadcast(ctx, broadcastData)
 	for _, r := range out {
 		if r.Error != nil {
-			glog.Infof("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+			glog.Errorf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 		} else {
 			lastBroadcasted = latest
 		}
@@ -141,19 +141,19 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	bin, _ := json.Marshal(broadcastMsg)
 	out, err := op.Send(ctx, bin)
 	if err != nil {
-		glog.Infof("STRUCT-Error sending request to leader: %v", err)
+		glog.Errorf("STRUCT-Error sending request to leader: %v", err)
 		return
 	}
 	var d map[string]map[string]*storage.Subscription
 	err = json.Unmarshal(out, &d)
 	if err != nil {
-		glog.Infof("STRUCT-Error unmarshalling topic-subscription data: %v", err)
+		glog.Errorf("STRUCT-Error unmarshalling topic-subscription data: %v", err)
 		return
 	}
 
 	err = storage.StoreTopicSubscriptions(d)
 	if err != nil {
-		glog.Infof("STRUCT-Error storing topic-subscription data: %v", err)
+		glog.Errorf("STRUCT-Error storing topic-subscription data: %v", err)
 	}
 
 	glog.Infof("[RequestStructFromLeader] topic-subscription data from leader: %v", string(out))

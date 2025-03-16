@@ -166,7 +166,7 @@ func main() {
 func run(ctx context.Context, serverconf *server) error {
 	lis, err := net.Listen("tcp", *port)
 	if err != nil {
-		glog.Infof("failed to listen: %v", err)
+		glog.Errorf("failed to listen: %v", err)
 		return err
 	}
 

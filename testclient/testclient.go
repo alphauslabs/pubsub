@@ -107,7 +107,7 @@ func main() {
 			}
 
 			if err != nil {
-				glog.Infof("Error: %v", err)
+				glog.Errorf("Error: %v", err)
 				break messageLoop
 			}
 

@@ -141,7 +141,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			break
 		}
 		if err != nil {
-			glog.Infof("[BroadcastMessage] Error reading message: %v", err)
+			glog.Errorf("[BroadcastMessage] Error reading message: %v", err)
 			continue
 		}
 		count++
