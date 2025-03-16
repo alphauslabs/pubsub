@@ -137,10 +137,11 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 		autoExtend = true
 	}
 
+	msg.Mu.Lock()
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
-
 	msg.Subscriptions[subId].Lock()
 	msg.Subscriptions[subId].RenewAge()
+	msg.Mu.Unlock()
 
 	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
@@ -158,8 +159,10 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 		return nil, fmt.Errorf("message not found")
 	}
 
+	m.Mu.Lock()
 	m.Subscriptions[subId].Unlock()
 	m.Subscriptions[subId].ClearAge()
+	m.Mu.Unlock()
 
 	return nil, nil
 }
@@ -187,7 +190,19 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 }
 
 func handleExtendMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
-	// todo:
+	m, err := storage.GetMessage(messageID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, fmt.Errorf("message not found")
+	}
+
+	m.Mu.Lock()
+	m.Subscriptions[subId].RenewAge()
+	m.Mu.Unlock()
+
+	glog.Infof("[Extend] Message=%v sucessfully extended timeout for sub=%v", messageID, subId)
 	return nil, nil
 }
 

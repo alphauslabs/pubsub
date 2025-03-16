@@ -79,28 +79,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, err
 	}
 
-	// m := storage.Message{
-	// 	Message: &pb.Message{
-	// 		Id:      msgId,
-	// 		Topic:   in.Topic,
-	// 		Payload: in.Payload,
-	// 	},
-	// }
-	// b, _ = json.Marshal(&m)
-
-	// // broadcast message
-	// bcastin := handlers.BroadCastInput{
-	// 	Type: handlers.Message,
-	// 	Msg:  b,
-	// }
-	// bin, _ := json.Marshal(bcastin)
-	// out := s.Op.Broadcast(ctx, bin)
-	// for _, v := range out {
-	// 	if v.Error != nil { // for us to know, then do necessary actions if frequent
-	// 		glog.Infof("[Publish] Error broadcasting message: %v", v.Error)
-	// 	}
-	// }
-
 	return &pb.PublishResponse{MessageId: msgId}, nil
 }
 
@@ -234,10 +212,17 @@ func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisib
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// Reset age
-	msg.Mu.Lock()
-	msg.Subscriptions[in.Subscription].RenewAge()
-	msg.Mu.Unlock()
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("extend:%s:%s", in.Id, in.Subscription)),
+	}
+	bin, _ := json.Marshal(broadcastData)
+	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
+	for _, v := range out {
+		if v.Error != nil {
+			glog.Infof("[Acknowledge] Error broadcasting acknowledgment: %v", v.Error)
+		}
+	}
 
 	glog.Infof("[Extend Visibility] Visibility Timeout for message %s has been extended.", in.Id)
 	return &emptypb.Empty{}, nil
