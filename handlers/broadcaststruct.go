@@ -164,7 +164,7 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Subscription) bool {
 	// First check if maps have the same number of topics
 	if len(current) != len(last) {
-		glog.V(3).Infof("STRUCT-Compare: Different number of topics: current=%d, last=%d",
+		glog.Infof("STRUCT-Compare: Different number of topics: current=%d, last=%d",
 			len(current), len(last))
 		return false
 	}
@@ -174,13 +174,13 @@ func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Sub
 		// Check if the topic exists in current map
 		currentSubs, exists := current[topic]
 		if !exists {
-			glog.V(3).Infof("STRUCT-Compare: Topic %s exists in last but not in current", topic)
+			glog.Infof("STRUCT-Compare: Topic %s exists in last but not in current", topic)
 			return false
 		}
 
 		// Check if subscriptions have the same length
 		if len(lastSubs) != len(currentSubs) {
-			glog.V(3).Infof("STRUCT-Compare: Different number of subscriptions for topic %s: current=%d, last=%d",
+			glog.Infof("STRUCT-Compare: Different number of subscriptions for topic %s: current=%d, last=%d",
 				topic, len(currentSubs), len(lastSubs))
 			return false
 		}
@@ -190,14 +190,14 @@ func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Sub
 			// Check if subscription exists in current map
 			currentSub, exists := currentSubs[subName]
 			if !exists {
-				glog.V(3).Infof("STRUCT-Compare: Subscription %s exists in last but not in current for topic %s",
+				glog.Infof("STRUCT-Compare: Subscription %s exists in last but not in current for topic %s",
 					subName, topic)
 				return false
 			}
 
 			// Compare subscription properties
 			if !areSubscriptionsEqual(currentSub, lastSub) {
-				glog.V(3).Infof("STRUCT-Compare: Properties differ for subscription %s in topic %s",
+				glog.Infof("STRUCT-Compare: Properties differ for subscription %s in topic %s",
 					subName, topic)
 				return false
 			}
@@ -206,7 +206,7 @@ func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Sub
 		// Check if current has any subscriptions not in last
 		for subName := range currentSubs {
 			if _, exists := lastSubs[subName]; !exists {
-				glog.V(3).Infof("STRUCT-Compare: Subscription %s exists in current but not in last for topic %s",
+				glog.Infof("STRUCT-Compare: Subscription %s exists in current but not in last for topic %s",
 					subName, topic)
 				return false
 			}
@@ -216,7 +216,7 @@ func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Sub
 	// Check if current has any topics not in last
 	for topic := range current {
 		if _, exists := last[topic]; !exists {
-			glog.V(3).Infof("STRUCT-Compare: Topic %s exists in current but not in last", topic)
+			glog.Infof("STRUCT-Compare: Topic %s exists in current but not in last", topic)
 			return false
 		}
 	}
@@ -238,21 +238,21 @@ func areSubscriptionsEqual(sub1, sub2 *storage.Subscription) bool {
 
 	// Compare Name property
 	if sub1.Subscription.Name != sub2.Subscription.Name {
-		glog.V(4).Infof("STRUCT-Compare: Subscription name changed from %s to %s",
+		glog.Infof("STRUCT-Compare: Subscription name changed from %s to %s",
 			sub2.Subscription.Name, sub1.Subscription.Name)
 		return false
 	}
 
 	// Compare Topic property
 	if sub1.Subscription.Topic != sub2.Subscription.Topic {
-		glog.V(4).Infof("STRUCT-Compare: Subscription topic changed from %s to %s for subscription %s",
+		glog.Infof("STRUCT-Compare: Subscription topic changed from %s to %s for subscription %s",
 			sub2.Subscription.Topic, sub1.Subscription.Topic, sub1.Subscription.Name)
 		return false
 	}
 
 	// Compare AutoExtend property
 	if sub1.Subscription.AutoExtend != sub2.Subscription.AutoExtend {
-		glog.V(4).Infof("STRUCT-Compare: AutoExtend setting changed from %v to %v for subscription %s",
+		glog.Infof("STRUCT-Compare: AutoExtend setting changed from %v to %v for subscription %s",
 			sub2.Subscription.AutoExtend, sub1.Subscription.AutoExtend, sub1.Subscription.Name)
 		return false
 	}
