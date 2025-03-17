@@ -159,43 +159,102 @@ func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	glog.Infof("[RequestStructFromLeader] topic-subscription data from leader: %v", string(out))
 }
 
-// Compare two topic-subscription maps for equality.
+// AreTopicSubscriptionsEqual compares two topic-subscription maps for equality,
+// including both structure and property values of subscriptions
 func AreTopicSubscriptionsEqual(current, last map[string]map[string]*storage.Subscription) bool {
-	// First check if maps have the same number of keys
+	// First check if maps have the same number of topics
 	if len(current) != len(last) {
+		glog.V(3).Infof("STRUCT-Compare: Different number of topics: current=%d, last=%d",
+			len(current), len(last))
 		return false
 	}
 
 	// Check each topic and its subscriptions
-	for topic, subs1 := range last {
-		// Check if the topic exists in map2
-		subs2, exists := current[topic]
+	for topic, lastSubs := range last {
+		// Check if the topic exists in current map
+		currentSubs, exists := current[topic]
 		if !exists {
+			glog.V(3).Infof("STRUCT-Compare: Topic %s exists in last but not in current", topic)
 			return false
 		}
 
-		// Check if slices have the same length
-		if len(subs1) != len(subs2) {
+		// Check if subscriptions have the same length
+		if len(lastSubs) != len(currentSubs) {
+			glog.V(3).Infof("STRUCT-Compare: Different number of subscriptions for topic %s: current=%d, last=%d",
+				topic, len(currentSubs), len(lastSubs))
 			return false
 		}
 
-		// Create frequency maps to compare elements regardless of order
-		freq1 := make(map[string]int)
-		for subName := range subs1 {
-			freq1[subName]++
-		}
+		// Check each subscription
+		for subName, lastSub := range lastSubs {
+			// Check if subscription exists in current map
+			currentSub, exists := currentSubs[subName]
+			if !exists {
+				glog.V(3).Infof("STRUCT-Compare: Subscription %s exists in last but not in current for topic %s",
+					subName, topic)
+				return false
+			}
 
-		freq2 := make(map[string]int)
-		for subName := range subs2 {
-			freq2[subName]++
-		}
-
-		// Compare frequency maps
-		for sub, count := range freq1 {
-			if freq2[sub] != count {
+			// Compare subscription properties
+			if !areSubscriptionsEqual(currentSub, lastSub) {
+				glog.V(3).Infof("STRUCT-Compare: Properties differ for subscription %s in topic %s",
+					subName, topic)
 				return false
 			}
 		}
+
+		// Check if current has any subscriptions not in last
+		for subName := range currentSubs {
+			if _, exists := lastSubs[subName]; !exists {
+				glog.V(3).Infof("STRUCT-Compare: Subscription %s exists in current but not in last for topic %s",
+					subName, topic)
+				return false
+			}
+		}
+	}
+
+	// Check if current has any topics not in last
+	for topic := range current {
+		if _, exists := last[topic]; !exists {
+			glog.V(3).Infof("STRUCT-Compare: Topic %s exists in current but not in last", topic)
+			return false
+		}
+	}
+
+	return true
+}
+
+// areSubscriptionsEqual compares two subscription objects for property equality
+func areSubscriptionsEqual(sub1, sub2 *storage.Subscription) bool {
+	// Check for nil values
+	if sub1 == nil || sub2 == nil {
+		return sub1 == sub2 // Both should be nil or both should be non-nil
+	}
+
+	// Check if both subscription objects have valid pb.Subscription fields
+	if sub1.Subscription == nil || sub2.Subscription == nil {
+		return sub1.Subscription == sub2.Subscription // Both should be nil or both should be non-nil
+	}
+
+	// Compare Name property
+	if sub1.Subscription.Name != sub2.Subscription.Name {
+		glog.V(4).Infof("STRUCT-Compare: Subscription name changed from %s to %s",
+			sub2.Subscription.Name, sub1.Subscription.Name)
+		return false
+	}
+
+	// Compare Topic property
+	if sub1.Subscription.Topic != sub2.Subscription.Topic {
+		glog.V(4).Infof("STRUCT-Compare: Subscription topic changed from %s to %s for subscription %s",
+			sub2.Subscription.Topic, sub1.Subscription.Topic, sub1.Subscription.Name)
+		return false
+	}
+
+	// Compare AutoExtend property
+	if sub1.Subscription.AutoExtend != sub2.Subscription.AutoExtend {
+		glog.V(4).Infof("STRUCT-Compare: AutoExtend setting changed from %v to %v for subscription %s",
+			sub2.Subscription.AutoExtend, sub1.Subscription.AutoExtend, sub1.Subscription.Name)
+		return false
 	}
 
 	return true
