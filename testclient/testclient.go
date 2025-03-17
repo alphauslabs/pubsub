@@ -188,9 +188,13 @@ func main() {
 			log.Fatalf("CreateSubscription failed: %v", err)
 		}
 		glog.Info("Subscription Created!\n")
-		// todo:
 	case "getsubscription":
-		// todo:
+		r, err := c.GetSubscription(context.Background(), &pb.GetSubscriptionRequest{Name: sub})
+		if err != nil {
+			log.Fatalf("GetSubscription failed: %v", err)
+		}
+		glog.Infof("Subscription Found!\nID: %s\nTopic: %s\n", r.Subscription.Name, r.Subscription.Topic)
+		glog.Infof("AutoExtend: %t\n", r.Subscription.AutoExtend)
 	case "updatesubscription":
 		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
 			Name: sub,
