@@ -180,7 +180,14 @@ func main() {
 			glog.Infof("[Acknowledge] Total Messages Acknowledged: %v", ackCount)
 		}
 	case "createsubscription":
-		panic("testing panic")
+		_, err := c.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
+			Topic: topic,
+			Name:  sub,
+		})
+		if err != nil {
+			log.Fatalf("CreateSubscription failed: %v", err)
+		}
+		glog.Info("Subscription Created!\n")
 		// todo:
 	case "getsubscription":
 		// todo:
