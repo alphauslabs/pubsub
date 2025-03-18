@@ -576,7 +576,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		[]string{"name", "autoextend", "updatedAt"},
 		[]any{
 			req.Name,
-			req.NoAutoExtend,
+			!req.NoAutoExtend,
 			spanner.CommitTimestamp,
 		},
 	)
@@ -591,7 +591,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		Subscription: &pb.Subscription{
 			Name:       req.Name,
 			Topic:      existingSub.Subscription.Topic,
-			AutoExtend: req.NoAutoExtend,
+			AutoExtend: !req.NoAutoExtend,
 		},
 	}, nil
 
