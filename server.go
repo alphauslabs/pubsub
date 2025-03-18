@@ -573,7 +573,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 	// Update the subscription
 	m := spanner.Update(
 		SubsTable,
-		[]string{"name", "visibility_timeout", "autoextend", "updatedAt"},
+		[]string{"name", "autoextend", "updatedAt"},
 		[]any{
 			req.Name,
 			req.NoAutoExtend,
