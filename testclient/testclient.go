@@ -197,8 +197,8 @@ func main() {
 		glog.Infof("AutoExtend: %t\n", r.Subscription.AutoExtend)
 	case "updatesubscription":
 		_, err := c.UpdateSubscription(context.Background(), &pb.UpdateSubscriptionRequest{
-			Name: sub,
-			//			Autoextend:              true,
+			Name:         sub,
+			NoAutoExtend: false,
 		})
 		if err != nil {
 			log.Fatalf("UpdateSubscription failed: %v", err)
