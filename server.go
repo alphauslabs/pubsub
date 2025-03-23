@@ -105,18 +105,17 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				continue
 			}
 
-			// Broadcast lock status to other nodes
-			broadcastData := handlers.BroadCastInput{
-				Type: handlers.MsgEvent,
-				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription)),
+			// Ask leader to lock this message for all nodes
+			broadcastData := handlers.SendInput{
+				Type: handlers.LockmsgEvent,
+				Msg:  []byte(fmt.Sprintf("%s:%s", msg.Id, in.Subscription)),
 			}
+
 			bin, _ := json.Marshal(broadcastData)
-			out := s.Op.Broadcast(stream.Context(), bin)
-			for _, o := range out {
-				if o.Error != nil {
-					glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
-					return nil
-				}
+			_, err = s.Op.Send(stream.Context(), bin)
+			if err != nil {
+				glog.Errorf("[Subscribe] Error broadcasting lock: %v", err)
+				return err
 			}
 
 			if err := stream.Send(msg.Message); err != nil {
