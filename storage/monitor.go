@@ -49,7 +49,7 @@ func MonitorActivity(ctx context.Context) {
 		}
 	}
 
-	do()
+	do() // trigger first do
 	for {
 		select {
 		case <-ctx.Done():
