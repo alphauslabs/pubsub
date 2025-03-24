@@ -115,7 +115,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			_, err = s.Op.Send(stream.Context(), bin)
 			if err != nil {
 				glog.Errorf("[Subscribe] Error broadcasting lock: %v", err)
-				return err
+				continue
 			}
 
 			if err := stream.Send(msg.Message); err != nil {
