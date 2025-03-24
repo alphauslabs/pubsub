@@ -34,16 +34,12 @@ func MonitorActivity(ctx context.Context) {
 		}
 		topicSubsMu.RUnlock()
 
-		if len(topicSubDetails) == 0 {
-			glog.Info("[Storage Monitor] No topic-subscription data available")
-		} else {
+		if len(topicSubDetails) != 0 {
 			b, _ := json.Marshal(topicSubDetails)
 			glog.Infof("[Storage Monitor] Topic-Subscription data: %s", string(b))
 		}
 
-		if len(topicMsgCounts) == 0 {
-			glog.Info("[Storage Monitor] No Messages available")
-		} else {
+		if len(topicMsgCounts) != 0 {
 			b, _ := json.Marshal(topicMsgCounts)
 			glog.Infof("[Storage Monitor] Topic-Messages data: %s", string(b))
 		}
