@@ -1,0 +1,59 @@
+name: main
+
+on:
+  push:
+    tags:
+      - "v*" 
+    branches:
+      - main  # Add main branch to trigger on commits
+
+jobs:
+  # check_commit_message:
+  #   runs-on: ubuntu-latest
+  #   if: "!startsWith(github.ref, 'refs/tags/')"
+  #   outputs:
+  #     should_build: ${{ steps.check_message.outputs.should_build }}
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 2  # Need to fetch the commit before the last one
+
+  #     - name: Check if commit message contains [ci]
+  #       id: check_message
+  #       run: |
+  #         commit_message=$(git log -1 --pretty=format:"%s")
+  #         echo "Commit message: $commit_message"
+  #         if [[ "$commit_message" == *"[ci]"* ]]; then
+  #           echo "should_build=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "should_build=false" >> $GITHUB_OUTPUT
+  #         fi
+
+  build_tag:
+    name: Build and Create Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.1" 
+
+      - name: Build Linux binary
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o pubsub
+          chmod +x pubsub
+
+      - name: Upload Release Binary
+        uses: softprops/action-gh-release@v1
+        with:
+          files: pubsub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  
