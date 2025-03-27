@@ -101,7 +101,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
 				glog.Errorf(err.Error())
-				time.Sleep(time.Second) // Back off on error
+				time.Sleep(2 * time.Second) // Back off on error
 				continue
 			}
 
