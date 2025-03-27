@@ -118,6 +118,14 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 		return nil, fmt.Errorf("message not found")
 	}
 
+	msg.Mu.Lock()
+	locked := msg.Subscriptions[subId].IsLocked()
+	msg.Mu.Unlock()
+	if locked {
+		glog.Errorf("[Lock] Message=%s already locked for sub=%s", messageID, subId)
+		return nil, fmt.Errorf("message already locked")
+	}
+
 	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
 	if err != nil {

@@ -85,7 +85,6 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 	}
 
 	messageId := mms[0]
-	// topic := mms[1]
 	sub := mms[1]
 
 	// retrieve the message from storage
@@ -124,31 +123,6 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 			return nil, o.Error
 		}
 	}
-
-	// // Retrieve subscriptions for the topic
-	// subscriptionsSlice, err := storage.GetSubscribtionsForTopic(topic)
-	// if err != nil {
-	// 	glog.Errorf("[Lock] Failed to retrieve subscriptions for topic %s: %v", topic, err)
-	// 	return nil, err
-	// }
-
-	// // Convert slice to map for quick lookup
-	// subscriptionsMap := make(map[string]*storage.Subscription)
-	// for _, sub := range subscriptionsSlice {
-	// 	subscriptionsMap[sub.Subscription.Name] = sub
-	// }
-
-	// // Check if this subscription enabled autoextend
-	// autoExtend := false
-	// if sub, exists := subscriptionsMap[sub]; exists && sub.Subscription.AutoExtend {
-	// 	autoExtend = true
-	// }
-
-	// message.Mu.Lock()
-	// message.Subscriptions[sub].SetAutoExtend(autoExtend)
-	// message.Subscriptions[sub].Lock()
-	// message.Subscriptions[sub].RenewAge()
-	// message.Mu.Unlock()
 
 	glog.Infof("[Lock-leader] Message=%s locked successfully for sub=%s", messageId, sub)
 	return nil, nil
