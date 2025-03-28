@@ -107,7 +107,7 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 
 // Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
-	// retrieve the message from storage
+	// Retrieve the message from storage
 	msg, err := storage.GetMessage(messageID)
 	if err != nil {
 		glog.Errorf("[Lock] Error retrieving message %s: %v", messageID, err)
@@ -118,15 +118,7 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 		return nil, fmt.Errorf("message not found")
 	}
 
-	msg.Mu.Lock()
-	locked := msg.Subscriptions[subId].IsLocked()
-	msg.Mu.Unlock()
-	if locked {
-		glog.Errorf("[Lock] Message=%s already locked for sub=%s", messageID, subId)
-		return nil, fmt.Errorf("message already locked")
-	}
-
-	// Retrieve subscriptions for the topic
+	// Retrieve subscriptions for the topic BEFORE acquiring any locks
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
 	if err != nil {
 		glog.Errorf("[Lock] Failed to retrieve subscriptions for topic %s: %v", msg.Topic, err)
@@ -145,27 +137,38 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 		autoExtend = true
 	}
 
+	// Now acquire the lock once and perform all operations
 	msg.Mu.Lock()
 	defer msg.Mu.Unlock()
-	if msg.Subscriptions[subId].IsDeleted() {
+
+	// Check if the subscription exists
+	subEntry, exists := msg.Subscriptions[subId]
+	if !exists {
+		glog.Errorf("[Lock] Subscription %s not found for message %s", subId, messageID)
+		return nil, fmt.Errorf("subscription not found")
+	}
+
+	// Check state
+	if subEntry.IsDeleted() {
 		glog.Infof("[Lock] Message %s already deleted for sub=%s", messageID, subId)
 		return nil, fmt.Errorf("message already deleted")
 	}
 
-	if msg.Subscriptions[subId].IsLocked() {
+	if subEntry.IsLocked() {
 		glog.Infof("[Lock] Message %s already locked for sub=%s", messageID, subId)
 		return nil, fmt.Errorf("message already locked")
 	}
-	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
-	msg.Subscriptions[subId].Lock()
-	msg.Subscriptions[subId].RenewAge()
 
-	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
+	// Update state under the single lock
+	subEntry.SetAutoExtend(autoExtend)
+	subEntry.Lock()
+	subEntry.RenewAge()
+
 	return nil, nil
 }
 
 func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
-	// retrieve the message from storage
+	// Retrieve the message from storage
 	m, err := storage.GetMessage(messageID)
 	if err != nil {
 		glog.Errorf("[Unlock] Error retrieving message %s: %v", messageID, err)
@@ -177,9 +180,17 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 	}
 
 	m.Mu.Lock()
-	m.Subscriptions[subId].Unlock()
-	m.Subscriptions[subId].ClearAge()
-	m.Mu.Unlock()
+	defer m.Mu.Unlock()
+
+	// Check if the subscription exists
+	subEntry, exists := m.Subscriptions[subId]
+	if !exists {
+		glog.Errorf("[Unlock] Subscription %s not found for message %s", subId, messageID)
+		return nil, fmt.Errorf("subscription not found")
+	}
+
+	subEntry.Unlock()
+	subEntry.ClearAge()
 
 	return nil, nil
 }
@@ -193,8 +204,21 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 		return nil, fmt.Errorf("message not found")
 	}
 
-	// Delete for this subscription
-	m.Subscriptions[subId].MarkAsDeleted()
+	// Acquire the lock before modifying the subscription
+	m.Mu.Lock()
+
+	// Check if the subscription exists
+	subEntry, exists := m.Subscriptions[subId]
+	if !exists {
+		m.Mu.Unlock() // Don't forget to unlock before returning
+		glog.Errorf("[Delete] Subscription %s not found for message %s", subId, messageID)
+		return nil, fmt.Errorf("subscription not found")
+	}
+
+	// Mark as deleted while holding the lock
+	subEntry.MarkAsDeleted()
+	m.Mu.Unlock()
+
 	// Update the message status in Spanner
 	err = utils.UpdateMessageProcessedStatusForSub(app.Client, messageID, subId)
 	if err != nil {

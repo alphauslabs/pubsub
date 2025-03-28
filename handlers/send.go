@@ -87,7 +87,7 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 	messageId := mms[0]
 	sub := mms[1]
 
-	// retrieve the message from storage
+	// Retrieve the message from storage
 	message, err := storage.GetMessage(messageId)
 	if err != nil {
 		glog.Errorf("[Lock] Error retrieving message %s: %v", messageId, err)
@@ -98,16 +98,30 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("message not found")
 	}
 
+	// Lock with defer to ensure unlock even if there's a panic
 	message.Mu.Lock()
-	if message.Subscriptions[sub].IsDeleted() {
+	defer message.Mu.Unlock()
+
+	// Check if the subscription exists
+	subEntry, exists := message.Subscriptions[sub]
+	if !exists || message.Subscriptions == nil {
+		glog.Errorf("[Lock] Subscription %s not found for message %s", sub, messageId)
+		return nil, fmt.Errorf("subscription not found")
+	}
+
+	// Check subscription state
+	if subEntry.IsDeleted() {
 		glog.Errorf("[Lock] Message=%s already done/deleted for sub=%s", messageId, sub)
 		return nil, fmt.Errorf("message already done/deleted")
 	}
 
-	if message.Subscriptions[sub].IsLocked() {
+	if subEntry.IsLocked() {
 		glog.Errorf("[Lock] Message=%s already locked for sub=%s", messageId, sub)
 		return nil, fmt.Errorf("message already locked")
 	}
+
+	// Unlock before broadcasting to avoid potential deadlocks
+	// where multiple nodes try to acquire locks in different orders
 	message.Mu.Unlock()
 
 	// Ask all nodes to lock this message
@@ -116,10 +130,11 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 		Msg:  []byte(fmt.Sprintf("lock:%s:%s", messageId, sub)),
 	}
 	bin, _ := json.Marshal(broadcastData)
+
 	out := app.Op.Broadcast(context.Background(), bin)
 	for _, o := range out {
 		if o.Error != nil {
-			glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+			glog.Errorf("[Lock-leader] Error broadcasting lock: %v", o.Error)
 			return nil, o.Error
 		}
 	}
