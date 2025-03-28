@@ -187,11 +187,15 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
 	}
+
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
+	glog.Infof("Done broadcasting waiting for response for message:%v, sub:%v", in.Id, in.Subscription)
 	for _, v := range out {
 		if v.Error != nil {
 			glog.Errorf("[Acknowledge] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
+		} else {
+			glog.Infof("[Acknowledge] Successfully broadcast acknowledgment for msg=%v, sub=%v from node:%v", in.Id, in.Subscription, v.Id)
 		}
 	}
 
