@@ -179,6 +179,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	glog.Infof("Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
+		glog.Error("[Acknowledge] Error retrieving message %s: %v", in.Id, err)
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
 	}
 
