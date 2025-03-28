@@ -149,6 +149,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								glog.Errorf("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
 								return
 							}
+							m.Subscriptions[in.Subscription].Lock()
 							switch {
 							case m.IsFinalDeleted():
 								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
@@ -160,6 +161,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
+							m.Subscriptions[in.Subscription].Unlock()
 						case <-stream.Context().Done():
 							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
 							return
