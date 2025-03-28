@@ -185,6 +185,7 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 }
 
 func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
+	glog.Infof("Handle delete message event called for msg:%v, sub:%v", messageID, subId)
 	m, err := storage.GetMessage(messageID)
 	if err != nil {
 		return nil, err
