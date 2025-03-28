@@ -202,6 +202,7 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 		return nil, err
 	}
 
+	glog.Infof("Message:%v set as deleted for sub:%v", messageID, subId)
 	return nil, nil
 }
 

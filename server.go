@@ -176,11 +176,13 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	// Check if message exists in storage
+	glog.Infof("Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
 	_, err := storage.GetMessage(in.Id)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "[Acknowledge] Message may have been removed after acknowledgment and cannot be found in storage. ")
 	}
 
+	glog.Infof("About to broadcast deletion for message:%v, sub:%v", in.Id, in.Subscription)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
