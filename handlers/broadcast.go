@@ -146,10 +146,19 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	}
 
 	msg.Mu.Lock()
+	defer msg.Mu.Unlock()
+	if msg.Subscriptions[subId].IsDeleted() {
+		glog.Infof("[Lock] Message %s already deleted for sub=%s", messageID, subId)
+		return nil, fmt.Errorf("message already deleted")
+	}
+
+	if msg.Subscriptions[subId].IsLocked() {
+		glog.Infof("[Lock] Message %s already locked for sub=%s", messageID, subId)
+		return nil, fmt.Errorf("message already locked")
+	}
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
 	msg.Subscriptions[subId].Lock()
 	msg.Subscriptions[subId].RenewAge()
-	msg.Mu.Unlock()
 
 	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
