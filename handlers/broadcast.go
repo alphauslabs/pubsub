@@ -113,10 +113,6 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 		glog.Errorf("[Lock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
 	}
-	if msg == nil {
-		glog.Errorf("[Lock] Message %s not found", messageID)
-		return nil, fmt.Errorf("message not found")
-	}
 
 	msg.Mu.Lock()
 	locked := msg.Subscriptions[subId].IsLocked()
@@ -171,10 +167,6 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 		glog.Errorf("[Unlock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
 	}
-	if m == nil {
-		glog.Errorf("[Unlock] Message %s not found", messageID)
-		return nil, fmt.Errorf("message not found")
-	}
 
 	m.Mu.Lock()
 	m.Subscriptions[subId].Unlock()
@@ -190,10 +182,6 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if m == nil {
-		return nil, fmt.Errorf("message not found")
-	}
-
 	// Delete for this subscription
 	m.Subscriptions[subId].MarkAsDeleted()
 	// Update the message status in Spanner
@@ -212,10 +200,6 @@ func handleExtendMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if m == nil {
-		return nil, fmt.Errorf("message not found")
-	}
-
 	m.Mu.Lock()
 	m.Subscriptions[subId].RenewAge()
 	m.Mu.Unlock()

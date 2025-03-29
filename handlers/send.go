@@ -93,10 +93,6 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 		glog.Errorf("[Lock] Error retrieving message %s: %v", messageId, err)
 		return nil, err
 	}
-	if message == nil {
-		glog.Errorf("[Lock] Message %s not found", messageId)
-		return nil, fmt.Errorf("message not found")
-	}
 
 	message.Mu.Lock()
 	if message.Subscriptions[sub].IsDeleted() {

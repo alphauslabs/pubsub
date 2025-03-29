@@ -195,12 +195,12 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 func GetSubscribtionsForTopic(topicName string) ([]*Subscription, error) {
 	topicSubsMu.RLock()
 	defer topicSubsMu.RUnlock()
-
 	subs, exists := topicSubs[topicName]
 	if !exists {
 		glog.Errorf("[STORAGE] topic %s not found in storage, current in mem=%v", topicName, getTopicKeys())
 		return nil, ErrTopicNotFound
 	}
+
 	// Convert map to slice
 	subList := make([]*Subscription, 0, len(subs))
 	for _, sub := range subs {
