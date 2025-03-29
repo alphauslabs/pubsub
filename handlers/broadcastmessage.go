@@ -68,13 +68,13 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			}
 		}
 
-		subss := make(map[string]*storage.Subs)
+		subss := make(map[string]*storage.MsgSub)
 		for k, v := range subStatus {
 			var done int32
 			if v {
 				done = 1
 			}
-			subss[k] = &storage.Subs{
+			subss[k] = &storage.MsgSub{
 				SubscriptionID: k,
 				Deleted:        done,
 			}
@@ -171,13 +171,13 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 
-		subss := make(map[string]*storage.Subs)
+		subss := make(map[string]*storage.MsgSub)
 		for k, v := range subStatus {
 			var done int32
 			if v {
 				done = 1
 			}
-			subss[k] = &storage.Subs{
+			subss[k] = &storage.MsgSub{
 				SubscriptionID: k,
 				Deleted:        done,
 			}

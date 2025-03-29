@@ -24,7 +24,7 @@ var (
 // 2. topicMsgMu
 // 3. MessageMap.Mu
 // 4. Message.Mu
-// 5. Subs.Mu
+// 5. MsgSub.Mu
 type Subscription struct {
 	*pb.Subscription
 }
@@ -46,7 +46,7 @@ type MessageMap struct {
 type Message struct {
 	*pb.Message
 	Mu            sync.Mutex
-	Subscriptions map[string]*Subs
+	Subscriptions map[string]*MsgSub
 	FinalDeleted  int32
 }
 
@@ -58,7 +58,7 @@ func (m *Message) IsFinalDeleted() bool {
 	return atomic.LoadInt32(&m.FinalDeleted) == 1
 }
 
-type Subs struct {
+type MsgSub struct {
 	SubscriptionID string
 	Age            time.Time
 	Deleted        int32
@@ -237,33 +237,33 @@ func RemoveTopic(topicName string) error {
 	return nil
 }
 
-func (s *Subs) RenewAge() {
+func (s *MsgSub) RenewAge() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	s.Age = time.Now().UTC()
 }
 
-func (s *Subs) Lock() {
+func (s *MsgSub) Lock() {
 	atomic.StoreInt32(&s.Locked, 1)
 }
 
-func (s *Subs) Unlock() {
+func (s *MsgSub) Unlock() {
 	atomic.StoreInt32(&s.Locked, 0)
 }
 
-func (s *Subs) IsLocked() bool {
+func (s *MsgSub) IsLocked() bool {
 	return atomic.LoadInt32(&s.Locked) == 1
 }
 
-func (s *Subs) IsDeleted() bool {
+func (s *MsgSub) IsDeleted() bool {
 	return atomic.LoadInt32(&s.Deleted) == 1
 }
 
-func (s *Subs) MarkAsDeleted() {
+func (s *MsgSub) MarkAsDeleted() {
 	atomic.StoreInt32(&s.Deleted, 1)
 }
 
-func (s *Subs) SetAutoExtend(autoExtend bool) {
+func (s *MsgSub) SetAutoExtend(autoExtend bool) {
 	if autoExtend {
 		atomic.StoreInt32(&s.AutoExtend, 1)
 	} else {
@@ -271,7 +271,7 @@ func (s *Subs) SetAutoExtend(autoExtend bool) {
 	}
 }
 
-func (s *Subs) ClearAge() {
+func (s *MsgSub) ClearAge() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	s.Age = time.Time{}
