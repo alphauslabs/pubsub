@@ -315,7 +315,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	var updatedTopic *pb.Topic
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		// 1. Get the existing topic with its createdAt timestamp
 		stmtGet := spanner.Statement{
 			SQL: `SELECT createdAt FROM Topics WHERE name = @name`,
 			Params: map[string]any{
@@ -338,7 +337,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 			return status.Errorf(codes.Internal, "Failed to parse topic data: %v", err)
 		}
 
-		// 2. Delete the old topic
 		stmtDelete := spanner.Statement{
 			SQL: `DELETE FROM Topics WHERE name = @name`,
 			Params: map[string]any{
@@ -353,7 +351,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 			return status.Errorf(codes.NotFound, "Topic %q not found", req.Name)
 		}
 
-		// 3. Insert the new topic with the original createdAt
 		mutation := spanner.Insert(
 			"Topics",
 			[]string{"name", "createdAt", "updatedAt"},
@@ -363,7 +360,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 			return status.Errorf(codes.Internal, "Failed to create new topic: %v", err)
 		}
 
-		// 4. Update all subscriptions referencing the old topic name
 		stmtSubs := spanner.Statement{
 			SQL: `UPDATE Subscriptions
                   SET topic = @newName,
@@ -379,7 +375,6 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 			return status.Errorf(codes.Internal, "Failed to update subscriptions: %v", err)
 		}
 
-		// 5. Update messages referencing the old topic name
 		stmtMsgs := spanner.Statement{
 			SQL: `UPDATE Messages
                   SET topic = @newName,
@@ -397,8 +392,8 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 
 		updatedTopic = &pb.Topic{
 			Name:      req.NewName,
-			CreatedAt: createdAt.Time.Format(time.RFC3339),          //not yet in proto return
-			UpdatedAt: spanner.CommitTimestamp.Format(time.RFC3339), //not yet in proto return
+			CreatedAt: createdAt.Time.Format(time.RFC3339),
+			UpdatedAt: spanner.CommitTimestamp.Format(time.RFC3339),
 		}
 
 		return nil
