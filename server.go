@@ -136,8 +136,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				// Wait for acknowledgement before doing another send.
 				ch := make(chan struct{})
 				go func() {
-					defer close(ch) // Just close the channel
-
+					defer close(ch)
 					ticker := time.NewTicker(100 * time.Millisecond)
 					defer ticker.Stop()
 
@@ -149,19 +148,44 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								glog.Errorf("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
 								return
 							}
-							m.Subscriptions[in.Subscription].Lock()
+
+							m.Mu.Lock()
+
+							// Check for nil map or missing subscription
+							if m.Subscriptions == nil {
+								glog.Warningf("[Subscribe] Message %s has nil Subscriptions map", m.Id)
+								m.Mu.Unlock()
+								return
+							}
+
+							subInfo, exists := m.Subscriptions[in.Subscription]
+							if !exists {
+								glog.Warningf("[Subscribe] Subscription %s not found in message %s", in.Subscription, m.Id)
+								m.Mu.Unlock()
+								return
+							}
+
+							// Check state under the lock
+							isFinalDeleted := m.IsFinalDeleted()
+							isDeleted := subInfo.IsDeleted()
+							isLocked := subInfo.IsLocked()
+
+							// Release lock before possibly returning
+							m.Mu.Unlock()
+
+							// Now check states and return if needed
 							switch {
-							case m.IsFinalDeleted():
+							case isFinalDeleted:
 								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
 								return
-							case m.Subscriptions[in.Subscription].IsDeleted():
+							case isDeleted:
 								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
 								return
-							case !m.Subscriptions[in.Subscription].IsLocked():
+							case !isLocked:
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-							m.Subscriptions[in.Subscription].Unlock()
+
 						case <-stream.Context().Done():
 							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
 							return
