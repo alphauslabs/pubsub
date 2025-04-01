@@ -150,7 +150,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 							}
 
 							m.Mu.Lock()
-
 							// Check for nil map or missing subscription
 							if m.Subscriptions == nil {
 								glog.Warningf("[Subscribe] Message %s has nil Subscriptions map", m.Id)
@@ -165,15 +164,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								return
 							}
 
-							// Check state under the lock
 							isFinalDeleted := m.IsFinalDeleted()
 							isDeleted := subInfo.IsDeleted()
 							isLocked := subInfo.IsLocked()
-
-							// Release lock before possibly returning
 							m.Mu.Unlock()
 
-							// Now check states and return if needed
 							switch {
 							case isFinalDeleted:
 								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
@@ -185,7 +180,6 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-
 						case <-stream.Context().Done():
 							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
 							return
