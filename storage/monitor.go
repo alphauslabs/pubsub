@@ -20,22 +20,26 @@ func MonitorActivity(ctx context.Context) {
 
 		TopicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
-			count := 0
-			count1 := 0
 			for _, msg := range msgs.GetAll() {
 				if msg.IsFinalDeleted() {
 					continue
 				}
 				for _, sub := range msg.Subscriptions {
+					k := fmt.Sprintf("%s_%s", topic, sub.SubscriptionID)
 					if sub.IsDeleted() {
-						count++
+						if count1, ok := topicsubMsgCountsdeleted[k]; ok {
+							topicsubMsgCountsdeleted[k] = count1 + 1
+						} else {
+							topicsubMsgCountsdeleted[k] = 1
+						}
 					}
 					if sub.IsLocked() {
-						count1++
+						if count2, ok := topicsubMsgCountslocked[k]; ok {
+							topicsubMsgCountslocked[k] = count2 + 1
+						} else {
+							topicsubMsgCountslocked[k] = 1
+						}
 					}
-					k := fmt.Sprintf("%s_%s", topic, sub.SubscriptionID)
-					topicsubMsgCountsdeleted[k] = count
-					topicsubMsgCountslocked[k] = count1
 				}
 			}
 
@@ -57,7 +61,7 @@ func MonitorActivity(ctx context.Context) {
 			b, _ := json.Marshal(topicsubMsgCountsdeleted)
 			glog.Infof("[Storage Monitor] Topic-sub-Messages data (deleted): %s", string(b))
 			b, _ = json.Marshal(topicsubMsgCountslocked)
-			glog.Infof("[Storage Monitor] Topic_sub-Messages data (deleted): %s", string(b))
+			glog.Infof("[Storage Monitor] Topic_sub-Messages data (locked): %s", string(b))
 		}
 	}
 
