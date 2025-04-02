@@ -105,7 +105,6 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 	return handler(appInstance, msgId, subId)
 }
 
-// Message event handlers
 func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
 	// retrieve the message from storage
 	msg, err := storage.GetMessage(messageID)

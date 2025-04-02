@@ -79,6 +79,15 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		return nil, err
 	}
 
+	go func() {
+		if in.Attributes != nil {
+			if _, ok := in.Attributes["triggerpanic"]; ok {
+				time.Sleep(500 * time.Millisecond)
+				panic("simulated panic")
+			}
+		}
+	}()
+
 	return &pb.PublishResponse{MessageId: msgId}, nil
 }
 

@@ -29,6 +29,9 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubSe
 			fmt.Sprintf("key%v", id): fmt.Sprintf("value%v", id),
 		},
 	}
+	if id%3 == 0 {
+		msg.Attributes["triggerpanic"] = "yes"
+	}
 
 	ctx := context.Background()
 	resp, err := client.Publish(ctx, msg)
