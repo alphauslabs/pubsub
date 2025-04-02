@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	numMessages = flag.Int("numMessages", 10000, "Number of messages to publish")
-	host        = flag.String("host", "localhost", "gRPC server host")
-	useMock     = flag.Bool("mock", false, "Use localhost mock gRPC servers")
-	topics      = flag.String("topics", "", "Topics to publish messages to, fmt: {topic1},{topic2}")
+	numMessages  = flag.Int("numMessages", 10000, "Number of messages to publish")
+	host         = flag.String("host", "localhost", "gRPC server host")
+	triggerPanic = flag.Bool("triggerpanic", false, "Trigger panic in the server")
+	topics       = flag.String("topics", "", "Topics to publish messages to, fmt: {topic1},{topic2}")
 )
 
 func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubServiceClient) {
@@ -29,8 +29,10 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubSe
 			fmt.Sprintf("key%v", id): fmt.Sprintf("value%v", id),
 		},
 	}
-	if id%3 == 0 {
-		msg.Attributes["triggerpanic"] = "yes"
+	if *triggerPanic {
+		if id%3 == 0 {
+			msg.Attributes["triggerpanic"] = "yes"
+		}
 	}
 
 	ctx := context.Background()
