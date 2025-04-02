@@ -30,7 +30,6 @@ func RunCheckForExpired(ctx context.Context) {
 						if t.Age.IsZero() {
 							continue
 						}
-						t.Mu.Lock()
 						switch {
 						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
 							t.Unlock()
@@ -38,7 +37,6 @@ func RunCheckForExpired(ctx context.Context) {
 						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:
 							t.RenewAge()
 						}
-						t.Mu.Unlock()
 					}
 					if count == len(v1.Subscriptions) {
 						v1.MarkAsFinalDeleted()
