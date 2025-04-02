@@ -38,7 +38,7 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubSe
 	ctx := context.Background()
 	resp, err := client.Publish(ctx, msg)
 	if err != nil {
-		glog.Infof("[ERROR] Message %d to %s failed: %v", id, topic, err)
+		glog.Errorf("[ERROR] Message %d to %s failed: %v", id, topic, err)
 		return
 	}
 
@@ -54,7 +54,9 @@ func connectToGRPC(endpoint string) (pb.PubSubServiceClient, error) {
 }
 
 func main() {
+	flag.Set("logtostderr", "true")
 	flag.Parse()
+
 	client, err := connectToGRPC(fmt.Sprintf("%v:50051", *host))
 	if err != nil {
 		glog.Errorf("Failed to connect to gRPC server: %v", err)
