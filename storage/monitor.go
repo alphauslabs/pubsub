@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -13,18 +14,31 @@ func MonitorActivity(ctx context.Context) {
 	defer ticker.Stop()
 
 	do := func() {
-		var topicMsgCounts = make(map[string]int)
+		var topicsubMsgCountsdeleted = make(map[string]int)
+		var topicsubMsgCountslocked = make(map[string]int)
 		var topicSubDetails = make(map[string]int)
 
 		TopicMsgMu.RLock()
 		for topic, msgs := range TopicMessages {
 			count := 0
+			count1 := 0
 			for _, msg := range msgs.GetAll() {
-				if !msg.IsFinalDeleted() {
-					count++
+				if msg.IsFinalDeleted() {
+					continue
+				}
+				for _, sub := range msg.Subscriptions {
+					if sub.IsDeleted() {
+						count++
+					}
+					if sub.IsLocked() {
+						count1++
+					}
+					k := fmt.Sprintf("%s_%s", topic, sub.SubscriptionID)
+					topicsubMsgCountsdeleted[k] = count
+					topicsubMsgCountslocked[k] = count1
 				}
 			}
-			topicMsgCounts[topic] = count
+
 		}
 		TopicMsgMu.RUnlock()
 
@@ -39,9 +53,11 @@ func MonitorActivity(ctx context.Context) {
 			glog.Infof("[Storage Monitor] Topic-Subscription data: %s", string(b))
 		}
 
-		if len(topicMsgCounts) != 0 {
-			b, _ := json.Marshal(topicMsgCounts)
-			glog.Infof("[Storage Monitor] Topic-Messages data: %s", string(b))
+		if len(topicsubMsgCountsdeleted) != 0 || len(topicsubMsgCountslocked) != 0 {
+			b, _ := json.Marshal(topicsubMsgCountsdeleted)
+			glog.Infof("[Storage Monitor] Topic-sub-Messages data (deleted): %s", string(b))
+			b, _ = json.Marshal(topicsubMsgCountslocked)
+			glog.Infof("[Storage Monitor] Topic_sub-Messages data (deleted): %s", string(b))
 		}
 	}
 
