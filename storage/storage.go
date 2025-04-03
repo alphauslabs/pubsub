@@ -148,18 +148,24 @@ func GetMessage(id string) (*Message, error) {
 	TopicMsgMu.RLock()
 	defer TopicMsgMu.RUnlock()
 
+	glog.Info("[STORAGE] GetMessage called with id:", id)
 	// Since we don't know which topic this message belongs to,
 	// we need to search all topics
 	for _, msgs := range TopicMessages {
+		glog.Infof("[STORAGE] Searching in topic messages id=%v", id)
 		if msg, exists := msgs.Get(id); exists {
 			// check if marked deleted
 			if msg.IsFinalDeleted() {
+				glog.Infof("[STORAGE] Message %s is marked as final deleted", id)
 				return nil, ErrMessageNotFound
 			}
+
+			glog.Infof("[STORAGE] Found message %s in topic %s", id, msg.Topic)
 			return msg, nil
 		}
 	}
 
+	glog.Infof("[STORAGE] Message %s not found in any topic", id)
 	return nil, ErrMessageNotFound
 }
 
@@ -174,15 +180,28 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 	allMsgs := topicMsgs.GetAll()
 
 	for _, msg := range allMsgs {
-		if msg.IsFinalDeleted() {
+		// Need to lock each message before checking its state
+		msg.Mu.Lock()
+
+		// Check for final deletion
+		isFinalDeleted := msg.IsFinalDeleted()
+
+		// Safely check subscriptions
+		isDeletedOrLocked := true
+		if msg.Subscriptions != nil {
+			subInfo, exists := msg.Subscriptions[sub]
+			if exists && subInfo != nil {
+				isDeletedOrLocked = subInfo.IsDeleted() || subInfo.IsLocked()
+			}
+		}
+
+		msg.Mu.Unlock()
+
+		if isFinalDeleted {
 			continue
 		}
 
-		if msg.Subscriptions[sub].IsDeleted() {
-			continue
-		}
-
-		if msg.Subscriptions[sub].IsLocked() {
+		if isDeletedOrLocked {
 			continue
 		}
 
@@ -252,10 +271,16 @@ func (s *MsgSub) Unlock() {
 }
 
 func (s *MsgSub) IsLocked() bool {
+	if s == nil {
+		return false
+	}
 	return atomic.LoadInt32(&s.Locked) == 1
 }
 
 func (s *MsgSub) IsDeleted() bool {
+	if s == nil {
+		return false
+	}
 	return atomic.LoadInt32(&s.Deleted) == 1
 }
 
