@@ -147,19 +147,24 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 func GetMessage(id string) (*Message, error) {
 	TopicMsgMu.RLock()
 	defer TopicMsgMu.RUnlock()
+	glog.Infof("[STORAGE] GetMessage id=%s", id)
 
 	// Since we don't know which topic this message belongs to,
 	// we need to search all topics
 	for _, msgs := range TopicMessages {
+		glog.Infof("[STORAGE] Searching in topic %s", msgs)
 		if msg, exists := msgs.Get(id); exists {
 			// check if marked deleted
 			if msg.IsFinalDeleted() {
+				glog.Infof("[STORAGE] Message %s is marked as final deleted", id)
 				return nil, ErrMessageNotFound
 			}
+			glog.Infof("[STORAGE] Found message %s in topic %s", id, msg.Topic)
 			return msg, nil
 		}
 	}
 
+	glog.Infof("[STORAGE] Message %s not found in any topic", id)
 	return nil, ErrMessageNotFound
 }
 
