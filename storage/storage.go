@@ -161,9 +161,10 @@ func GetMessage(id string) (*Message, error) {
 		glog.Infof("[STORAGE] Searching msg=%v, in topic=%v", id, topic)
 		msg := msgs.Get(id)
 		if msg == nil {
-			glog.Errorf("[STORAGE] Message %s not found in topic %s", id, msgs)
+			glog.Errorf("[STORAGE] Message %s not found in topic %s", id, topic)
 			continue
 		}
+		glog.Infof("[STORAGE] Found message %s in topic %s", id, topic)
 		return msg, nil
 	}
 
