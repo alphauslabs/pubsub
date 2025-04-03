@@ -75,12 +75,18 @@ func NewMessageMap() *MessageMap {
 }
 
 // Get retrieves a message by ID
-func (mm *MessageMap) Get(id string) (*Message, bool) {
+func (mm *MessageMap) Get(id string) *Message {
 	mm.Mu.RLock()
 	defer mm.Mu.RUnlock()
 
 	msg, exists := mm.Messages[id]
-	return msg, exists
+	if !exists {
+		return nil
+	}
+	if msg.IsFinalDeleted() {
+		return nil
+	}
+	return msg
 }
 
 // Put adds a message, no op if exists
@@ -151,20 +157,17 @@ func GetMessage(id string) (*Message, error) {
 
 	// Since we don't know which topic this message belongs to,
 	// we need to search all topics
-	for _, msgs := range TopicMessages {
-		glog.Infof("[STORAGE] Searching in topic %s", msgs)
-		if msg, exists := msgs.Get(id); exists {
-			// check if marked deleted
-			if msg.IsFinalDeleted() {
-				glog.Infof("[STORAGE] Message %s is marked as final deleted", id)
-				return nil, ErrMessageNotFound
-			}
-			glog.Infof("[STORAGE] Found message %s in topic %s", id, msg.Topic)
-			return msg, nil
+	for topic, msgs := range TopicMessages {
+		glog.Infof("[STORAGE] Searching msg=%v, in topic=%v", id, topic)
+		msg := msgs.Get(id)
+		if msg == nil {
+			glog.Errorf("[STORAGE] Message %s not found in topic %s", id, msgs)
+			continue
 		}
+		return msg, nil
 	}
 
-	glog.Infof("[STORAGE] Message %s not found in any topic", id)
+	glog.Errorf("[STORAGE] Message %s not found in any topic", id)
 	return nil, ErrMessageNotFound
 }
 
