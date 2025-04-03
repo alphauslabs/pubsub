@@ -45,7 +45,7 @@ type MessageMap struct {
 }
 type Message struct {
 	*pb.Message
-	Mu            sync.Mutex
+	Mu            sync.RWMutex
 	Subscriptions map[string]*MsgSub
 	FinalDeleted  int32
 }
