@@ -192,10 +192,12 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 		}
 		msg.Subscriptions[sub].Mu.RLock()
 		if msg.Subscriptions[sub].IsDeleted() {
+			msg.Subscriptions[sub].Mu.RUnlock()
 			continue
 		}
 
 		if msg.Subscriptions[sub].IsLocked() {
+			msg.Subscriptions[sub].Mu.RUnlock()
 			continue
 		}
 		msg.Subscriptions[sub].Mu.RUnlock()
