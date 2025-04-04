@@ -132,7 +132,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("unlock:%s:%s", msg.Id, in.Subscription, in.Topic)),
+					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 				}
 				bin, _ := json.Marshal(broadcastData)
 				out := s.Op.Broadcast(stream.Context(), bin)

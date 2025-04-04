@@ -80,7 +80,7 @@ func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
 // Handles lock/unlock/delete/extend operations separately
 func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 	parts := strings.Split(string(msg), ":")
-	if len(parts) < 3 {
+	if len(parts) < 4 {
 		glog.Info("[Error] Invalid message event format:", msg)
 		return nil, fmt.Errorf("invalid message event format")
 	}
