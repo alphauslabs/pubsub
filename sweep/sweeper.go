@@ -23,10 +23,11 @@ func RunCheckForExpired(ctx context.Context) {
 					v1.Mu.RLock()
 					count := 0
 					for _, t := range v1.Subscriptions {
-						if atomic.LoadInt32(&t.Deleted) == 1 {
+						if t.IsDeleted() {
 							count++
 							continue
 						}
+
 						if t.Age.IsZero() {
 							continue
 						}
@@ -41,6 +42,9 @@ func RunCheckForExpired(ctx context.Context) {
 					if count == len(v1.Subscriptions) {
 						v1.MarkAsFinalDeleted()
 						glog.Info("[sweep] set to final deleted message:", v1.Id)
+					} else {
+
+						glog.Infof("[sweep] message=%v is not final deleted, count=%v, subs=%v", v1.Id, count, len(v1.Subscriptions))
 					}
 					v1.Mu.RUnlock()
 				}
