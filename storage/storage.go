@@ -150,26 +150,23 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 	return nil
 }
 
-func GetMessage(id string) (*Message, error) {
+func GetMessage(id, topic string) (*Message, error) {
 	TopicMsgMu.RLock()
 	defer TopicMsgMu.RUnlock()
 	glog.Infof("[STORAGE] GetMessage id=%s", id)
 
-	// Since we don't know which topic this message belongs to,
-	// we need to search all topics
-	for topic, msgs := range TopicMessages {
-		glog.Infof("[STORAGE] Searching msg=%v, in topic=%v", id, topic)
-		msg := msgs.Get(id)
-		if msg == nil {
-			glog.Errorf("[STORAGE] Message %s not found in topic %s", id, topic)
-			continue
-		}
-		glog.Infof("[STORAGE] Found message %s in topic %s", id, topic)
-		return msg, nil
+	msg, ok := TopicMessages[topic]
+	if !ok {
+		glog.Errorf("[STORAGE] Topic %s not found in storage", topic)
+		return nil, ErrTopicNotFound
+	}
+	m := msg.Get(id)
+	if m == nil {
+		glog.Errorf("[STORAGE] Message %s not found in topic %s", id, topic)
+		return nil, ErrMessageNotFound
 	}
 
-	glog.Errorf("[STORAGE] Message %s not found in any topic", id)
-	return nil, ErrMessageNotFound
+	return m, nil
 }
 
 func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {

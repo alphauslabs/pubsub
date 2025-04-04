@@ -115,7 +115,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Ask leader to lock this message for all nodes
 			broadcastData := handlers.BroadCastInput{
 				Type: handlers.MsgEvent,
-				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription)),
+				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription, in.Topic)),
 			}
 
 			bin, _ := json.Marshal(broadcastData)
@@ -132,7 +132,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("unlock:%s:%s", msg.Id, in.Subscription)),
+					Msg:  []byte(fmt.Sprintf("unlock:%s:%s", msg.Id, in.Subscription, in.Topic)),
 				}
 				bin, _ := json.Marshal(broadcastData)
 				out := s.Op.Broadcast(stream.Context(), bin)
@@ -153,7 +153,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 					for {
 						select {
 						case <-ticker.C:
-							m, err := storage.GetMessage(msg.Id)
+							m, err := storage.GetMessage(msg.Id, in.Topic)
 							if err != nil {
 								glog.Errorf("[SubscribeHandler] Error retrieving message %s: %v", msg.Id, err)
 								return
@@ -202,7 +202,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
+		Msg:  []byte(fmt.Sprintf("delete:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
 	}
 
 	glog.Infof("[AcknowledgeHandler] Broadcasting acknowledgment for message:%v, sub:%v", in.Id, in.Subscription)
@@ -223,7 +223,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisibilityTimeoutRequest) (*emptypb.Empty, error) {
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("extend:%s:%s", in.Id, in.Subscription)),
+		Msg:  []byte(fmt.Sprintf("extend:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
 	}
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted

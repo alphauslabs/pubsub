@@ -3,11 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
 
 	"github.com/alphauslabs/pubsub/app"
-	"github.com/alphauslabs/pubsub/storage"
 	"github.com/golang/glog"
 )
 
@@ -30,7 +27,7 @@ var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	checkleader:          handleCheckLeader,
 	initialTopicSubFetch: handleInitializeTopicSub,
 	initialmsgsfetch:     handleInitialMsgsFetch,
-	LockmsgEvent:         handleLockMessage,
+	// LockmsgEvent:         handleLockMessage,
 }
 
 // Root handler for op.Send()
@@ -75,54 +72,54 @@ func handleInitialMsgsFetch(app *app.PubSub, msg []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
-	m := string(msg)
-	mms := strings.Split(m, ":")
+// func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
+// 	m := string(msg)
+// 	mms := strings.Split(m, ":")
 
-	if len(mms) != 2 {
-		glog.Errorf("[Handlelock] Invalid message format: %s", m)
-		return nil, fmt.Errorf("invalid message format")
-	}
+// 	if len(mms) != 2 {
+// 		glog.Errorf("[Handlelock] Invalid message format: %s", m)
+// 		return nil, fmt.Errorf("invalid message format")
+// 	}
 
-	messageId := mms[0]
-	sub := mms[1]
+// 	messageId := mms[0]
+// 	sub := mms[1]
 
-	// Retrieve the message from storage
-	message, err := storage.GetMessage(messageId)
-	if err != nil {
-		glog.Errorf("[Handlelock] Error retrieving message %s: %v", messageId, err)
-		return nil, err
-	}
+// 	// Retrieve the message from storage
+// 	message, err := storage.GetMessage(messageId)
+// 	if err != nil {
+// 		glog.Errorf("[Handlelock] Error retrieving message %s: %v", messageId, err)
+// 		return nil, err
+// 	}
 
-	message.Mu.RLock()
-	if message.Subscriptions[sub].IsDeleted() {
-		glog.Errorf("[Handlelock} Message=%s already done/deleted for sub=%s", messageId, sub)
-		return nil, fmt.Errorf("message already done/deleted")
-	}
+// 	message.Mu.RLock()
+// 	if message.Subscriptions[sub].IsDeleted() {
+// 		glog.Errorf("[Handlelock} Message=%s already done/deleted for sub=%s", messageId, sub)
+// 		return nil, fmt.Errorf("message already done/deleted")
+// 	}
 
-	if message.Subscriptions[sub].IsLocked() {
-		glog.Errorf("[Handlelock] Message=%s already locked for sub=%s", messageId, sub)
-		return nil, fmt.Errorf("message already locked")
-	}
-	message.Mu.RUnlock()
+// 	if message.Subscriptions[sub].IsLocked() {
+// 		glog.Errorf("[Handlelock] Message=%s already locked for sub=%s", messageId, sub)
+// 		return nil, fmt.Errorf("message already locked")
+// 	}
+// 	message.Mu.RUnlock()
 
-	// Ask all nodes to lock this message
-	broadcastData := BroadCastInput{
-		Type: MsgEvent,
-		Msg:  []byte(fmt.Sprintf("lock:%s:%s", messageId, sub)),
-	}
-	bin, _ := json.Marshal(broadcastData)
-	out := app.Op.Broadcast(context.Background(), bin)
-	for _, o := range out {
-		if o.Error != nil {
-			glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
-			return nil, o.Error
-		}
-	}
+// 	// Ask all nodes to lock this message
+// 	broadcastData := BroadCastInput{
+// 		Type: MsgEvent,
+// 		Msg:  []byte(fmt.Sprintf("lock:%s:%s", messageId, sub)),
+// 	}
+// 	bin, _ := json.Marshal(broadcastData)
+// 	out := app.Op.Broadcast(context.Background(), bin)
+// 	for _, o := range out {
+// 		if o.Error != nil {
+// 			glog.Errorf("[Subscribe] Error broadcasting lock: %v", o.Error)
+// 			return nil, o.Error
+// 		}
+// 	}
 
-	glog.Infof("[Lock-leader] Message=%s locked successfully for sub=%s", messageId, sub)
-	return nil, nil
-}
+// 	glog.Infof("[Lock-leader] Message=%s locked successfully for sub=%s", messageId, sub)
+// 	return nil, nil
+// }
 
 func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
 	if string(msg) == "PING" {

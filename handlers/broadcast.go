@@ -88,8 +88,9 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 	msgType := parts[0]
 	msgId := parts[1]
 	subId := parts[2]
+	topic := parts[3]
 
-	eventHandlers := map[string]func(*app.PubSub, string, string) ([]byte, error){
+	eventHandlers := map[string]func(*app.PubSub, string, string, string) ([]byte, error){
 		LockMsg:   handleLockMsg,
 		UnlockMsg: handleUnlockMsg,
 		DeleteMsg: handleDeleteMsg,
@@ -102,12 +103,12 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unknown message event: %s", msgType)
 	}
 
-	return handler(appInstance, msgId, subId)
+	return handler(appInstance, msgId, subId, topic)
 }
 
-func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
+func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
 	// retrieve the message from storage
-	msg, err := storage.GetMessage(messageID)
+	msg, err := storage.GetMessage(messageID, topic)
 	if err != nil {
 		glog.Errorf("[broadcast-handlelock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
@@ -159,9 +160,9 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	return nil, nil
 }
 
-func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
+func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, error) {
 	// retrieve the message from storage
-	m, err := storage.GetMessage(messageID)
+	m, err := storage.GetMessage(messageID, topic)
 	if err != nil {
 		glog.Errorf("[Unlock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
@@ -175,9 +176,9 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId string) ([]byte, error) {
 	return nil, nil
 }
 
-func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
+func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
 	glog.Infof("Handle delete message event called for msg:%v, sub:%v", messageID, subId)
-	m, err := storage.GetMessage(messageID)
+	m, err := storage.GetMessage(messageID, topic)
 	if err != nil {
 		return nil, err
 	}
@@ -194,8 +195,8 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId string) ([]byte, e
 	return nil, nil
 }
 
-func handleExtendMsg(app *app.PubSub, messageID string, subId string) ([]byte, error) {
-	m, err := storage.GetMessage(messageID)
+func handleExtendMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
+	m, err := storage.GetMessage(messageID, topic)
 	if err != nil {
 		return nil, err
 	}
