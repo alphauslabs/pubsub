@@ -108,19 +108,32 @@ func handleMessageEvent(appInstance *app.PubSub, msg []byte) ([]byte, error) {
 
 func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
 	// retrieve the message from storage
-	msg, err := storage.GetMessage(messageID, topic)
-	if err != nil {
-		glog.Errorf("[broadcast-handlelock] Error retrieving message %s: %v", messageID, err)
-		return nil, err
+	msg := storage.GetMessage(messageID, topic)
+	if msg == nil {
+		return nil, nil
 	}
 
-	msg.Mu.RLock()
-	locked := msg.Subscriptions[subId].IsLocked()
-	msg.Mu.RUnlock()
-	if locked {
-		glog.Errorf("[broadcast-handlelock] Message=%s already locked for sub=%s", messageID, subId)
-		return nil, fmt.Errorf("message already locked")
+	msg.Mu.Lock()
+	defer msg.Mu.Unlock()
+
+	if msg.IsFinalDeleted() {
+		return nil, nil
 	}
+
+	msg.Subscriptions[subId].Mu.RLock()
+	if msg.Subscriptions[subId].IsDeleted() {
+		glog.Infof("[broadcast-handlelock] Message %s already deleted for sub=%s", messageID, subId)
+		msg.Subscriptions[subId].Mu.RUnlock()
+		return nil, nil
+	}
+
+	if msg.Subscriptions[subId].IsLocked() {
+		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
+		msg.Subscriptions[subId].Mu.RUnlock()
+		return nil, nil
+	}
+
+	msg.Subscriptions[subId].Mu.RUnlock()
 
 	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
@@ -141,17 +154,6 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 		autoExtend = true
 	}
 
-	msg.Mu.Lock()
-	defer msg.Mu.Unlock()
-	if msg.Subscriptions[subId].IsDeleted() {
-		glog.Infof("[broadcast-handlelock] Message %s already deleted for sub=%s", messageID, subId)
-		return nil, fmt.Errorf("message already deleted")
-	}
-
-	if msg.Subscriptions[subId].IsLocked() {
-		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
-		return nil, fmt.Errorf("message already locked")
-	}
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
 	msg.Subscriptions[subId].Lock()
 	msg.Subscriptions[subId].RenewAge()
@@ -162,10 +164,9 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 
 func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, error) {
 	// retrieve the message from storage
-	m, err := storage.GetMessage(messageID, topic)
-	if err != nil {
-		glog.Errorf("[Unlock] Error retrieving message %s: %v", messageID, err)
-		return nil, err
+	m := storage.GetMessage(messageID, topic)
+	if m == nil {
+		return nil, nil
 	}
 
 	m.Mu.Lock()
@@ -178,14 +179,15 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, e
 
 func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
 	glog.Infof("Handle delete message event called for msg:%v, sub:%v", messageID, subId)
-	m, err := storage.GetMessage(messageID, topic)
-	if err != nil {
-		return nil, err
+	m := storage.GetMessage(messageID, topic)
+	if m == nil {
+		return nil, nil
 	}
+
 	// Delete for this subscription
 	m.Subscriptions[subId].MarkAsDeleted()
 	// Update the message status in Spanner
-	err = utils.UpdateMessageProcessedStatusForSub(app.Client, messageID, subId)
+	err := utils.UpdateMessageProcessedStatusForSub(app.Client, messageID, subId)
 	if err != nil {
 		glog.Errorf("[Delete] Error updating message status for sub %s: %v", subId, err)
 		return nil, err
@@ -196,10 +198,11 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]
 }
 
 func handleExtendMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
-	m, err := storage.GetMessage(messageID, topic)
-	if err != nil {
-		return nil, err
+	m := storage.GetMessage(messageID, topic)
+	if m == nil {
+		return nil, nil
 	}
+
 	m.Mu.Lock()
 	m.Subscriptions[subId].RenewAge()
 	m.Mu.Unlock()

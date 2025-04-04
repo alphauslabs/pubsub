@@ -150,7 +150,7 @@ func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
 	return nil
 }
 
-func GetMessage(id, topic string) (*Message, error) {
+func GetMessage(id, topic string) *Message {
 	TopicMsgMu.RLock()
 	defer TopicMsgMu.RUnlock()
 	glog.Infof("[STORAGE] GetMessage id=%s", id)
@@ -158,22 +158,22 @@ func GetMessage(id, topic string) (*Message, error) {
 	msg, ok := TopicMessages[topic]
 	if !ok {
 		glog.Errorf("[STORAGE] Topic %s not found in storage", topic)
-		return nil, ErrTopicNotFound
+		return nil
 	}
 
 	m := msg.Get(id)
 	if m == nil {
 		glog.Errorf("[STORAGE] Message %s not found in topic %s", id, topic)
-		return nil, ErrMessageNotFound
+		return nil
 	}
 
 	if m.IsFinalDeleted() {
 		glog.Errorf("[STORAGE] Message %s is marked as final deleted in topic %s", id, topic)
-		return nil, ErrMessageNotFound
+		return nil
 	}
 
 	glog.Infof("[STORAGE] Found message %s in topic %s", id, topic)
-	return m, nil
+	return m
 }
 
 func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {

@@ -154,9 +154,8 @@ outer:
 					for {
 						select {
 						case <-ticker.C:
-							m, err := storage.GetMessage(msg.Id, in.Topic)
-							if err != nil {
-								glog.Errorf("[SubscribeHandler] Error retrieving message %s: %v", msg.Id, err)
+							m := storage.GetMessage(msg.Id, in.Topic)
+							if m == nil {
 								return
 							}
 
