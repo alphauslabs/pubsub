@@ -133,6 +133,7 @@ func main() {
 								_, err := c.ExtendVisibilityTimeout(context.Background(), &pb.ExtendVisibilityTimeoutRequest{
 									Id:           rec.Id,
 									Subscription: sub,
+									Topic:        topic,
 								})
 								if err != nil {
 									glog.Errorf("Failed to extend visibility for message %s: %v", rec.Id, err)
@@ -169,7 +170,7 @@ func main() {
 		acknowledge:
 			//Acknowledge the message
 			glog.Infof("[Acknowledge] Attempting to acknowledge message %s", rec.Id)
-			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub})
+			ackres, err := c.Acknowledge(context.Background(), &pb.AcknowledgeRequest{Id: rec.Id, Subscription: sub, Topic: topic})
 			if err != nil {
 				glog.Errorf("[Acknowledge] Failed to acknowledge message %s: %v", rec.Id, err)
 				continue messageLoop // Skip to next message on error
