@@ -74,7 +74,6 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 
 	latest = FetchAllTopicSubscriptions(ctx, app.Client)
 	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
-		glog.Info("STRUCT-Leader: No changes detected in topic-subscription structure.")
 		return
 	}
 
