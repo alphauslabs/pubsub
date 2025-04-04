@@ -115,7 +115,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			// Ask leader to lock this message for all nodes
 			broadcastData := handlers.BroadCastInput{
 				Type: handlers.MsgEvent,
-				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription, in.Topic)),
+				Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 			}
 
 			bin, _ := json.Marshal(broadcastData)
