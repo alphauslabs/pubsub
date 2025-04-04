@@ -100,6 +100,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	}
 
 	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
+outer:
 	for {
 		select {
 		case <-stream.Context().Done():
@@ -123,7 +124,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			for _, o := range outs {
 				if o.Error != nil {
 					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
-					return nil
+					continue outer
 				}
 			}
 
@@ -139,7 +140,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				for _, o := range out {
 					if o.Error != nil {
 						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
-						return nil
+						continue outer
 					}
 				}
 			} else {
