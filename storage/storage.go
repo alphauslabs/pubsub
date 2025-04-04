@@ -64,7 +64,7 @@ type MsgSub struct {
 	Deleted        int32
 	Locked         int32
 	AutoExtend     int32
-	Mu             sync.Mutex // lock
+	Mu             sync.RWMutex // lock
 }
 
 // NewMessageMap creates a new message map
@@ -178,15 +178,15 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 
 	topicMsgs, exists := TopicMessages[topicName]
 	if !exists {
-		return nil, fmt.Errorf("[Subscribe] no active messages found for topic=%s and sub=%s", topicName, sub)
+		return nil, fmt.Errorf("[Subscribe] topic %s not found in TopicMessages", topicName)
 	}
-	allMsgs := topicMsgs.GetAll()
 
+	allMsgs := topicMsgs.GetAll()
 	for _, msg := range allMsgs {
 		if msg.IsFinalDeleted() {
 			continue
 		}
-
+		msg.Subscriptions[sub].Mu.RLock()
 		if msg.Subscriptions[sub].IsDeleted() {
 			continue
 		}
@@ -194,6 +194,7 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 		if msg.Subscriptions[sub].IsLocked() {
 			continue
 		}
+		msg.Subscriptions[sub].Mu.RUnlock()
 
 		return msg, nil
 	}

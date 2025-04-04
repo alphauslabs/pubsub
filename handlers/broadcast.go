@@ -109,22 +109,22 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	// retrieve the message from storage
 	msg, err := storage.GetMessage(messageID)
 	if err != nil {
-		glog.Errorf("[Lock] Error retrieving message %s: %v", messageID, err)
+		glog.Errorf("[broadcast-handlelock] Error retrieving message %s: %v", messageID, err)
 		return nil, err
 	}
 
-	msg.Mu.Lock()
+	msg.Mu.RLock()
 	locked := msg.Subscriptions[subId].IsLocked()
-	msg.Mu.Unlock()
+	msg.Mu.RUnlock()
 	if locked {
-		glog.Errorf("[Lock] Message=%s already locked for sub=%s", messageID, subId)
+		glog.Errorf("[broadcast-handlelock] Message=%s already locked for sub=%s", messageID, subId)
 		return nil, fmt.Errorf("message already locked")
 	}
 
 	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
 	if err != nil {
-		glog.Errorf("[Lock] Failed to retrieve subscriptions for topic %s: %v", msg.Topic, err)
+		glog.Errorf("[broadcast-handlelock] Failed to retrieve subscriptions for topic %s: %v", msg.Topic, err)
 		return nil, err
 	}
 
@@ -143,19 +143,19 @@ func handleLockMsg(app *app.PubSub, messageID string, subId string) ([]byte, err
 	msg.Mu.Lock()
 	defer msg.Mu.Unlock()
 	if msg.Subscriptions[subId].IsDeleted() {
-		glog.Infof("[Lock] Message %s already deleted for sub=%s", messageID, subId)
+		glog.Infof("[broadcast-handlelock] Message %s already deleted for sub=%s", messageID, subId)
 		return nil, fmt.Errorf("message already deleted")
 	}
 
 	if msg.Subscriptions[subId].IsLocked() {
-		glog.Infof("[Lock] Message %s already locked for sub=%s", messageID, subId)
+		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
 		return nil, fmt.Errorf("message already locked")
 	}
 	msg.Subscriptions[subId].SetAutoExtend(autoExtend)
 	msg.Subscriptions[subId].Lock()
 	msg.Subscriptions[subId].RenewAge()
 
-	glog.Infof("[Lock] Message=%s locked successfully for sub=%s", messageID, subId)
+	glog.Infof("[broadcast-handlelock] Message=%s locked successfully for sub=%s", messageID, subId)
 	return nil, nil
 }
 

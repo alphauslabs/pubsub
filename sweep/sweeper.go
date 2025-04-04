@@ -17,10 +17,10 @@ func RunCheckForExpired(ctx context.Context) {
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
-			v.Mu.Lock()
+			v.Mu.RLock()
 			for _, v1 := range v.Messages {
 				if !v1.IsFinalDeleted() {
-					v1.Mu.Lock()
+					v1.Mu.RLock()
 					count := 0
 					for _, t := range v1.Subscriptions {
 						if atomic.LoadInt32(&t.Deleted) == 1 {
@@ -42,10 +42,10 @@ func RunCheckForExpired(ctx context.Context) {
 						v1.MarkAsFinalDeleted()
 						glog.Info("[sweep] set to final deleted message:", v1.Id)
 					}
-					v1.Mu.Unlock()
+					v1.Mu.RUnlock()
 				}
 			}
-			v.Mu.Unlock()
+			v.Mu.RUnlock()
 		}
 	}
 
@@ -67,7 +67,7 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
-			v.Mu.Lock()
+			v.Mu.RLock()
 			for _, v1 := range v.Messages {
 				if v1.IsFinalDeleted() {
 					// Update the processed status in Spanner
@@ -79,7 +79,7 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 					glog.Info("[sweep] deleted message:", v1.Id)
 				}
 			}
-			v.Mu.Unlock()
+			v.Mu.RUnlock()
 		}
 	}
 

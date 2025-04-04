@@ -80,31 +80,31 @@ func handleLockMessage(app *app.PubSub, msg []byte) ([]byte, error) {
 	mms := strings.Split(m, ":")
 
 	if len(mms) != 2 {
-		glog.Errorf("[Lock] Invalid message format: %s", m)
+		glog.Errorf("[Handlelock] Invalid message format: %s", m)
 		return nil, fmt.Errorf("invalid message format")
 	}
 
 	messageId := mms[0]
 	sub := mms[1]
 
-	// retrieve the message from storage
+	// Retrieve the message from storage
 	message, err := storage.GetMessage(messageId)
 	if err != nil {
-		glog.Errorf("[Lock] Error retrieving message %s: %v", messageId, err)
+		glog.Errorf("[Handlelock] Error retrieving message %s: %v", messageId, err)
 		return nil, err
 	}
 
-	message.Mu.Lock()
+	message.Mu.RLock()
 	if message.Subscriptions[sub].IsDeleted() {
-		glog.Errorf("[Lock] Message=%s already done/deleted for sub=%s", messageId, sub)
+		glog.Errorf("[Handlelock} Message=%s already done/deleted for sub=%s", messageId, sub)
 		return nil, fmt.Errorf("message already done/deleted")
 	}
 
 	if message.Subscriptions[sub].IsLocked() {
-		glog.Errorf("[Lock] Message=%s already locked for sub=%s", messageId, sub)
+		glog.Errorf("[Handlelock] Message=%s already locked for sub=%s", messageId, sub)
 		return nil, fmt.Errorf("message already locked")
 	}
-	message.Mu.Unlock()
+	message.Mu.RUnlock()
 
 	// Ask all nodes to lock this message
 	broadcastData := BroadCastInput{

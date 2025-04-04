@@ -95,16 +95,15 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
-		glog.Errorf("[Subscribe] Error validating subscription: %v", err)
+		glog.Errorf("[SubscribeHandler] Error validating subscription: %v", err)
 		return err
 	}
 
-	glog.Infof("[Subscribe] Starting subscription stream for topic=%v, sub=%v", in.Topic, in.Subscription)
+	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
 	for {
 		select {
-		// Check if client has disconnected
 		case <-stream.Context().Done():
-			glog.Infof("[Subscribe] Client disconnected, closing stream for subscription %s", in.Subscription)
+			glog.Errorf("[SubscribeHandler] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
@@ -114,20 +113,22 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 			}
 
 			// Ask leader to lock this message for all nodes
-			broadcastData := handlers.SendInput{
-				Type: handlers.LockmsgEvent,
-				Msg:  []byte(fmt.Sprintf("%s:%s", msg.Id, in.Subscription)),
+			broadcastData := handlers.BroadCastInput{
+				Type: handlers.MsgEvent,
+				Msg:  []byte(fmt.Sprintf("lock:%s:%s", msg.Id, in.Subscription)),
 			}
 
 			bin, _ := json.Marshal(broadcastData)
-			_, err = s.Op.Send(stream.Context(), bin)
-			if err != nil {
-				glog.Errorf("[Subscribe] Error broadcasting lock: %v", err)
-				continue
+			outs := s.Op.Broadcast(stream.Context(), bin)
+			for _, o := range outs {
+				if o.Error != nil {
+					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
+					return nil
+				}
 			}
 
 			if err := stream.Send(msg.Message); err != nil {
-				glog.Errorf("[Subscribe] Failed to send message %s to subscription %s: %v", msg.Id, in.Subscription, err)
+				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
 				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
@@ -137,7 +138,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				out := s.Op.Broadcast(stream.Context(), bin)
 				for _, o := range out {
 					if o.Error != nil {
-						glog.Errorf("[Subscribe] Error broadcasting unlock: %v", o.Error)
+						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
 						return nil
 					}
 				}
@@ -154,21 +155,21 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 						case <-ticker.C:
 							m, err := storage.GetMessage(msg.Id)
 							if err != nil {
-								glog.Errorf("[Subscribe] Error retrieving message %s: %v", msg.Id, err)
+								glog.Errorf("[SubscribeHandler] Error retrieving message %s: %v", msg.Id, err)
 								return
 							}
 
 							m.Mu.RLock()
 							// Check for nil map or missing subscription
 							if m.Subscriptions == nil {
-								glog.Warningf("[Subscribe] Message %s has nil Subscriptions map", m.Id)
+								glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
 								m.Mu.Unlock()
 								return
 							}
 
 							subInfo, exists := m.Subscriptions[in.Subscription]
 							if !exists {
-								glog.Warningf("[Subscribe] Subscription %s not found in message %s", in.Subscription, m.Id)
+								glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
 								m.Mu.RUnlock()
 								return
 							}
@@ -176,17 +177,17 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 
 							switch {
 							case m.IsFinalDeleted():
-								glog.Infof("[Subscribe] Message %s has been deleted", m.Id)
+								glog.Errorf("[SubscribeHandler] Message %s has been final deleted", m.Id)
 								return
 							case subInfo.IsDeleted():
-								glog.Infof("[Subscribe] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
+								glog.Errorf("[SubscribeHandler] Message %s has been deleted for subscription %s", m.Id, in.Subscription)
 								return
 							case !subInfo.IsLocked():
-								glog.Infof("[Subscribe] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
+								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
 						case <-stream.Context().Done():
-							glog.Infof("[Subscribe] Client context done while monitoring message %s", msg.Id)
+							glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
 							return
 						}
 					}
@@ -198,26 +199,24 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 }
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
-	// Check if message exists in storage
-	glog.Infof("Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
+	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
 	broadcastData := handlers.BroadCastInput{
 		Type: handlers.MsgEvent,
 		Msg:  []byte(fmt.Sprintf("delete:%s:%s", in.Id, in.Subscription)),
 	}
 
-	glog.Infof("[Acknowledge] Broadcasting acknowledgment for message:%v, sub:%v", in.Id, in.Subscription)
+	glog.Infof("[AcknowledgeHandler] Broadcasting acknowledgment for message:%v, sub:%v", in.Id, in.Subscription)
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
-	glog.Info("[Acknowledge] Broadcast response len=", len(out))
+	glog.Info("[AcknowledgeHandler] Broadcast response len=", len(out))
 	for _, v := range out {
 		if v.Error != nil {
-			glog.Errorf("[Acknowledge] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
-		} else {
-			glog.Infof("[Acknowledge] Successfully broadcast acknowledgment for msg=%v, sub=%v from node:%v", in.Id, in.Subscription, v.Id)
+			glog.Errorf("[AcknowledgeHandler] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
+			return nil, status.Errorf(codes.Internal, "failed to broadcast acknowledgment: %v", v.Error)
 		}
 	}
 
-	glog.Infof("[Acknowledge] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
+	glog.Infof("[AcknowledgeHandler] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
 	return &emptypb.Empty{}, nil
 }
 
