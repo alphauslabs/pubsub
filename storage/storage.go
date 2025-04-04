@@ -160,12 +160,19 @@ func GetMessage(id, topic string) (*Message, error) {
 		glog.Errorf("[STORAGE] Topic %s not found in storage", topic)
 		return nil, ErrTopicNotFound
 	}
+
 	m := msg.Get(id)
 	if m == nil {
 		glog.Errorf("[STORAGE] Message %s not found in topic %s", id, topic)
 		return nil, ErrMessageNotFound
 	}
 
+	if m.IsFinalDeleted() {
+		glog.Errorf("[STORAGE] Message %s is marked as final deleted in topic %s", id, topic)
+		return nil, ErrMessageNotFound
+	}
+
+	glog.Infof("[STORAGE] Found message %s in topic %s", id, topic)
 	return m, nil
 }
 
