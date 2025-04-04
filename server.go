@@ -147,7 +147,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 				ch := make(chan struct{})
 				go func() {
 					defer close(ch)
-					ticker := time.NewTicker(100 * time.Millisecond)
+					ticker := time.NewTicker(1000 * time.Millisecond)
 					defer ticker.Stop()
 
 					for {
