@@ -42,12 +42,8 @@ func RunCheckForExpired(ctx context.Context) {
 					if count == len(v1.Subscriptions) {
 						v1.MarkAsFinalDeleted()
 						glog.Info("[sweep] set to final deleted message:", v1.Id)
-					} else {
-						glog.Infof("[sweep] message=%v is not final deleted, count=%v, subs=%v", v1.Id, count, len(v1.Subscriptions))
 					}
 					v1.Mu.RUnlock()
-				} else {
-					glog.Infof("[sweep] message=%v is already final deleted", v1.Id)
 				}
 			}
 			v.Mu.RUnlock()
