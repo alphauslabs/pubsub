@@ -187,6 +187,30 @@ outer:
 								return
 							}
 						case <-stream.Context().Done():
+							m := storage.GetMessage(msg.Id, in.Topic)
+							if m == nil {
+								return
+							}
+
+							m.Mu.RLock()
+							// Check for nil map or missing subscription
+							if m.Subscriptions == nil {
+								glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
+								m.Mu.Unlock()
+								return
+							}
+
+							subInfo, exists := m.Subscriptions[in.Subscription]
+							if !exists {
+								glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
+								m.Mu.RUnlock()
+								return
+							}
+							m.Mu.RUnlock()
+
+							subInfo.ClearAge()
+							subInfo.Unlock()
+
 							glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
 							return
 						}
