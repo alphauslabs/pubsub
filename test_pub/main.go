@@ -20,7 +20,7 @@ var (
 	topics       = flag.String("topics", "", "Topics to publish messages to, fmt: {topic1},{topic2}")
 )
 
-func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubServiceClient) {
+func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, client pb.PubSubServiceClient) {
 	defer wg.Done()
 	msg := &pb.PublishRequest{
 		Payload: fmt.Sprintf("Message %d for topic=%v", id, topic),
@@ -39,6 +39,7 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, client pb.PubSubSe
 	resp, err := client.Publish(ctx, msg)
 	if err != nil {
 		glog.Errorf("[ERROR] Message %d to %s failed: %v", id, topic, err)
+		ch <- 1
 		return
 	}
 
@@ -64,18 +65,24 @@ func main() {
 	}
 	var wg sync.WaitGroup
 	startTime := time.Now()
+	counterr := make(chan int, *numMessages)
 
 	ts := strings.Split(*topics, ",")
 	for _, t := range ts {
 		for i := range *numMessages {
 			wg.Add(1)
-			go publishMessage(&wg, i, t, client)
+			go publishMessage(&wg, i, t, counterr, client)
 		}
 	}
 	wg.Wait()
+	close(counterr)
+	c := 0
+	for range counterr {
+		c++
+	}
+
 	duration := time.Since(startTime)
-	glog.Infof("All messages published.")
-	glog.Infof("Total Messages per topic: %d", *numMessages)
+	glog.Infof("Total Messages published %d", *numMessages-c)
 	glog.Infof("Total Time: %.2f seconds", duration.Seconds())
 	glog.Infof("Throughput: %.2f messages/second", float64(*numMessages)/duration.Seconds())
 }
