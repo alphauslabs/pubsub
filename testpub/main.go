@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pb "github.com/alphauslabs/pubsub-proto/v1"
+	pbsb "github.com/alphauslabs/pubsub-sdk-go"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 )
@@ -20,14 +21,15 @@ var (
 	topics       = flag.String("topics", "", "Topics to publish messages to, fmt: {topic1},{topic2}")
 )
 
-func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, client pb.PubSubServiceClient) {
+func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, client *pbsb.PubSubClient) {
 	defer wg.Done()
-	msg := &pb.PublishRequest{
-		Payload: fmt.Sprintf("Message %d for topic=%v", id, topic),
+	msg := &pbsb.PublishRequest{
+		Message: fmt.Sprintf("Message %d for topic=%v", id, topic),
 		Topic:   topic,
 		Attributes: map[string]string{
 			fmt.Sprintf("key%v", id): fmt.Sprintf("value%v", id),
 		},
+		RetryLimit: 30,
 	}
 	if *triggerPanic {
 		if id%3 == 0 {
@@ -36,14 +38,15 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, clien
 	}
 
 	ctx := context.Background()
-	resp, err := client.Publish(ctx, msg)
+
+	err := client.Publish(ctx, msg)
 	if err != nil {
-		glog.Errorf("[ERROR] Message %d to %s failed: %v", id, topic, err)
+		glog.Errorf("[ERROR] Failed to publish message %d to topic %s: %v", id, topic, err)
 		ch <- 1
 		return
 	}
 
-	glog.Infof("[SUCCESS] Message %d published to %s. Message ID: %s", id, topic, resp.MessageId)
+	glog.Infof("[SUCCESS] Message %s publshed, topic=%s", id, topic)
 }
 
 func connectToGRPC(endpoint string) (pb.PubSubServiceClient, error) {
@@ -58,20 +61,23 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Parse()
 
-	client, err := connectToGRPC(fmt.Sprintf("%v:50051", *host))
-	if err != nil {
-		glog.Errorf("Failed to connect to gRPC server: %v", err)
-		return
-	}
 	var wg sync.WaitGroup
 	startTime := time.Now()
 	counterr := make(chan int, *numMessages)
+
+	cclient, err := pbsb.New()
+	if err != nil {
+		glog.Errorf("Failed to create PubSub client: %v", err)
+		return
+	}
+
+	defer cclient.Close()
 
 	ts := strings.Split(*topics, ",")
 	for _, t := range ts {
 		for i := range *numMessages {
 			wg.Add(1)
-			go publishMessage(&wg, i, t, counterr, client)
+			go publishMessage(&wg, i, t, counterr, cclient)
 		}
 	}
 	wg.Wait()
