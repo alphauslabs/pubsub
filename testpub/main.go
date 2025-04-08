@@ -8,10 +8,8 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/alphauslabs/pubsub-proto/v1"
 	pbsb "github.com/alphauslabs/pubsub-sdk-go"
 	"github.com/golang/glog"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -46,15 +44,7 @@ func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, clien
 		return
 	}
 
-	glog.Infof("[SUCCESS] Message %s publshed, topic=%s", id, topic)
-}
-
-func connectToGRPC(endpoint string) (pb.PubSubServiceClient, error) {
-	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s: %v", endpoint, err)
-	}
-	return pb.NewPubSubServiceClient(conn), nil
+	glog.Infof("[SUCCESS] Message %v publshed, topic=%s", id, topic)
 }
 
 func main() {
