@@ -14,8 +14,7 @@ func MonitorActivity(ctx context.Context) {
 	defer ticker.Stop()
 
 	do := func() {
-		var topicsubMsgCountsdeleted = make(map[string]int)
-		var topicsubMsgCountslocked = make(map[string]int)
+		var topicsubMsgCounts = make(map[string]int)
 		var topicSubDetails = make(map[string]int)
 
 		TopicMsgMu.RLock()
@@ -27,20 +26,15 @@ func MonitorActivity(ctx context.Context) {
 				for _, sub := range msg.Subscriptions {
 					k := fmt.Sprintf("%s_%s", topic, sub.SubscriptionID)
 					if sub.IsDeleted() {
-						if count1, ok := topicsubMsgCountsdeleted[k]; ok {
-							topicsubMsgCountsdeleted[k] = count1 + 1
-						} else {
-							topicsubMsgCountsdeleted[k] = 1
-						}
+						continue
 					}
-					if sub.IsLocked() {
-						if count2, ok := topicsubMsgCountslocked[k]; ok {
-							topicsubMsgCountslocked[k] = count2 + 1
-						} else {
-							topicsubMsgCountslocked[k] = 1
-						}
+					if m, ok := topicsubMsgCounts[k]; !ok {
+						topicsubMsgCounts[k] = 1
+					} else {
+						topicsubMsgCounts[k] = m + 1
 					}
 				}
+
 			}
 
 		}
@@ -56,12 +50,9 @@ func MonitorActivity(ctx context.Context) {
 			b, _ := json.Marshal(topicSubDetails)
 			glog.Infof("[Storage Monitor] Topic-Subscription data: %s", string(b))
 		}
-
-		if len(topicsubMsgCountsdeleted) != 0 || len(topicsubMsgCountslocked) != 0 {
-			b, _ := json.Marshal(topicsubMsgCountsdeleted)
-			glog.Infof("[Storage Monitor] Topic-sub-Messages data (deleted): %s", string(b))
-			b, _ = json.Marshal(topicsubMsgCountslocked)
-			glog.Infof("[Storage Monitor] Topic_sub-Messages data (locked): %s", string(b))
+		if len(topicsubMsgCounts) != 0 {
+			b, _ := json.Marshal(topicsubMsgCounts)
+			glog.Infof("[Storage Monitor] Topic_sub-Messages data: %s", string(b))
 		}
 	}
 

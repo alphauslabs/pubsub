@@ -19,6 +19,7 @@ import (
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/leader"
+	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/sweep"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge"
@@ -142,7 +143,7 @@ func main() {
 		}
 	}()
 
-	// go storage.MonitorActivity(ctx)
+	go storage.MonitorActivity(ctx)
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.
 	go sweep.RunCheckForExpired(ctx)
 	// Start our sweeper goroutine to check if message is deleted, if so, then it deletes it.
