@@ -43,7 +43,7 @@ func verifyCaller(ctx context.Context, md metadata.MD) (userInfo, error) {
 		return userInfo{}, unauthorizedCallerErr
 	}
 
-	payload, err := idtoken.Validate(ctx, token, "http://10.146.0.27:50051")
+	payload, err := idtoken.Validate(ctx, token, "10.146.0.27:50051")
 	if err != nil {
 		glog.Errorf("Validate failed: %v", err)
 		return userInfo{}, err
