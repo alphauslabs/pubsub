@@ -17,6 +17,7 @@ import (
 	"cloud.google.com/go/spanner"
 	pb "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/auth"
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
@@ -182,9 +183,18 @@ func run(ctx context.Context, serverconf *server) error {
 		Time:                  30 * time.Second, // Send keepalive ping per interval to maintain NAT/firewall state
 		Timeout:               20 * time.Second, // Wait 20 seconds for a ping response before considering the connection dead
 	}
+
+	var opts []grpc.ServerOption
+	opts = append(opts, grpc.KeepaliveEnforcementPolicy(kaep))
+	opts = append(opts, grpc.KeepaliveParams(kasp))
+	opts = append(opts, grpc.ChainUnaryInterceptor(
+		grpc.UnaryServerInterceptor(auth.UnaryInterceptor),
+	))
+	opts = append(opts, grpc.ChainStreamInterceptor(
+		grpc.StreamServerInterceptor(auth.StreamInterceptor),
+	))
 	s := grpc.NewServer(
-		grpc.KeepaliveEnforcementPolicy(kaep),
-		grpc.KeepaliveParams(kasp),
+		opts...,
 	)
 	reflection.Register(s)
 	pb.RegisterPubSubServiceServer(s, serverconf)
