@@ -20,6 +20,7 @@ var unauthorizedCallerErr = status.Errorf(codes.Unauthenticated, "Unauthorized c
 var allowed = []string{
 	"@labs-169405.iam.gserviceaccount.com",
 	"@mobingi-main.iam.gserviceaccount.com",
+	"compute@developer.gserviceaccount.com",
 }
 
 type userInfo struct {
