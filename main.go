@@ -219,6 +219,7 @@ func serveHealthChecks() {
 		if err != nil {
 			log.Fatalf("failed to accept health check connection: %v", err)
 		}
+		glog.Info("Health check connection accepted, ", conn.RemoteAddr())
 		conn.Close()
 	}
 }

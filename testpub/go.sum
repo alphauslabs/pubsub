@@ -6,10 +6,8 @@ cloud.google.com/go/compute/metadata v0.6.0 h1:A6hENjEsCDtC1k8byVsgwvVcioamEHvZ4
 cloud.google.com/go/compute/metadata v0.6.0/go.mod h1:FjyFAW1MW0C203CEOMDTu3Dk1FlqW3Rga40jzHL4hfg=
 github.com/alphauslabs/pubsub-proto v0.2.2 h1:RVktJYzyuA3xNsp0gmVvHdKFIvfLry9nLdOR/VK7Lf0=
 github.com/alphauslabs/pubsub-proto v0.2.2/go.mod h1:sfDRyxsVmiZtG22g8DUGajSp4qOxCkDrwl655xHNDPg=
-github.com/alphauslabs/pubsub-sdk-go v0.0.16 h1:x/z4CWd3bGGNDEJh7i91rJAfQzvggDXRuYigFKxWdIs=
-github.com/alphauslabs/pubsub-sdk-go v0.0.16/go.mod h1:/wS+fY12iSgS8UO/RuPVlUOk8dwee5wZGW/s7GAu7xg=
-github.com/alphauslabs/pubsub-sdk-go v0.0.17 h1:vD6c/xDgghpLOps2XetSNrsCMQ9W1SUTNAbNiNVK6f8=
-github.com/alphauslabs/pubsub-sdk-go v0.0.17/go.mod h1:/wS+fY12iSgS8UO/RuPVlUOk8dwee5wZGW/s7GAu7xg=
+github.com/alphauslabs/pubsub-sdk-go v0.0.18 h1:DjxNA/RsjOrLasq/4y2uP+rSr1gGkRf59ArU8r1niWY=
+github.com/alphauslabs/pubsub-sdk-go v0.0.18/go.mod h1:/wS+fY12iSgS8UO/RuPVlUOk8dwee5wZGW/s7GAu7xg=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
