@@ -78,9 +78,9 @@ func main() {
 	op := hedge.New(
 		spannerClient,
 		":50052", // addr will be resolved internally
-		"locktable",
+		"pubsub_lock",
 		"pubsublock",
-		"logtable",
+		"pubsub_log",
 		hedge.WithDuration(5000),
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(
