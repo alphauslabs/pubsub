@@ -13,6 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	MessagesTable = "pubsub_messages"
+)
+
 func EnsureLeaderActive(op *hedge.Op, ctx context.Context) (bool, error) {
 	msg := struct {
 		Type string
@@ -44,7 +48,7 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 
 	// Update the message processed status in Spanner
 	_, err := spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"id", "processed", "updatedAt"}, []any{id, true, spanner.CommitTimestamp}),
+		spanner.Update(MessagesTable, []string{"id", "processed", "updatedAt"}, []any{id, true, spanner.CommitTimestamp}),
 	})
 	if err != nil {
 		glog.Errorf("[Acknowledge]: Failed to update message processed status in Spanner: %v", err)
@@ -67,7 +71,7 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 	}
 
 	// Query first to get the current status
-	query := spanner.NewStatement("SELECT subStatus FROM Messages WHERE id = @id and processed = false")
+	query := spanner.NewStatement("SELECT subStatus FROM " + MessagesTable + " WHERE id = @id and processed = false")
 	query.Params["id"] = id
 	iter := spannerClient.Single().Query(context.Background(), query)
 	defer iter.Stop()
@@ -99,7 +103,7 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 
 	// Update the message processed status in Spanner
 	_, err = spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update("Messages", []string{"id", "subStatus", "updatedAt"}, []any{id, string(b), spanner.CommitTimestamp}),
+		spanner.Update(MessagesTable, []string{"id", "subStatus", "updatedAt"}, []any{id, string(b), spanner.CommitTimestamp}),
 	})
 	if err != nil {
 		glog.Errorf("[Acknowledge]: Failed to update message sub status in Spanner: %v", err)

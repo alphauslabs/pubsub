@@ -23,7 +23,7 @@ var (
 
 func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map[string]map[string]*storage.Subscription {
 	stmt := spanner.Statement{
-		SQL: `SELECT topic, name AS subscription, autoextend FROM Subscriptions WHERE name IS NOT NULL ORDER BY topic, subscription`,
+		SQL: `SELECT topic, name AS subscription, autoextend FROM pubsub_subscriptions WHERE name IS NOT NULL ORDER BY topic, subscription`,
 	}
 
 	iter := client.Single().Query(ctx, stmt)

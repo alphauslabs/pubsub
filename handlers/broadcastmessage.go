@@ -26,7 +26,7 @@ type Raw struct {
 func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload, attributes, subStatus
-			  FROM Messages where processed = false`,
+			  FROM pubsub_messages where processed = false`,
 	}
 
 	iter := app.Client.Single().Query(ctx, stmt)
@@ -126,7 +126,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	current := time.Now().UTC()
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload, attributes, subStatus
-			  FROM Messages
+			  FROM pubsub_messages
 			  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
 		Params: map[string]any{"lastQueryTime": t},
 	}

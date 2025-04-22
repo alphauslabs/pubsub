@@ -28,9 +28,9 @@ type server struct {
 }
 
 const (
-	MessagesTable = "Messages"
-	TopicsTable   = "Topics"
-	SubsTable     = "Subscriptions"
+	MessagesTable      = "pubsub_messages"
+	TopicsTable        = "pubsub_topics"
+	SubscriptionsTable = "pubsub_subscriptions"
 )
 
 // Publish a message to a topic
@@ -288,8 +288,8 @@ func (s *server) GetTopic(ctx context.Context, req *pb.GetTopicRequest) (*pb.Get
 	}
 
 	stmt := spanner.Statement{
-		SQL:    `SELECT name, createdAt, updatedAt FROM Topics WHERE name = @name LIMIT 1`,
-		Params: map[string]any{"name": req.Name},
+		SQL:    `SELECT name, createdAt, updatedAt FROM @table WHERE name = @name LIMIT 1`,
+		Params: map[string]any{"table": TopicsTable, "name": req.Name},
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
@@ -332,7 +332,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		stmtGet := spanner.Statement{
-			SQL: `SELECT createdAt FROM Topics WHERE name = @name`,
+			SQL: `SELECT createdAt FROM ` + TopicsTable + ` WHERE name = @name`,
 			Params: map[string]any{
 				"name": req.Name,
 			},
@@ -354,7 +354,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		}
 
 		stmtDelete := spanner.Statement{
-			SQL: `DELETE FROM Topics WHERE name = @name`,
+			SQL: `DELETE FROM ` + TopicsTable + ` WHERE name = @name`,
 			Params: map[string]any{
 				"name": req.Name,
 			},
@@ -368,7 +368,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		}
 
 		mutation := spanner.Insert(
-			"Topics",
+			TopicsTable,
 			[]string{"name", "createdAt", "updatedAt"},
 			[]any{req.NewName, createdAt.Time, spanner.CommitTimestamp},
 		)
@@ -377,7 +377,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		}
 
 		stmtSubs := spanner.Statement{
-			SQL: `UPDATE Subscriptions
+			SQL: `UPDATE ` + SubscriptionsTable + `
                   SET topic = @newName,
                       updatedAt = PENDING_COMMIT_TIMESTAMP()
                   WHERE topic = @oldName`,
@@ -392,7 +392,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 		}
 
 		stmtMsgs := spanner.Statement{
-			SQL: `UPDATE Messages
+			SQL: `UPDATE ` + MessagesTable + `
                   SET topic = @newName,
                       updatedAt = PENDING_COMMIT_TIMESTAMP()
                   WHERE topic = @oldName`,
@@ -434,7 +434,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 	_, err := s.Client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		// Check if topic exists
 		checkStmt := spanner.Statement{
-			SQL:    `SELECT name FROM Topics WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
+			SQL:    `SELECT name FROM ` + TopicsTable + ` WHERE name = @name`, // (--THEN RETURN name) {but need to modify proto to return also the name}
 			Params: map[string]any{"name": req.Name},
 		}
 		iter := txn.Query(ctx, checkStmt)
@@ -456,7 +456,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 
 		// Delete all related subscriptions referencing this topic
 		delSubs := spanner.Statement{
-			SQL: `DELETE FROM Subscriptions WHERE topic = @Topic`,
+			SQL: `DELETE FROM ` + SubscriptionsTable + ` WHERE topic = @Topic`,
 			Params: map[string]any{
 				"Topic": req.Name,
 			},
@@ -497,7 +497,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 }
 
 func (s *server) ListTopics(ctx context.Context, in *pb.ListTopicsRequest) (*pb.ListTopicsResponse, error) {
-	stmt := spanner.Statement{SQL: `SELECT name, createdAt, updatedAt FROM Topics`}
+	stmt := spanner.Statement{SQL: `SELECT name, createdAt, updatedAt FROM ` + TopicsTable}
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
@@ -540,7 +540,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 	}
 
 	m := spanner.Insert(
-		SubsTable,
+		SubscriptionsTable,
 		[]string{"name", "topic", "createdAt", "updatedAt", "autoextend"},
 		[]any{req.Name, req.Topic, spanner.CommitTimestamp, spanner.CommitTimestamp, autoExtend},
 	)
@@ -562,7 +562,7 @@ func (s *server) GetSubscription(ctx context.Context, req *pb.GetSubscriptionReq
 	}
 
 	stmt := spanner.Statement{
-		SQL: `SELECT name, topic, autoextend FROM Subscriptions WHERE name = @name`,
+		SQL: `SELECT name, topic, autoextend FROM ` + SubscriptionsTable + ` WHERE name = @name`,
 		Params: map[string]any{
 			"name": req.Name,
 		},
@@ -608,7 +608,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 
 	// Update the subscription
 	m := spanner.Update(
-		SubsTable,
+		SubscriptionsTable,
 		[]string{"name", "autoextend", "updatedAt"},
 		[]any{
 			req.Name,
@@ -638,7 +638,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 		return nil, status.Error(codes.InvalidArgument, "Subscription name is required")
 	}
 
-	m := spanner.Delete(SubsTable, spanner.Key{req.Name})
+	m := spanner.Delete(SubscriptionsTable, spanner.Key{req.Name})
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{m})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
@@ -650,7 +650,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 
 func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
 	stmt := spanner.Statement{
-		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM Subscriptions`,
+		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM ` + SubscriptionsTable,
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
