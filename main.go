@@ -33,12 +33,13 @@ import (
 
 var (
 	port = flag.String("port", ":50051", "Main gRPC server port")
+	env  = flag.String("env", "dev", "Environment: dev, prod")
 )
 
 func main() {
-	client, err := logging.NewClient(context.Background(), "labs-169405")
+	client, err := createLoggingClient(*env)
 	if err != nil {
-		log.Fatalf("Failed to create Google Cloud Logging client: %v", err)
+		glog.Fatalf("Failed to create Google Cloud Logging client: %v", err)
 	}
 	defer client.Close()
 
@@ -59,20 +60,11 @@ func main() {
 
 	go serveHealthChecks() // _handle health checks from our LB
 
-	spconf := spanner.ClientConfig{
-		SessionPoolConfig: spanner.SessionPoolConfig{
-			TrackSessionHandles: true,
-			InactiveTransactionRemovalOptions: spanner.InactiveTransactionRemovalOptions{
-				ActionOnInactiveTransaction: spanner.WarnAndClose,
-			},
-		},
-		Logger: log.New(os.Stdout, "spanner-client: ", log.Lshortfile),
-	}
-	spannerClient, err := spanner.NewClientWithConfig(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main", spconf)
+	spannerClient, err := createSpannerClient(*env)
 	if err != nil {
-		log.Fatalf("failed to create Spanner client: %v", err)
-		return
+		glog.Fatalf("Failed to create Spanner client: %v", err)
 	}
+
 	defer spannerClient.Close()
 	ap := &app.PubSub{
 		Client: spannerClient,
@@ -222,4 +214,39 @@ func serveHealthChecks() {
 		glog.Info("Health check connection accepted, ", conn.RemoteAddr())
 		conn.Close()
 	}
+}
+
+func createSpannerClient(env string) (*spanner.Client, error) {
+	if env == "dev" {
+		return spanner.NewClientWithConfig(context.Background(), "projects/labs-169405/instances/alphaus-dev/databases/main", spanner.ClientConfig{
+			SessionPoolConfig: spanner.SessionPoolConfig{
+				TrackSessionHandles: true,
+				InactiveTransactionRemovalOptions: spanner.InactiveTransactionRemovalOptions{
+					ActionOnInactiveTransaction: spanner.WarnAndClose,
+				},
+			},
+			Logger: log.New(os.Stdout, "spanner-client: ", log.Lshortfile),
+		})
+	} else if env == "prod" {
+		return spanner.NewClientWithConfig(context.Background(), "projects/mobingi-main/instances/alphaus-prod/databases/main", spanner.ClientConfig{
+			SessionPoolConfig: spanner.SessionPoolConfig{
+				TrackSessionHandles: true,
+				InactiveTransactionRemovalOptions: spanner.InactiveTransactionRemovalOptions{
+					ActionOnInactiveTransaction: spanner.WarnAndClose,
+				},
+			},
+			Logger: log.New(os.Stdout, "spanner-client: ", log.Lshortfile),
+		})
+	}
+	return nil, fmt.Errorf("invalid environment: %s", env)
+}
+
+func createLoggingClient(env string) (*logging.Client, error) {
+	if env == "dev" {
+		return logging.NewClient(context.Background(), "labs-169405")
+	} else if env == "prod" {
+		return logging.NewClient(context.Background(), "mobingi-main")
+	}
+
+	return nil, fmt.Errorf("invalid environment: %s", env)
 }
