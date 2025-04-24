@@ -19,8 +19,7 @@ var (
 	topics       = flag.String("topics", "", "Topics to publish messages to, fmt: {topic1},{topic2}")
 )
 
-func publishMessage(wg *sync.WaitGroup, id int, topic string, ch chan int, client *pbsb.PubSubClient) {
-	defer wg.Done()
+func publishMessage(id int, topic string, ch chan int, client *pbsb.PubSubClient) {
 	msg := &pbsb.PublishRequest{
 		Message: fmt.Sprintf("Message %d for topic=%v", id, topic),
 		Topic:   topic,
@@ -63,11 +62,19 @@ func main() {
 
 	defer cclient.Close()
 
+	limit := make(chan struct{}, 100)
 	ts := strings.Split(*topics, ",")
 	for _, t := range ts {
 		for i := range *numMessages {
+			limit <- struct{}{}
 			wg.Add(1)
-			go publishMessage(&wg, i, t, counterr, cclient)
+			go func() {
+				defer func() {
+					<-limit
+					wg.Done()
+				}()
+				publishMessage(i, t, counterr, cclient)
+			}()
 		}
 	}
 	wg.Wait()
