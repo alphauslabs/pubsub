@@ -117,20 +117,20 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 	defer msg.Mu.Unlock()
 
 	if msg.IsFinalDeleted() {
-		return nil, nil
+		return nil, fmt.Errorf("message %s already deleted", messageID)
 	}
 
 	msg.Subscriptions[subId].Mu.RLock()
 	if msg.Subscriptions[subId].IsDeleted() {
 		glog.Infof("[broadcast-handlelock] Message %s already deleted for sub=%s", messageID, subId)
 		msg.Subscriptions[subId].Mu.RUnlock()
-		return nil, nil
+		return nil, fmt.Errorf("message %s already deleted for sub=%s", messageID, subId)
 	}
 
 	if msg.Subscriptions[subId].IsLocked() {
 		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
 		msg.Subscriptions[subId].Mu.RUnlock()
-		return nil, nil
+		return nil, fmt.Errorf("message %s already locked for sub=%s", messageID, subId)
 	}
 
 	msg.Subscriptions[subId].Mu.RUnlock()
