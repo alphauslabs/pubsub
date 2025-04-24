@@ -110,7 +110,7 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 	// retrieve the message from storage
 	msg := storage.GetMessage(messageID, topic)
 	if msg == nil {
-		return nil, nil
+		return nil, fmt.Errorf("message %s not found/available/locked", messageID)
 	}
 
 	msg.Mu.Lock()
