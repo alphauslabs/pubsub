@@ -168,11 +168,11 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, e
 	if m == nil {
 		return nil, nil
 	}
+	m.Mu.RLock()
+	defer m.Mu.RUnlock()
 
-	m.Mu.Lock()
 	m.Subscriptions[subId].Unlock()
 	m.Subscriptions[subId].ClearAge()
-	m.Mu.Unlock()
 
 	return nil, nil
 }

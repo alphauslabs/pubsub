@@ -172,7 +172,6 @@ outer:
 							return
 						}
 					}
-
 				}()
 				// Wait for acknowledgement before doing another send.
 				go func() {
