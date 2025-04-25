@@ -102,37 +102,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
 outer:
 	for {
-		send := false
-		var msgId string
 		select {
 		case <-stream.Context().Done():
-			if send {
-				m := storage.GetMessage(msgId, in.Topic)
-				if m == nil {
-					return nil
-				}
-
-				m.Mu.RLock()
-				// Check for nil map or missing subscription
-				if m.Subscriptions == nil {
-					glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
-					m.Mu.Unlock()
-					return nil
-				}
-
-				subInfo, exists := m.Subscriptions[in.Subscription]
-				if !exists {
-					glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
-					m.Mu.RUnlock()
-					return nil
-				}
-				m.Mu.RUnlock()
-
-				subInfo.ClearAge()
-				subInfo.Unlock()
-
-				glog.Errorf("[SubscribeHandler] Client disconnected after receiving message, closing stream for subscription %s", in.Subscription)
-			}
 			glog.Errorf("[SubscribeHandler] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
@@ -173,8 +144,36 @@ outer:
 					}
 				}
 			} else {
-				msgId = msg.Id
-				send = true
+				go func() {
+					<-stream.Context().Done()
+
+					m := storage.GetMessage(msg.Id, in.Topic)
+					if m == nil {
+						return
+					}
+
+					m.Mu.RLock()
+					// Check for nil map or missing subscription
+					if m.Subscriptions == nil {
+						glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
+						m.Mu.Unlock()
+						return
+					}
+
+					subInfo, exists := m.Subscriptions[in.Subscription]
+					if !exists {
+						glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
+						m.Mu.RUnlock()
+						return
+					}
+					m.Mu.RUnlock()
+
+					subInfo.ClearAge()
+					subInfo.Unlock()
+
+					glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
+					return
+				}()
 				// Wait for acknowledgement before doing another send.
 				ch := make(chan struct{})
 				go func() {
@@ -217,33 +216,7 @@ outer:
 								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-						case <-stream.Context().Done():
-							m := storage.GetMessage(msg.Id, in.Topic)
-							if m == nil {
-								return
-							}
 
-							m.Mu.RLock()
-							// Check for nil map or missing subscription
-							if m.Subscriptions == nil {
-								glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
-								m.Mu.Unlock()
-								return
-							}
-
-							subInfo, exists := m.Subscriptions[in.Subscription]
-							if !exists {
-								glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
-								m.Mu.RUnlock()
-								return
-							}
-							m.Mu.RUnlock()
-
-							subInfo.ClearAge()
-							subInfo.Unlock()
-
-							glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
-							return
 						}
 					}
 				}()
