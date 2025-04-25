@@ -149,29 +149,18 @@ outer:
 					defer close(clientDisconnect)
 					<-stream.Context().Done()
 
-					m := storage.GetMessage(msg.Id, in.Topic)
-					if m == nil {
-						return
+					broadcastData := handlers.BroadCastInput{
+						Type: handlers.MsgEvent,
+						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 					}
-
-					m.Mu.RLock()
-					// Check for nil map or missing subscription
-					if m.Subscriptions == nil {
-						glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
-						m.Mu.Unlock()
-						return
+					bin, _ := json.Marshal(broadcastData)
+					out := s.Op.Broadcast(stream.Context(), bin)
+					for _, o := range out {
+						if o.Error != nil {
+							glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+							return
+						}
 					}
-
-					subInfo, exists := m.Subscriptions[in.Subscription]
-					if !exists {
-						glog.Errorf("[SubscribeHaf ndler] Subscription %s not found in message %s", in.Subscription, m.Id)
-						m.Mu.RUnlock()
-						return
-					}
-					m.Mu.RUnlock()
-
-					subInfo.ClearAge()
-					subInfo.Unlock()
 
 					glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
 					return
@@ -221,13 +210,11 @@ outer:
 						}
 					}
 				}()
-				for {
-					select {
-					case <-clientDisconnect:
-						return nil
-					case <-ch:
-						continue outer
-					}
+				select {
+				case <-clientDisconnect:
+					return nil
+				case <-ch:
+					continue outer
 				}
 			}
 		}
