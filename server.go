@@ -145,28 +145,36 @@ outer:
 				}
 			} else {
 				clientDisconnect := make(chan struct{})
+				ch := make(chan struct{})
 				go func() {
-					defer close(clientDisconnect)
-					<-stream.Context().Done()
+					for {
+						select {
+						case <-stream.Context().Done():
+							func() {
+								defer close(clientDisconnect)
+								broadcastData := handlers.BroadCastInput{
+									Type: handlers.MsgEvent,
+									Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
+								}
+								bin, _ := json.Marshal(broadcastData)
+								out := s.Op.Broadcast(stream.Context(), bin)
+								for _, o := range out {
+									if o.Error != nil {
+										glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+										return
+									}
+								}
 
-					broadcastData := handlers.BroadCastInput{
-						Type: handlers.MsgEvent,
-						Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-					}
-					bin, _ := json.Marshal(broadcastData)
-					out := s.Op.Broadcast(stream.Context(), bin)
-					for _, o := range out {
-						if o.Error != nil {
-							glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+								glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
+								return
+							}()
+						case <-ch:
 							return
 						}
 					}
 
-					glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
-					return
 				}()
 				// Wait for acknowledgement before doing another send.
-				ch := make(chan struct{})
 				go func() {
 					defer close(ch)
 					ticker := time.NewTicker(1000 * time.Millisecond)
