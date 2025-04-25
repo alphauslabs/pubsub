@@ -144,7 +144,9 @@ outer:
 					}
 				}
 			} else {
+				clientDisconnect := make(chan struct{})
 				go func() {
+					defer close(clientDisconnect)
 					<-stream.Context().Done()
 
 					m := storage.GetMessage(msg.Id, in.Topic)
@@ -162,7 +164,7 @@ outer:
 
 					subInfo, exists := m.Subscriptions[in.Subscription]
 					if !exists {
-						glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
+						glog.Errorf("[SubscribeHaf ndler] Subscription %s not found in message %s", in.Subscription, m.Id)
 						m.Mu.RUnlock()
 						return
 					}
@@ -216,11 +218,17 @@ outer:
 								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-
 						}
 					}
 				}()
-				<-ch
+				for {
+					select {
+					case <-clientDisconnect:
+						return nil
+					case <-ch:
+						continue outer
+					}
+				}
 			}
 		}
 	}
