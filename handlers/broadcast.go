@@ -174,6 +174,7 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, e
 	m.Subscriptions[subId].Unlock()
 	m.Subscriptions[subId].ClearAge()
 
+	glog.Infof("[broadcast-handleunlock] Message=%s unlocked successfully for sub=%s", messageID, subId)
 	return nil, nil
 }
 
