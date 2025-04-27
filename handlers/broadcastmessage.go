@@ -226,6 +226,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	// Always update the timestamp regardless of whether messages were found
 	// This ensures we don't repeatedly query the same time range
 	*t = current
+	glog.Infof("[BroadcastMessage] count: %v", count)
 
 	if count > 0 {
 		glog.Infof("[BroadcastMessage] Processed %d new messages", count)
