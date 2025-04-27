@@ -16,37 +16,61 @@ func RunCheckForExpired(ctx context.Context) {
 	sweep := func() {
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
-		for _, v := range storage.TopicMessages {
-			v.Mu.RLock()
-			for _, v1 := range v.Messages {
-				if !v1.IsFinalDeleted() {
-					v1.Mu.RLock()
-					count := 0
-					for _, t := range v1.Subscriptions {
-						if t.IsDeleted() {
-							count++
-							continue
-						}
 
-						if t.Age.IsZero() {
-							continue
-						}
-						switch {
-						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
-							t.Unlock()
-							t.ClearAge()
-						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:
-							t.RenewAge()
-						}
-					}
-					if count == len(v1.Subscriptions) {
-						v1.MarkAsFinalDeleted()
-						glog.Info("[sweep] set to final deleted message:", v1.Id)
-					}
-					v1.Mu.RUnlock()
+		for _, topic := range storage.TopicMessages {
+			topic.Mu.RLock()
+
+			// First pass: identify messages that need final deletion
+			var toMarkDeleted []string
+			for msgID, msg := range topic.Messages {
+				if msg.IsFinalDeleted() {
+					continue
 				}
+
+				msg.Mu.RLock()
+				deletedCount := 0
+
+				// Check each subscription
+				for _, sub := range msg.Subscriptions {
+					if sub.IsDeleted() {
+						deletedCount++
+						continue
+					}
+
+					if !sub.Age.IsZero() {
+						ageSeconds := time.Since(sub.Age).Seconds()
+						if ageSeconds >= 30 {
+							if atomic.LoadInt32(&sub.AutoExtend) == 0 {
+								sub.ClearAge()
+								sub.Unlock()
+							} else if atomic.LoadInt32(&sub.AutoExtend) == 1 {
+								sub.RenewAge()
+							}
+						}
+					}
+				}
+
+				// If all subscriptions are deleted, mark this message
+				if deletedCount == len(msg.Subscriptions) {
+					toMarkDeleted = append(toMarkDeleted, msgID)
+				}
+
+				msg.Mu.RUnlock()
 			}
-			v.Mu.RUnlock()
+
+			topic.Mu.RUnlock()
+
+			// Second pass: mark messages as deleted (with proper write lock)
+			if len(toMarkDeleted) > 0 {
+				topic.Mu.Lock()
+				for _, msgID := range toMarkDeleted {
+					if msg, exists := topic.Messages[msgID]; exists {
+						msg.MarkAsFinalDeleted()
+						glog.Info("[sweep] set to final deleted message:", msg.Id)
+					}
+				}
+				topic.Mu.Unlock()
+			}
 		}
 	}
 
@@ -67,18 +91,27 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 	sweep := func() {
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
-		for _, v := range storage.TopicMessages {
-			v.Mu.Lock()
-			for _, v1 := range v.Messages {
-				if v1.IsFinalDeleted() {
-					// Update the processed status in Spanner
-					if err := utils.UpdateMessageProcessedStatus(app.Client, v1.Id); err != nil {
-						glog.Errorf("[sweep] error updating message %s processed status: %v", v1.Id, err)
-					}
 
-					delete(v.Messages, v1.Id)
-					glog.Info("[sweep] deleted message:", v1.Id)
+		for _, v := range storage.TopicMessages {
+			// Create a list of messages to delete first
+			var toDelete []string
+
+			v.Mu.Lock()
+			for msgID, msg := range v.Messages {
+				if msg.IsFinalDeleted() {
+					toDelete = append(toDelete, msgID)
 				}
+			}
+
+			// Then delete them after identifying all candidates
+			for _, msgID := range toDelete {
+				// Update the processed status in Spanner
+				if err := utils.UpdateMessageProcessedStatus(app.Client, msgID); err != nil {
+					glog.Errorf("[sweep] error updating message %s processed status: %v", msgID, err)
+				}
+
+				delete(v.Messages, msgID)
+				glog.Info("[sweep] deleted message:", msgID)
 			}
 			v.Mu.Unlock()
 		}
