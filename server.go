@@ -119,13 +119,39 @@ outer:
 				Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 			}
 
+			lockcount := 0
+			allLocked := false
 			bin, _ := json.Marshal(broadcastData)
 			outs := s.Op.Broadcast(stream.Context(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
 					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
-					continue outer
+					lockcount++
 				}
+			}
+			if len(outs) == lockcount {
+				allLocked = true
+			}
+
+			if !allLocked && lockcount == 0 {
+				continue outer
+			}
+
+			if !allLocked && lockcount > 0 {
+				glog.Errorf("[SubscribeHandler] Failed to lock message %s for subscription %s, err: %v", msg.Id, in.Subscription, err)
+				// Broadcast unlock on error
+				broadcastData := handlers.BroadCastInput{
+					Type: handlers.MsgEvent,
+					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
+				}
+				bin, _ := json.Marshal(broadcastData)
+				out := s.Op.Broadcast(stream.Context(), bin)
+				for _, o := range out {
+					if o.Error != nil {
+						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+					}
+				}
+				continue outer
 			}
 
 			if err := stream.Send(msg.Message); err != nil {
@@ -210,6 +236,8 @@ outer:
 								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
+						case <-clientDisconnect:
+							return
 						}
 					}
 				}()
