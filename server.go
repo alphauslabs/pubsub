@@ -126,6 +126,7 @@ outer:
 			for _, o := range outs {
 				if o.Error != nil {
 					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
+				} else {
 					lockcount++
 				}
 			}
