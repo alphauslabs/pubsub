@@ -127,8 +127,9 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 	stmt := spanner.Statement{
 		SQL: `SELECT id, topic, payload, attributes, subStatus
 			  FROM pubsub_messages
-			  WHERE processed = FALSE AND createdAt > @lastQueryTime`,
-		Params: map[string]any{"lastQueryTime": t},
+			  WHERE processed = FALSE AND createdAt > @lastQueryTime
+			  ORDER BY createdAt ASC`,
+		Params: map[string]any{"lastQueryTime": *t},
 	}
 
 	iter := app.Client.Single().Query(ctx, stmt)
@@ -221,8 +222,13 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 	}
+
+	// Always update the timestamp regardless of whether messages were found
+	// This ensures we don't repeatedly query the same time range
+	*t = current
+
 	if count > 0 {
-		*t = current
+		glog.Infof("[BroadcastMessage] Processed %d new messages", count)
 	}
 }
 
