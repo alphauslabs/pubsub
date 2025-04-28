@@ -681,7 +681,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 
 func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
 	stmt := spanner.Statement{
-		SQL: `SELECT name, topic, visibility_timeout, autoextend FROM ` + SubscriptionsTable,
+		SQL: `SELECT name, topic, autoextend FROM ` + SubscriptionsTable,
 	}
 
 	iter := s.Client.Single().Query(ctx, stmt)
@@ -698,13 +698,12 @@ func (s *server) ListSubscriptions(ctx context.Context, in *pb.ListSubscriptions
 		}
 
 		var (
-			name              string
-			topic             string
-			visibilityTimeout int32
-			autoextend        bool
+			name       string
+			topic      string
+			autoextend bool
 		)
 
-		if err := row.Columns(&name, &topic, &visibilityTimeout, &autoextend); err != nil {
+		if err := row.Columns(&name, &topic, &autoextend); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to parse subscription data: %v", err)
 		}
 
