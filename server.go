@@ -281,10 +281,11 @@ func (s *server) ExtendVisibilityTimeout(ctx context.Context, in *pb.ExtendVisib
 		Msg:  []byte(fmt.Sprintf("extend:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
 	}
 	bin, _ := json.Marshal(broadcastData)
-	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
+	out := s.Op.Broadcast(ctx, bin)
 	for _, v := range out {
 		if v.Error != nil {
 			glog.Errorf("[Extend Visibility] Error in extending timeout for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
+			return nil, status.Errorf(codes.Internal, "failed to extend visibility timeout: %v", v.Error)
 		}
 	}
 
@@ -737,6 +738,28 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 	return &pb.GetMessagesInQueueResponse{
 		InQueue: r,
 	}, nil
+}
+
+func (s *server) RequeueMessage(ctx context.Context, in *pb.RequeueMessageRequest) (*emptypb.Empty, error) {
+	if in.Subscription == "" || in.Topic == "" || in.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "Subscription, Topic and Message ID are required")
+	}
+
+	broadcastData := handlers.BroadCastInput{
+		Type: handlers.MsgEvent,
+		Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
+	}
+	bin, _ := json.Marshal(broadcastData)
+	out := s.Op.Broadcast(ctx, bin)
+	for _, v := range out {
+		if v.Error != nil {
+			glog.Errorf("[Requeue] Error in requeuing msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
+			return nil, status.Error(codes.Internal, "failed to requeue message: "+v.Error.Error())
+		}
+	}
+
+	glog.Infof("[Requeue] Message %s requeued for subscription %s", in.Id, in.Subscription)
+	return &emptypb.Empty{}, nil
 }
 
 func (s *server) notifyLeader(ctx context.Context) {
