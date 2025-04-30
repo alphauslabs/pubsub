@@ -724,7 +724,7 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 	if in.Subscription == "triggercrash" {
 		panic("trigger crash")
 	}
-	count, err := storage.GetSubscriptionQueueDepths()
+	count, err := storage.GetSubscriptionQueueDepths(in.Topic, in.Subscription)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
 	}

@@ -463,8 +463,16 @@ func GetMessagesStatsByTopic() (map[string]struct {
 }
 
 // GetSubscriptionQueueDepths returns queue depths for monitoring purposes
-func GetSubscriptionQueueDepths() ([]InQueue, error) {
-	counts, err := GetMessagesCountBySubscription("", "")
+// in could be topic, subscription or both. fmt: in[0] = topic, in[1] = subscription
+func GetSubscriptionQueueDepths(in ...string) ([]InQueue, error) {
+	var topic, sub string
+	if len(in) == 1 {
+		topic = in[0]
+	} else if len(in) == 2 {
+		topic = in[0]
+		sub = in[1]
+	}
+	counts, err := GetMessagesCountBySubscription(topic, sub)
 	if err != nil {
 		return nil, err
 	}

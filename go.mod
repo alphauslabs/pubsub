@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	cloud.google.com/go/logging v1.13.0
 	cloud.google.com/go/spanner v1.76.1
-	github.com/alphauslabs/pubsub-proto v0.2.3
+	github.com/alphauslabs/pubsub-proto v0.2.4
 	github.com/flowerinthenight/hedge v1.18.0
 	github.com/flowerinthenight/timedoff v1.0.2
 	github.com/golang/glog v1.2.4
