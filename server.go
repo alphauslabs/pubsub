@@ -1,4 +1,3 @@
-// server.go
 package main
 
 import (
@@ -33,7 +32,6 @@ const (
 	SubscriptionsTable = "pubsub_subscriptions"
 )
 
-// Publish a message to a topic
 func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.PublishResponse, error) {
 	if in.Topic == "" {
 		return nil, status.Error(codes.InvalidArgument, "topic must not be empty")
@@ -91,7 +89,6 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	return &pb.PublishResponse{MessageId: msgId}, nil
 }
 
-// Subscribe to receive messages for a subscription
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
 	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
 	if err != nil {
@@ -113,32 +110,24 @@ outer:
 				continue
 			}
 
-			// Ask leader to lock this message for all nodes
+			// Ask others to lock the message.
 			broadcastData := handlers.BroadCastInput{
 				Type: handlers.MsgEvent,
 				Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 			}
 
-			lockcount := 0
-			allLocked := false
+			allLocked := true
 			bin, _ := json.Marshal(broadcastData)
 			outs := s.Op.Broadcast(stream.Context(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
 					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
-				} else {
-					lockcount++
+					allLocked = false
 				}
 			}
-			if len(outs) == lockcount {
-				allLocked = true
-			}
 
-			if !allLocked && lockcount == 0 {
-				continue outer
-			}
-
-			if !allLocked && lockcount > 0 {
+			// Ask others to unlock the message and continue.
+			if !allLocked {
 				glog.Errorf("[SubscribeHandler] Failed to lock message %s for subscription %s, err: %v", msg.Id, in.Subscription, err)
 				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
