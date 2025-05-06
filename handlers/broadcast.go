@@ -113,27 +113,22 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 		return nil, nil
 	}
 
-	msg.Mu.Lock()
-	defer msg.Mu.Unlock()
+	msg.Mu.RLock()
+	defer msg.Mu.RUnlock()
 
 	if msg.IsFinalDeleted() {
 		return nil, fmt.Errorf("message %s already deleted", messageID)
 	}
 
-	msg.Subscriptions[subId].Mu.RLock()
 	if msg.Subscriptions[subId].IsDeleted() {
 		glog.Infof("[broadcast-handlelock] Message %s already deleted for sub=%s", messageID, subId)
-		msg.Subscriptions[subId].Mu.RUnlock()
 		return nil, fmt.Errorf("message %s already deleted for sub=%s", messageID, subId)
 	}
 
 	if msg.Subscriptions[subId].IsLocked() {
 		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
-		msg.Subscriptions[subId].Mu.RUnlock()
 		return nil, fmt.Errorf("message %s already locked for sub=%s", messageID, subId)
 	}
-
-	msg.Subscriptions[subId].Mu.RUnlock()
 
 	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)
@@ -206,9 +201,9 @@ func handleExtendMsg(app *app.PubSub, messageID string, subId, topic string) ([]
 		return nil, nil
 	}
 
-	m.Mu.Lock()
+	m.Mu.RLock()
 	m.Subscriptions[subId].RenewAge()
-	m.Mu.Unlock()
+	m.Mu.RUnlock()
 
 	return nil, nil
 }
