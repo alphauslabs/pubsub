@@ -186,7 +186,9 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]
 	}
 
 	// Delete for this subscription
+	m.Mu.RLock()
 	m.Subscriptions[subId].MarkAsDeleted()
+	m.Mu.RUnlock()
 	// Update the message status in Spanner
 	err := utils.UpdateMessageProcessedStatusForSub(app.Client, messageID, subId)
 	if err != nil {
