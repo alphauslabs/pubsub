@@ -131,7 +131,7 @@ func main() {
 				})
 			}
 		}()
-		if err := run(ctx, &server{PubSub: ap, ch: make(chan struct{})}); err != nil {
+		if err := run(ctx, &server{PubSub: ap, shutdown: make(chan struct{})}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()

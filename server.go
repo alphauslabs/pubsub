@@ -24,7 +24,7 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
-	ch chan struct{} // for graceful shutdown
+	shutdown chan struct{} // for graceful shutdown
 }
 
 const (
@@ -101,7 +101,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		select {
-		case <-s.ch:
+		case <-s.shutdown:
 			glog.Infof("[SubscribeHandler] Server shutting down, closing stream for subscription %s", in.Subscription)
 			return nil
 		case <-stream.Context().Done():
@@ -148,9 +148,7 @@ outer:
 				continue outer
 			}
 
-			if err := stream.Send(msg.Message); err != nil {
-				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
-				// Broadcast unlock on error
+			unlock := func() {
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
 					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
@@ -160,47 +158,29 @@ outer:
 				for _, o := range out {
 					if o.Error != nil {
 						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
-						continue outer
 					}
 				}
+			}
+
+			if err := stream.Send(msg.Message); err != nil {
+				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
+				unlock()
+				continue outer
 			} else {
-				clientDisconnect := make(chan struct{})
+				disconnect := make(chan struct{})
 				ch := make(chan struct{})
+
 				go func() {
 					select {
-					case <-s.ch:
-						defer close(clientDisconnect)
-						broadcastData := handlers.BroadCastInput{
-							Type: handlers.MsgEvent,
-							Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-						}
-						bin, _ := json.Marshal(broadcastData)
-						out := s.Op.Broadcast(stream.Context(), bin)
-						for _, o := range out {
-							if o.Error != nil {
-								glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
-								return
-							}
-						}
-
+					case <-s.shutdown:
 						glog.Infof("[SubscribeHandler] Server shutting down while monitoring message %s", msg.Id)
+						defer close(disconnect)
+						unlock()
 						return
 					case <-stream.Context().Done():
-						defer close(clientDisconnect)
-						broadcastData := handlers.BroadCastInput{
-							Type: handlers.MsgEvent,
-							Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-						}
-						bin, _ := json.Marshal(broadcastData)
-						out := s.Op.Broadcast(stream.Context(), bin)
-						for _, o := range out {
-							if o.Error != nil {
-								glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
-								return
-							}
-						}
-
-						glog.Infof("[SubscribeHandler] Client context done while monitoring message %s", msg.Id)
+						glog.Infof("[SubscribeHandler] Client disconnected while monitoring message %s", msg.Id)
+						defer close(disconnect)
+						unlock()
 						return
 					case <-ch:
 						return
@@ -247,13 +227,13 @@ outer:
 								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-						case <-clientDisconnect:
+						case <-disconnect:
 							return
 						}
 					}
 				}()
 				select {
-				case <-clientDisconnect:
+				case <-disconnect:
 					return nil
 				case <-ch:
 					continue outer
@@ -791,5 +771,5 @@ func (s *server) notifyLeader(ctx context.Context) {
 }
 
 func (s *server) Shutdown() {
-	close(s.ch)
+	close(s.shutdown)
 }

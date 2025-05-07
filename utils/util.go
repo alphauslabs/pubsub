@@ -114,15 +114,12 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 }
 
 func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
-	glog.Infof("[Subscribe] Checking if subscription exists for topic: %s", topicID)
 	subs, err := storage.GetSubscribtionsForTopic(topicID)
 
 	if err != nil {
 		glog.Errorf("[Subscribe] Topic %s not found in storage", topicID)
 		return status.Errorf(codes.NotFound, "Topic %s not found", topicID)
 	}
-
-	glog.Infof("[Subscribe] Found subscriptions for topic %s: %v", topicID, subs)
 
 	// Check if the provided subscription ID exists in the topic's subscriptions
 	found := false
