@@ -77,13 +77,12 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 			}
 
 			for k := range tobedeleted {
-				// Update the processed status in Spanner
 				if err := utils.UpdateMessageProcessedStatus(app.Client, k); err != nil {
 					glog.Errorf("[sweep] error updating message %s processed status: %v", k, err)
+				} else {
+					delete(v.Messages, k)
+					glog.Info("[sweep] deleted message:", k)
 				}
-
-				delete(v.Messages, k)
-				glog.Info("[sweep] deleted message:", k)
 			}
 			v.Mu.Unlock()
 		}

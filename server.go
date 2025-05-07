@@ -239,10 +239,8 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 		Msg:  []byte(fmt.Sprintf("delete:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
 	}
 
-	glog.Infof("[AcknowledgeHandler] Broadcasting acknowledgment for message:%v, sub:%v", in.Id, in.Subscription)
 	bin, _ := json.Marshal(broadcastData)
 	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
-	glog.Info("[AcknowledgeHandler] Broadcast response len=", len(out))
 	for _, v := range out {
 		if v.Error != nil {
 			glog.Errorf("[AcknowledgeHandler] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
