@@ -131,7 +131,7 @@ func main() {
 				})
 			}
 		}()
-		if err := run(ctx, &server{PubSub: ap}); err != nil {
+		if err := run(ctx, &server{PubSub: ap, ch: make(chan struct{})}); err != nil {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
@@ -194,6 +194,7 @@ func run(ctx context.Context, serverconf *server) error {
 
 	go func() {
 		<-ctx.Done()
+		serverconf.Shutdown()
 		s.GracefulStop()
 	}()
 

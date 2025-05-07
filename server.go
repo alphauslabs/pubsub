@@ -24,6 +24,7 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
+	ch chan struct{} // for graceful shutdown
 }
 
 const (
@@ -100,8 +101,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		select {
+		case <-s.ch:
+			glog.Infof("[SubscribeHandler] Server shutting down, closing stream for subscription %s", in.Subscription)
+			return nil
 		case <-stream.Context().Done():
-			glog.Errorf("[SubscribeHandler] Client disconnected, closing stream for subscription %s", in.Subscription)
+			glog.Infof("[SubscribeHandler] Client disconnected, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
@@ -128,7 +132,7 @@ outer:
 
 			// Ask others to unlock the message and continue.
 			if !allLocked {
-				glog.Errorf("[SubscribeHandler] Failed to lock message %s for subscription %s, err: %v", msg.Id, in.Subscription, err)
+				glog.Errorf("[SubscribeHandler] Failed to lock message %s for subscription %s", msg.Id, in.Subscription)
 				// Broadcast unlock on error
 				broadcastData := handlers.BroadCastInput{
 					Type: handlers.MsgEvent,
@@ -164,6 +168,23 @@ outer:
 				ch := make(chan struct{})
 				go func() {
 					select {
+					case <-s.ch:
+						defer close(clientDisconnect)
+						broadcastData := handlers.BroadCastInput{
+							Type: handlers.MsgEvent,
+							Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
+						}
+						bin, _ := json.Marshal(broadcastData)
+						out := s.Op.Broadcast(stream.Context(), bin)
+						for _, o := range out {
+							if o.Error != nil {
+								glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+								return
+							}
+						}
+
+						glog.Infof("[SubscribeHandler] Server shutting down while monitoring message %s", msg.Id)
+						return
 					case <-stream.Context().Done():
 						defer close(clientDisconnect)
 						broadcastData := handlers.BroadCastInput{
@@ -767,4 +788,8 @@ func (s *server) notifyLeader(ctx context.Context) {
 	if err != nil {
 		glog.Errorf("Failed to send to leader: %v", err)
 	}
+}
+
+func (s *server) Shutdown() {
+	close(s.ch)
 }
