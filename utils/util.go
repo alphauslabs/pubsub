@@ -71,7 +71,7 @@ func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub s
 	}
 
 	// Query first to get the current status
-	query := spanner.NewStatement("SELECT subStatus FROM " + MessagesTable + " WHERE id = @id and processed = false")
+	query := spanner.NewStatement("SELECT subStatus FROM " + MessagesTable + " WHERE id = @id")
 	query.Params["id"] = id
 	iter := spannerClient.Single().Query(context.Background(), query)
 	defer iter.Stop()
