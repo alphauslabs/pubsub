@@ -129,6 +129,7 @@ outer:
 					select {
 					case <-stream.Context().Done():
 						unlock()
+						return
 					case <-sg:
 						return
 					}
