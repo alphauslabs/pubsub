@@ -3,12 +3,12 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"cloud.google.com/go/spanner"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge"
 	"github.com/golang/glog"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -60,56 +60,50 @@ func UpdateMessageProcessedStatus(spannerClient *spanner.Client, id string) erro
 }
 
 func UpdateMessageProcessedStatusForSub(spannerClient *spanner.Client, id, sub string) error {
-	if id == "" {
-		glog.Error("[Acknowledge]: Received invalid message ID")
-		return nil
+	if id == "" || sub == "" {
+		glog.Error("[Acknowledge]: Received invalid message or subscription ID")
+		return fmt.Errorf("invalid message ID or subscription ID")
 	}
 
-	if sub == "" {
-		glog.Error("[Acknowledge]: Received invalid subscription ID")
-		return nil
-	}
-
-	// Query first to get the current status
-	query := spanner.NewStatement("SELECT subStatus FROM " + MessagesTable + " WHERE id = @id")
-	query.Params["id"] = id
-	iter := spannerClient.Single().Query(context.Background(), query)
-	defer iter.Stop()
-	var subStatus map[string]bool
-	var temp string
-
-	row, err := iter.Next()
-	if err != nil {
-		if err == iterator.Done {
-			glog.Errorf("[Acknowledge]: Message with ID %s not found in Spanner", id)
-			return nil
+	_, err := spannerClient.ReadWriteTransaction(context.Background(), func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		// Get current status within transaction
+		row, err := txn.ReadRow(ctx, MessagesTable, spanner.Key{id}, []string{"subStatus"})
+		if err != nil {
+			glog.Errorf("[Acknowledge]: Error reading message %s: %v", id, err)
+			return err
 		}
-		glog.Errorf("[Acknowledge]: Error querying message status: %v", err)
-		return err
-	}
 
-	if err := row.Columns(&temp); err != nil {
-		glog.Errorf("[Acknowledge]: Error reading message status: %v", err)
-		return err
-	}
+		var temp string
+		if err := row.Column(0, &temp); err != nil {
+			return err
+		}
 
-	if err := json.Unmarshal([]byte(temp), &subStatus); err != nil {
-		glog.Errorf("[Acknowledge]: Error unmarshalling message status: %v", err)
-		return err
-	}
+		var subStatus map[string]bool
+		if err := json.Unmarshal([]byte(temp), &subStatus); err != nil {
+			return err
+		}
 
-	subStatus[sub] = true
-	b, _ := json.Marshal(subStatus)
+		// Update status
+		subStatus[sub] = true
+		b, err := json.Marshal(subStatus)
+		if err != nil {
+			return err
+		}
 
-	// Update the message processed status in Spanner
-	_, err = spannerClient.Apply(context.Background(), []*spanner.Mutation{
-		spanner.Update(MessagesTable, []string{"id", "subStatus", "updatedAt"}, []any{id, string(b), spanner.CommitTimestamp}),
+		// Update within transaction
+		txn.BufferWrite([]*spanner.Mutation{
+			spanner.Update(MessagesTable, []string{"id", "subStatus", "updatedAt"},
+				[]any{id, string(b), spanner.CommitTimestamp}),
+		})
+		return nil
 	})
+
 	if err != nil {
 		glog.Errorf("[Acknowledge]: Failed to update message sub status in Spanner: %v", err)
 		return err
 	}
 
+	glog.Infof("[Acknowledge]: Successfully updated message status for ID: %s, Sub: %s", id, sub)
 	return nil
 }
 
