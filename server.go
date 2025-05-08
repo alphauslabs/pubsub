@@ -121,7 +121,7 @@ outer:
 			outs := s.Op.Broadcast(context.Background(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
-					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
+					glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
 					allLocked = false
 				}
 			}
@@ -135,14 +135,13 @@ outer:
 				out := s.Op.Broadcast(context.Background(), bin)
 				for _, o := range out {
 					if o.Error != nil {
-						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
+						glog.Errorf("[SubscribeHandler] Error broadcasting unlock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
 					}
 				}
 			}
 
 			// Ask others to unlock the message and continue.
 			if !allLocked {
-				glog.Errorf("[SubscribeHandler] Failed to lock message %s for subscription %s", msg.Id, in.Subscription)
 				unlock()
 				continue outer
 			}
