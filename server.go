@@ -109,6 +109,31 @@ outer:
 				time.Sleep(2 * time.Second) // Back off on error
 				continue
 			}
+			sg := make(chan struct{})
+			unlock := func() {
+				broadcastData := handlers.BroadCastInput{
+					Type: handlers.MsgEvent,
+					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
+				}
+				bin, _ := json.Marshal(broadcastData)
+				out := s.Op.Broadcast(context.Background(), bin)
+				for _, o := range out {
+					if o.Error != nil {
+						glog.Errorf("[SubscribeHandler] Error broadcasting unlock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
+					}
+				}
+			}
+
+			go func() {
+				for {
+					select {
+					case <-stream.Context().Done():
+						unlock()
+					case <-sg:
+						return
+					}
+				}
+			}()
 
 			// Ask others to lock the message.
 			broadcastData := handlers.BroadCastInput{
@@ -126,34 +151,22 @@ outer:
 				}
 			}
 
-			unlock := func() {
-				broadcastData := handlers.BroadCastInput{
-					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-				}
-				bin, _ := json.Marshal(broadcastData)
-				out := s.Op.Broadcast(context.Background(), bin)
-				for _, o := range out {
-					if o.Error != nil {
-						glog.Errorf("[SubscribeHandler] Error broadcasting unlock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
-					}
-				}
-			}
-
 			// Ask others to unlock the message and continue.
 			if !allLocked {
 				unlock()
+				sg <- struct{}{}
 				continue outer
 			}
 
 			if err := stream.Send(msg.Message); err != nil {
 				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
 				unlock()
+				sg <- struct{}{}
 				continue outer
 			} else {
 				disconnect := make(chan struct{})
 				ch := make(chan struct{})
-
+				sg <- struct{}{}
 				go func() {
 					select {
 					case <-stream.Context().Done():
