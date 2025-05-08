@@ -24,7 +24,6 @@ import (
 type server struct {
 	*app.PubSub
 	pb.UnimplementedPubSubServiceServer
-	shutdown chan struct{} // for graceful shutdown
 }
 
 const (
@@ -101,11 +100,8 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		select {
-		case <-s.shutdown:
-			glog.Infof("[SubscribeHandler] Server shutting down, closing stream for subscription %s", in.Subscription)
-			return nil
 		case <-stream.Context().Done():
-			glog.Infof("[SubscribeHandler] Client disconnected, closing stream for subscription %s", in.Subscription)
+			glog.Infof("[SubscribeHandler] Client disconnected/server restart, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
@@ -122,7 +118,7 @@ outer:
 
 			allLocked := true
 			bin, _ := json.Marshal(broadcastData)
-			outs := s.Op.Broadcast(stream.Context(), bin)
+			outs := s.Op.Broadcast(context.Background(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
 					glog.Errorf("[SubscribeHandler] Error broadcasting lock: %v", o.Error)
@@ -136,7 +132,7 @@ outer:
 					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
 				}
 				bin, _ := json.Marshal(broadcastData)
-				out := s.Op.Broadcast(stream.Context(), bin)
+				out := s.Op.Broadcast(context.Background(), bin)
 				for _, o := range out {
 					if o.Error != nil {
 						glog.Errorf("[SubscribeHandler] Error broadcasting unlock: %v", o.Error)
@@ -161,13 +157,8 @@ outer:
 
 				go func() {
 					select {
-					case <-s.shutdown:
-						glog.Infof("[SubscribeHandler] Server shutting down while monitoring message %s", msg.Id)
-						defer close(disconnect)
-						unlock()
-						return
 					case <-stream.Context().Done():
-						glog.Infof("[SubscribeHandler] Client disconnected while monitoring message %s", msg.Id)
+						glog.Infof("[SubscribeHandler] Client disconnected/server restart while monitoring message %s", msg.Id)
 						defer close(disconnect)
 						unlock()
 						return
@@ -755,8 +746,4 @@ func (s *server) notifyLeader(ctx context.Context) {
 	if err != nil {
 		glog.Errorf("Failed to send to leader: %v", err)
 	}
-}
-
-func (s *server) Shutdown() {
-	close(s.shutdown)
 }
