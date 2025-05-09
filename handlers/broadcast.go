@@ -174,7 +174,6 @@ func handleUnlockMsg(app *app.PubSub, messageID, subId, topic string) ([]byte, e
 }
 
 func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]byte, error) {
-	glog.Infof("Handle delete message event called for msg:%v, sub:%v", messageID, subId)
 	m := storage.GetMessage(messageID, topic)
 	if m == nil {
 		return nil, nil
@@ -189,8 +188,8 @@ func handleDeleteMsg(app *app.PubSub, messageID string, subId, topic string) ([]
 
 	// Delete for this subscription
 	m.Mu.RLock()
+	defer m.Mu.RUnlock()
 	m.Subscriptions[subId].MarkAsDeleted()
-	m.Mu.RUnlock()
 
 	glog.Infof("Message:%v set as deleted for sub:%v", messageID, subId)
 	return nil, nil

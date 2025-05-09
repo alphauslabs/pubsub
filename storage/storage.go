@@ -116,7 +116,7 @@ func (mm *MessageMap) GetAll() []*Message {
 
 func StoreMessage(msg *Message) error {
 	if msg == nil || msg.Id == "" {
-		glog.Info("[ERROR]: Received invalid message")
+		glog.Error("[Storage] Received invalid message, msg is nil or id is empty")
 		return ErrInvalidMessage
 	}
 
@@ -188,18 +188,25 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 		if msg.IsFinalDeleted() {
 			continue
 		}
-		msg.Subscriptions[sub].Mu.RLock()
-		if msg.Subscriptions[sub].IsDeleted() {
-			msg.Subscriptions[sub].Mu.RUnlock()
+
+		// Check status
+		err := func() error {
+			msg.Mu.RLock()
+			defer msg.Mu.RUnlock()
+
+			if msg.Subscriptions[sub].IsDeleted() {
+				return fmt.Errorf("deleted")
+			}
+
+			if msg.Subscriptions[sub].IsLocked() {
+				return fmt.Errorf("locked")
+			}
+			return nil
+		}()
+
+		if err != nil {
 			continue
 		}
-
-		if msg.Subscriptions[sub].IsLocked() {
-			msg.Subscriptions[sub].Mu.RUnlock()
-			continue
-		}
-		msg.Subscriptions[sub].Mu.RUnlock()
-
 		return msg, nil
 	}
 
@@ -285,6 +292,10 @@ func (s *MsgSub) SetAutoExtend(autoExtend bool) {
 	}
 }
 
+func (s *MsgSub) IsAutoExtend() bool {
+	return atomic.LoadInt32(&s.AutoExtend) == 1
+}
+
 func (s *MsgSub) ClearAge() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -292,20 +303,20 @@ func (s *MsgSub) ClearAge() {
 }
 
 type InQueue struct {
-	Subscription string `json:"subscription"`
-	Total        int    `json:"total"`
-	Available    int    `json:"available"`
-	Locked       int    `json:"locked"`
+	Subscription string
+	Total        int
+	Available    int
+	Locked       int
 }
 
 // MessageCount represents the count of messages for a subscription
 type MessageCount struct {
-	Topic        string `json:"topic"`
-	Subscription string `json:"subscription"`
-	Total        int    `json:"total"`     // Total messages
-	Locked       int    `json:"locked"`    // Messages locked
-	Available    int    `json:"available"` // Messages available for processing
-	Deleted      int    `json:"deleted"`   // Messages marked as deleted
+	Topic        string
+	Subscription string
+	Total        int // Total messages
+	Locked       int // Messages locked
+	Available    int // Messages available for processing
+	Deleted      int // Messages marked as deleted
 }
 
 // GetMessagesCountBySubscription returns counts of messages for all subscriptions
@@ -369,6 +380,7 @@ func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]M
 				continue
 			}
 
+			msg.Mu.RLock()
 			// Check each subscription for this message
 			for subName, sub := range msg.Subscriptions {
 				// Skip if filtering by subscription and this isn't the requested one
@@ -382,18 +394,17 @@ func GetMessagesCountBySubscription(filterTopic, filterSubscription string) ([]M
 					continue
 				}
 
-				// Count this message
-				counter.Total++
-
-				// Update specific counters based on message state
 				if sub.IsDeleted() {
-					counter.Deleted++
-				} else if sub.IsLocked() {
-					counter.Locked++
+					continue
+				}
+
+				if sub.IsLocked() {
+					counter.Locked++ // in flight
 				} else {
-					counter.Available++
+					counter.Available++ // available for processing
 				}
 			}
+			msg.Mu.RUnlock()
 		}
 	}
 

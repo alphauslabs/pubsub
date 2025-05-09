@@ -2,7 +2,6 @@ package sweep
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/alphauslabs/pubsub/app"
@@ -32,10 +31,10 @@ func RunCheckForExpired(ctx context.Context) {
 							continue
 						}
 						switch {
-						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 0:
+						case time.Since(t.Age).Seconds() >= 30 && !t.IsAutoExtend():
 							t.Unlock()
 							t.ClearAge()
-						case time.Since(t.Age).Seconds() >= 30 && atomic.LoadInt32(&t.AutoExtend) == 1:
+						case time.Since(t.Age).Seconds() >= 30 && t.IsAutoExtend():
 							t.RenewAge()
 						}
 					}
@@ -81,7 +80,7 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 					glog.Errorf("[sweep] error updating message %s processed status: %v", k, err)
 				} else {
 					delete(v.Messages, k)
-					glog.Info("[sweep] deleted message:", k)
+					glog.Infof("[sweep] removed from memory message: %v", k)
 				}
 			}
 			v.Mu.Unlock()
