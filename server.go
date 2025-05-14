@@ -152,6 +152,10 @@ outer:
 				continue outer
 			}
 			bin, _ := json.Marshal(broadcastData)
+
+			r = rand.Intn(1000)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+
 			outs := s.Op.Broadcast(context.Background(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
