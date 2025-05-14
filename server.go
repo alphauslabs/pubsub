@@ -157,6 +157,7 @@ outer:
 					} else {
 						glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
 						allLocked = false
+						alreadyLocked = false
 					}
 				}
 			}
