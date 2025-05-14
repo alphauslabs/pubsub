@@ -125,10 +125,10 @@ func handleLockMsg(app *app.PubSub, messageID string, subId, topic string) ([]by
 		return nil, fmt.Errorf("message %s already deleted for sub=%s", messageID, subId)
 	}
 
-	// if msg.Subscriptions[subId].IsLocked() {
-	// 	glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
-	// 	return nil, fmt.Errorf("message %s already locked for sub=%s", messageID, subId)
-	// }
+	if msg.Subscriptions[subId].IsLocked() {
+		glog.Infof("[broadcast-handlelock] Message %s already locked for sub=%s", messageID, subId)
+		return nil, fmt.Errorf("message %s already locked for sub=%s", messageID, subId)
+	}
 
 	// Retrieve subscriptions for the topic
 	subscriptionsSlice, err := storage.GetSubscribtionsForTopic(msg.Topic)

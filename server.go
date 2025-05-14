@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -147,21 +148,26 @@ outer:
 			}
 
 			allLocked := true
+			var hasLockedAlready bool
 			if msg.Subscriptions[in.Subscription].IsLocked() {
 				sg <- struct{}{}
 				continue outer
 			}
 			bin, _ := json.Marshal(broadcastData)
-
-			r = rand.Intn(1000)
-			time.Sleep(time.Duration(r) * time.Millisecond)
-
 			outs := s.Op.Broadcast(context.Background(), bin)
 			for _, o := range outs {
 				if o.Error != nil {
-					glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
+					if strings.Contains(o.Error.Error(), "already locked") {
+						hasLockedAlready = true
+					}
 					allLocked = false
+					glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
 				}
+			}
+
+			if hasLockedAlready {
+				sg <- struct{}{}
+				continue outer
 			}
 
 			// Ask others to unlock the message and continue.
