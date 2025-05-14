@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -104,6 +105,9 @@ outer:
 			glog.Infof("[SubscribeHandler] Client disconnected/server restart, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
+			r := rand.Intn(1000)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
 				time.Sleep(2 * time.Second) // Back off on error
