@@ -7,7 +7,7 @@ import (
 
 	"cloud.google.com/go/spanner"
 	"github.com/alphauslabs/pubsub/storage"
-	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -12,7 +12,7 @@ import (
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
-	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
 )

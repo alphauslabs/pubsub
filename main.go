@@ -23,7 +23,7 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/sweep"
 	"github.com/alphauslabs/pubsub/utils"
-	"github.com/flowerinthenight/hedge"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/flowerinthenight/timedoff"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
