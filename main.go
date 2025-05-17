@@ -31,12 +31,17 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+// todo: Make sure when node size changes, existing client connected should be transerreed to correct node.
+
 var (
 	port = flag.String("port", ":50051", "Main gRPC server port")
 	env  = flag.String("env", "dev", "Environment: dev, prod")
 )
 
 func main() {
+	var t spanner.NullString
+	fmt.Printf("%v\n", t)
+	return
 	client, err := createLoggingClient(*env)
 	if err != nil {
 		glog.Fatalf("Failed to create Google Cloud Logging client: %v", err)
@@ -95,6 +100,10 @@ func main() {
 			ap,
 			handlers.Broadcast,
 		),
+		hedge.WithMemberChangesHandler(
+			ap,
+			handlers.MemberChanges,
+		),
 		hedge.WithLogger(log.New(io.Discard, "", 0)), // silence
 	)
 
@@ -135,6 +144,13 @@ func main() {
 			log.Fatalf("failed to run: %v", err)
 		}
 	}()
+
+	storage.RecordMap = utils.CreateRecordMapping(ap)
+	err = utils.BroadcastRecord(ap, storage.RecordMap)
+	if err != nil {
+		// Fatal log if we can't broadcast the record map
+		glog.Fatalf("Error broadcasting record map: %v", err)
+	}
 
 	go storage.MonitorActivity(ctx)
 	// Start our sweeper goroutine to check if message is expired, if so, then it unlocks it.

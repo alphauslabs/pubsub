@@ -89,4 +89,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250219182151-9fdb1cabc7b2 // indirect
 )
 
-replace github.com/flowerinthenight/hedge/v2 => github.com/tituscarl/hedge/v2 v2.0.0-20250515105053-c4ff5d3cef60
+replace github.com/flowerinthenight/hedge/v2 => github.com/tituscarl/hedge/v2 v2.0.0-20250517063401-e676ea99e0ed

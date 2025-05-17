@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"cloud.google.com/go/spanner"
+	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
@@ -131,4 +133,126 @@ func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 	}
 
 	return nil
+}
+
+func CreateRecordMapping(app *app.PubSub) map[string][]string {
+	record := map[string][]string{} // Maps node IDs to subscription prefixes
+	all := app.Op.Members()
+	if len(all) > 0 {
+		alphabet := "abcdefghijklmnopqrstuvwxyz"
+		charsPerNode := len(alphabet) / len(all)
+		remainder := len(alphabet) % len(all)
+
+		start := 0
+		for i, nodeID := range all {
+			end := start + charsPerNode
+			if i < remainder {
+				// Distribute remainder characters evenly
+				end++
+			}
+
+			// Assign a range of letters to this node
+			if end > len(alphabet) {
+				end = len(alphabet)
+			}
+
+			charRange := alphabet[start:end]
+			record[nodeID] = []string{charRange}
+			glog.Infof("Node %s assigned subscription prefixes: %s", nodeID, charRange)
+
+			start = end
+		}
+	}
+	return record
+}
+
+// Find the correct nodeId for this subscription prefix
+func WhatNode(pre string, record map[string][]string) string {
+	for nodeID, prefixes := range record {
+		for _, prefix := range prefixes {
+			if pre == prefix {
+				return nodeID
+			}
+		}
+	}
+	return ""
+}
+
+func BroadcastRecord(app *app.PubSub, record map[string][]string) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		glog.Errorf("Error marshalling record: %v", err)
+		return err
+	}
+
+	broadcastMsg := struct {
+		Type string
+		Msg  []byte
+	}{
+		Type: "recordmap",
+		Msg:  data,
+	}
+
+	broadcastData, err := json.Marshal(broadcastMsg)
+	if err != nil {
+		glog.Errorf("Error marshalling BroadCastInput: %v", err)
+		return err
+	}
+
+	out := app.Op.Broadcast(context.Background(), broadcastData)
+	for _, r := range out {
+		if r.Error != nil {
+			glog.Errorf("Error broadcasting to %s: %v", r.Id, r.Error)
+			return r.Error
+		}
+	}
+	return nil
+}
+
+func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription, topic string) map[string]map[string]*storage.Subscription {
+	samePrefixSubs := make(map[string]map[string]*storage.Subscription)
+	for k, v := range subs {
+		if k == topic {
+			samePrefixSubs[k] = v
+		}
+	}
+	return samePrefixSubs
+}
+
+func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string) map[string]map[string]*storage.Subscription {
+	grouped := make(map[string]map[string]*storage.Subscription)
+	for topic, subs := range ts {
+		for subName, sub := range subs {
+			if IsPresent(subName, grp) {
+				grouped[topic][subName] = sub
+			}
+		}
+	}
+	return grouped
+}
+
+func IsPresent(s string, arr []string) bool {
+	for _, v := range arr {
+		if strings.HasPrefix(s, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func CheckIfSubscriptionIsCorrect(sub string, nodeId string) (bool, string) {
+	recs := storage.RecordMap[nodeId]
+	if IsPresent(sub, recs) {
+		return true, ""
+	}
+
+	for name, v := range storage.RecordMap {
+		for _, rec := range v {
+			if strings.HasPrefix(sub, rec) {
+				return false, name
+			}
+		}
+	}
+
+	return false, ""
 }

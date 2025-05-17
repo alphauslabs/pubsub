@@ -12,6 +12,7 @@ import (
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
@@ -66,43 +67,45 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 }
 
 func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
-	var latest map[string]map[string]*storage.Subscription
 	if isStartup {
 		requestTopicSubFetch(ctx, app.Op) // request to the current leader
 		return
 	}
 
-	latest = FetchAllTopicSubscriptions(ctx, app.Client)
+	latest := FetchAllTopicSubscriptions(ctx, app.Client)
 	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
 		return
 	}
 
-	// Marshal topic-subscription data into JSON
-	msgData, err := json.Marshal(latest)
-	if err != nil {
-		glog.Errorf("STRUCT-Error marshalling topicSub: %v", err)
-		return
-	}
+	for k, v := range storage.RecordMap {
+		grouped := utils.CreateGrouping(latest, v)
+		msgData, err := json.Marshal(grouped)
+		if err != nil {
+			glog.Errorf("STRUCT-Error marshalling topicSub: %v", err)
+			return
+		}
 
-	broadcastMsg := BroadCastInput{
-		Type: Topicsub,
-		Msg:  msgData,
-	}
+		broadcastMsg := BroadCastInput{
+			Type: Topicsub,
+			Msg:  msgData,
+		}
 
-	// Marshal BroadCastInput
-	broadcastData, err := json.Marshal(broadcastMsg)
-	if err != nil {
-		glog.Errorf("STRUCT-Error marshalling BroadCastInput: %v", err)
-		return
-	}
+		// Marshal BroadCastInput
+		broadcastData, err := json.Marshal(broadcastMsg)
+		if err != nil {
+			glog.Errorf("STRUCT-Error marshalling BroadCastInput: %v", err)
+			return
+		}
 
-	// Broadcast message
-	out := app.Op.Broadcast(ctx, broadcastData)
-	for _, r := range out {
-		if r.Error != nil {
-			glog.Errorf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
-		} else {
-			lastBroadcasted = latest
+		out := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+			OnlySendTo: []string{k}, // only send to this node
+		})
+		for _, r := range out {
+			if r.Error != nil {
+				glog.Errorf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
+			} else {
+				lastBroadcasted = latest
+			}
 		}
 	}
 }

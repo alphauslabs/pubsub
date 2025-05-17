@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -13,7 +12,6 @@ import (
 	"github.com/alphauslabs/pubsub/handlers"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
-	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
 
@@ -98,6 +96,12 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 		return err
 	}
 
+	// Check if client is connected to the correct node, if not we return error and provide correct node address.
+	correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, s.Op.Name())
+	if !correct && node != "" {
+		return fmt.Errorf("wrongnode:%v", node)
+	}
+
 	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
 outer:
 	for {
@@ -106,88 +110,104 @@ outer:
 			glog.Infof("[SubscribeHandler] Client disconnected/server restart, closing stream for subscription %s", in.Subscription)
 			return nil
 		default:
-			r := rand.Intn(1000)
-			time.Sleep(time.Duration(r) * time.Millisecond)
-
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
 				time.Sleep(2 * time.Second) // Back off on error
 				continue
 			}
-			sg := make(chan struct{})
-			unlock := func(nodes ...string) {
-				broadcastData := handlers.BroadCastInput{
-					Type: handlers.MsgEvent,
-					Msg:  []byte(fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-				}
-				bin, _ := json.Marshal(broadcastData)
-				out := s.Op.Broadcast(context.Background(), bin, hedge.BroadcastArgs{
-					OnlySendTo: nodes,
-				})
-				for _, o := range out {
-					if o.Error != nil {
-						glog.Errorf("[SubscribeHandler] Error broadcasting unlock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
-					}
-				}
-			}
 
-			go func() {
-				for {
-					select {
-					case <-stream.Context().Done():
-						unlock()
-						return
-					case <-sg:
-						return
-					}
-				}
-			}()
+			// sg := make(chan struct{})
+			// unlockmsg := func() string {
+			// 	return fmt.Sprintf("unlock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)
+			// }
+			// lockmsg := func() string {
+			// 	return fmt.Sprintf("lock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)
+			// }
+
+			// unlock := func(nodes ...string) {
+			// 	broadcastData := handlers.BroadCastInput{
+			// 		Type: handlers.MsgEvent,
+			// 		Msg:  []byte(unlockmsg()),
+			// 	}
+			// 	bin, _ := json.Marshal(broadcastData)
+			// 	out := s.Op.Broadcast(context.Background(), bin, hedge.BroadcastArgs{
+			// 		OnlySendTo: nodes,
+			// 	})
+			// 	for _, o := range out {
+			// 		if o.Error != nil {
+			// 			glog.Errorf("[SubscribeHandler] Error broadcasting unlock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
+			// 		}
+			// 	}
+			// }
+
+			// go func() {
+			// 	for {
+			// 		select {
+			// 		case <-stream.Context().Done():
+			// 			unlock()
+			// 			return
+			// 		case <-sg:
+			// 			return
+			// 		}
+			// 	}
+			// }()
 
 			// Ask others to lock the message.
-			broadcastData := handlers.BroadCastInput{
-				Type: handlers.MsgEvent,
-				Msg:  []byte(fmt.Sprintf("lock:%s:%s:%s", msg.Id, in.Subscription, in.Topic)),
-			}
+			// broadcastData := handlers.BroadCastInput{
+			// 	Type: handlers.MsgEvent,
+			// 	Msg:  []byte(lockmsg()),
+			// }
 
-			allLocked := true
-			successnodes := []string{}
-			if msg.Subscriptions[in.Subscription].IsLocked() {
-				sg <- struct{}{}
-				continue outer
-			}
-			bin, _ := json.Marshal(broadcastData)
-			outs := s.Op.Broadcast(context.Background(), bin)
-			for _, o := range outs {
-				if o.Error != nil {
-					allLocked = false
-					glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
-				} else {
-					successnodes = append(successnodes, o.Id)
+			// allLocked := true
+			// successnodes := []string{}
+			// if msg.Subscriptions[in.Subscription].IsLocked() {
+			// 	sg <- struct{}{}
+			// 	continue outer
+			// }
+			// bin, _ := json.Marshal(broadcastData)
+			// outs := s.Op.Broadcast(context.Background(), bin)
+			// for _, o := range outs {
+			// 	if o.Error != nil {
+			// 		allLocked = false
+			// 		glog.Errorf("[SubscribeHandler] Error broadcasting lock for msg=%v, sub=%v, err=%v", msg.Id, in.Subscription, o.Error)
+			// 	} else {
+			// 		successnodes = append(successnodes, o.Id)
+			// 	}
+			// }
+
+			// // Ask others to unlock the message and continue.
+			// if !allLocked {
+			// 	unlock(successnodes...)
+			// 	sg <- struct{}{}
+			// 	continue outer
+			// }
+
+			// Local lock
+			func() {
+				m := storage.GetMessage(msg.Id, in.Topic)
+				if m == nil {
+					return
 				}
-			}
+				m.Mu.RLock()
+				defer m.Mu.RUnlock()
 
-			// Ask others to unlock the message and continue.
-			if !allLocked {
-				unlock(successnodes...)
-				sg <- struct{}{}
-				continue outer
-			}
+				m.Subscriptions[in.Subscription].Unlock()
+				m.Subscriptions[in.Subscription].ClearAge()
+			}()
 
 			if err := stream.Send(msg.Message); err != nil {
 				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
-				unlock()
-				sg <- struct{}{}
 				continue outer
 			} else {
 				disconnect := make(chan struct{})
 				ch := make(chan struct{})
-				sg <- struct{}{}
+				// sg <- struct{}{}
 				go func() {
 					select {
 					case <-stream.Context().Done():
 						glog.Infof("[SubscribeHandler] Client disconnected/server restart while monitoring message %s", msg.Id)
 						defer close(disconnect)
-						unlock()
+						// unlock()
 						return
 					case <-ch:
 						return

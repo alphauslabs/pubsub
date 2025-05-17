@@ -37,7 +37,14 @@ var (
 	// Map for topic Messages
 	TopicMessages = make(map[string]*MessageMap)
 	TopicMsgMu    sync.RWMutex
+
+	// Record Map for node subscriptions
+	RecordMap = make(map[string][]string)
 )
+
+func SetRecordMap(v map[string][]string) {
+	RecordMap = v
+}
 
 type MessageMap struct {
 	Messages map[string]*Message

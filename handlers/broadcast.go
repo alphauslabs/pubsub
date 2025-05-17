@@ -17,6 +17,7 @@ const (
 	LeaderLiveliness = "leaderliveliness"
 	MsgEvent         = "msgEvent"
 	TopicDeleted     = "topicdeleted"
+	RecordMap        = "recordmap"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -36,6 +37,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
 	LeaderLiveliness: handleLeaderLiveliness,
 	TopicDeleted:     handleTopicDeleted,
+	RecordMap:        handleRecordMap,
 }
 
 // Root handler for op.Broadcast()
@@ -227,5 +229,19 @@ func handleTopicDeleted(app *app.PubSub, msg []byte) ([]byte, error) {
 	}
 
 	glog.Infof("[Delete] Successfully removed topic %s from memory", topicName)
+	return nil, nil
+}
+
+func handleRecordMap(app *app.PubSub, msg []byte) ([]byte, error) {
+	var data map[string][]string
+	err := json.Unmarshal(msg, &data)
+	if err != nil {
+		glog.Errorf("[RecordMap] Error unmarshalling record map: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal record map: %w", err)
+	}
+
+	glog.Infof("[RecordMap] Successfully unmarshalled record map: %v", data)
+	storage.SetRecordMap(data)
+
 	return nil, nil
 }

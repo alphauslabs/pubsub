@@ -11,6 +11,8 @@ import (
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/leader"
 	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
+	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
 	"google.golang.org/api/iterator"
 )
@@ -104,17 +106,19 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 		}
 
 		// Marshal broadcast input
+		node := utils.WhatNode(string(msg.Id[0]), storage.RecordMap)
 		broadcastData, err := json.Marshal(broadcastInput)
 		if err != nil {
 			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 			continue
 		}
 
-		// Broadcast
-		responses := app.Op.Broadcast(ctx, broadcastData)
-		for _, response := range responses {
-			if response.Error != nil {
-				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
+		outs := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+			OnlySendTo: []string{node}, // only send to this node
+		})
+		for _, out := range outs {
+			if out.Error != nil {
+				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", out.Error)
 			}
 		}
 	}
@@ -262,3 +266,12 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 		}
 	}
 }
+
+// func placeholder() {
+// 	for _, msg := range storage.TopicMessages {
+// 		all := msg.GetAll()
+// 		for _, m := range all {
+// 			// send m to all the requesting node
+// 		}
+// 	}
+// }

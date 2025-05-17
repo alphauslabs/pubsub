@@ -1,0 +1,18 @@
+package handlers
+
+import (
+	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
+	"github.com/golang/glog"
+)
+
+func MemberChanges(data any, msg []byte) ([]byte, error) {
+	ap := data.(*app.PubSub)
+	storage.RecordMap = utils.CreateRecordMapping(ap)
+	err := utils.BroadcastRecord(ap, storage.RecordMap)
+	if err != nil {
+		glog.Errorf("BroadcastRecord error: %v", err)
+	}
+	return nil, nil
+}
