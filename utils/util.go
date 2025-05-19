@@ -231,6 +231,7 @@ func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string
 			}
 		}
 	}
+	glog.Infof("Grouped subscriptions: %v", grouped)
 	return grouped
 }
 
