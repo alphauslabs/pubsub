@@ -72,6 +72,7 @@ func handleBroadcastedTopicsub(app *app.PubSub, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to unmarshal topic-subscriptions: %w", err)
 	}
 
+	glog.Infof("[Broadcast] Received topic-subscription data: %v", topicSubs)
 	if err := storage.StoreTopicSubscriptions(topicSubs); err != nil {
 		return nil, fmt.Errorf("failed to store topic-subscriptions: %w", err)
 	}

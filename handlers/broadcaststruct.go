@@ -74,9 +74,9 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	}
 
 	latest := FetchAllTopicSubscriptions(ctx, app.Client)
-	if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
-		return
-	}
+	// if AreTopicSubscriptionsEqual(latest, lastBroadcasted) {
+	// 	return
+	// }
 
 	for k, v := range storage.RecordMap {
 		grouped := utils.CreateGrouping(latest, v)
@@ -110,7 +110,8 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 			if r.Error != nil {
 				glog.Errorf("STRUCT-Error broadcasting to %s: %v", r.Id, r.Error)
 			} else {
-				lastBroadcasted = latest
+				glog.Infof("STRUCT-Broadcasted to %s successfully", r.Id)
+				// lastBroadcasted = latest
 			}
 		}
 	}
