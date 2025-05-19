@@ -31,17 +31,12 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-// todo: Make sure when node size changes, existing client connected should be transerreed to correct node.
-
 var (
 	port = flag.String("port", ":50051", "Main gRPC server port")
 	env  = flag.String("env", "dev", "Environment: dev, prod")
 )
 
 func main() {
-	var t spanner.NullString
-	fmt.Printf("%v\n", t)
-	return
 	client, err := createLoggingClient(*env)
 	if err != nil {
 		glog.Fatalf("Failed to create Google Cloud Logging client: %v", err)
