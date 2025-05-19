@@ -118,16 +118,14 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 }
 
 func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
-	ticker := time.NewTicker(10 * time.Second) // will adjust to lower interval later
+	ticker := time.NewTicker(1 * time.Hour) // will adjust to lower interval later
 	defer func() {
 		ticker.Stop()
 		glog.Info("STRUCT-Leader: Distributor ticker stopped.")
 	}()
 
 	// Perform an initial broadcast of all topic-subscription structures
-	if atomic.LoadInt32(&leader.IsLeader) == 1 {
-		FetchAndBroadcast(ctx, app, true) // run startup broadcast
-	}
+	FetchAndBroadcast(ctx, app, true) // run startup broadcast
 
 	for {
 		select {
