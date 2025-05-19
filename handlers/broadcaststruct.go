@@ -124,8 +124,10 @@ func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 		glog.Info("STRUCT-Leader: Distributor ticker stopped.")
 	}()
 
-	// perform an initial broadcast of all topic-subscription structures
-	FetchAndBroadcast(ctx, app, true) // run startup broadcast
+	// Perform an initial broadcast of all topic-subscription structures
+	if atomic.LoadInt32(&leader.IsLeader) == 1 {
+		FetchAndBroadcast(ctx, app, true) // run startup broadcast
+	}
 
 	for {
 		select {
