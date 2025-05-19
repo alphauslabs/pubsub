@@ -230,6 +230,7 @@ func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string
 
 		for subName, sub := range subs {
 			if IsPresent(subName, grp) {
+				glog.Infof("found subname:%v in group: %v", subName, grp)
 				grouped[topic][subName] = sub
 			}
 		}
