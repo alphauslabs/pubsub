@@ -73,6 +73,8 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	glog.Infof("[InitializeTopicSub] grouped: %v", string(msgData))
+
 	return msgData, nil
 }
 

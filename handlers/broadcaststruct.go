@@ -97,6 +97,8 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 			return
 		}
 
+		glog.Infof("STRUCT-Broadcasting topic-subscription data to %s: %v", k, string(broadcastData))
+
 		out := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
 			OnlySendTo: []string{k}, // only send to this node
 		})
