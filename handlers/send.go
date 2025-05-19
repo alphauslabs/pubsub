@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
@@ -60,9 +59,7 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	topicsub := FetchAllTopicSubscriptions(ctx, app.Client) // trigger topic-subscription fetch
 	glog.Infof("topiccsub: %v", topicsub)
-	me := app.Op.Name()
-	me = strings.Split(me, ":")[0]
-	me = me + ":" + "50051"
+	me := string(msg)
 	glog.Infof("me: %v", me)
 	glog.Infof("recordmap: %v", storage.RecordMap)
 	members := storage.GetMembersFromRecordMap(storage.RecordMap, me)
