@@ -91,11 +91,11 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 }
 
 func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_SubscribeServer) error {
-	err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
-	if err != nil {
-		glog.Errorf("[SubscribeHandler] Error validating subscription: %v", err)
-		return err
-	}
+	// err := utils.CheckIfTopicSubscriptionIsCorrect(in.Topic, in.Subscription)
+	// if err != nil {
+	// 	glog.Errorf("[SubscribeHandler] Error validating subscription: %v", err)
+	// 	return err
+	// }
 
 	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
 outer:
