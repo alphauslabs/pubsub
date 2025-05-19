@@ -138,7 +138,6 @@ func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 func CreateRecordMapping(app *app.PubSub) map[string][]string {
 	record := map[string][]string{} // Maps node IDs to subscription prefixes
 	all := app.Op.Members()
-	glog.Info("Members: ", all)
 	if len(all) > 0 {
 		alphabet := "abcdefghijklmnopqrstuvwxyz"
 		charsPerNode := len(alphabet) / len(all)
@@ -154,14 +153,19 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 				end++
 			}
 
-			// Assign a range of letters to this node
 			if end > len(alphabet) {
 				end = len(alphabet)
 			}
 
+			// Convert character range to individual letters
 			charRange := alphabet[start:end]
-			record[nodeID] = []string{charRange}
-			glog.Infof("Node %s assigned subscription prefixes: %s", nodeID, charRange)
+			individualLetters := make([]string, len(charRange))
+			for j, c := range charRange {
+				individualLetters[j] = string(c)
+			}
+
+			record[nodeID] = individualLetters
+			glog.Infof("Node %s assigned subscription prefixes: %v", nodeID, individualLetters)
 
 			start = end
 		}
