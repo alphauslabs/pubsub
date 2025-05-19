@@ -3,9 +3,14 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/alphauslabs/pubsub/app"
+	"github.com/alphauslabs/pubsub/storage"
+	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -54,7 +59,15 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 
 	topicsub := FetchAllTopicSubscriptions(ctx, app.Client) // trigger topic-subscription fetch
-	msgData, err := json.Marshal(topicsub)
+	me := app.Op.Name()
+	me = strings.Split(me, ":")[0]
+	me = me + ":" + "50051"
+	members := storage.GetMembersFromRecordMap(storage.RecordMap, me)
+	if members == nil {
+		return nil, status.Errorf(codes.Internal, "no members found in record map")
+	}
+	grouped := utils.CreateGrouping(topicsub, members)
+	msgData, err := json.Marshal(grouped)
 	if err != nil {
 		glog.Errorf("STRUCT-Error marshalling topicSub: %v", err)
 		return nil, err

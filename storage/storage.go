@@ -46,6 +46,15 @@ func SetRecordMap(v map[string][]string) {
 	RecordMap = v
 }
 
+func GetMembersFromRecordMap(r map[string][]string, node string) []string {
+	mem, ok := r[node]
+	if !ok {
+		return nil
+	}
+
+	return mem
+}
+
 type MessageMap struct {
 	Messages map[string]*Message
 	Mu       sync.RWMutex
