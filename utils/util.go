@@ -138,6 +138,7 @@ func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 func CreateRecordMapping(app *app.PubSub) map[string][]string {
 	record := map[string][]string{} // Maps node IDs to subscription prefixes
 	all := app.Op.Members()
+	glog.Info("Members: ", all)
 	if len(all) > 0 {
 		alphabet := "abcdefghijklmnopqrstuvwxyz"
 		charsPerNode := len(alphabet) / len(all)
@@ -146,7 +147,7 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 		start := 0
 		for i, nodeID := range all {
 			nodeID = strings.Split(nodeID, ":")[0]
-			nodeID = nodeID + ":" + "50052"
+			nodeID = nodeID + ":" + "50051"
 			end := start + charsPerNode
 			if i < remainder {
 				// Distribute remainder characters evenly

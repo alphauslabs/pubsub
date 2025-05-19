@@ -141,10 +141,13 @@ func main() {
 	}()
 
 	storage.RecordMap = utils.CreateRecordMapping(ap)
+	glog.Infof("Record map created: %v", storage.RecordMap)
 	err = utils.BroadcastRecord(ap, storage.RecordMap)
 	if err != nil {
 		// Fatal log if we can't broadcast the record map
 		glog.Fatalf("Error broadcasting record map: %v", err)
+	} else {
+		glog.Infof("Record map broadcasted successfully")
 	}
 
 	go storage.MonitorActivity(ctx)
