@@ -145,6 +145,8 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 
 		start := 0
 		for i, nodeID := range all {
+			nodeID = strings.Split(nodeID, ":")[0]
+			nodeID = nodeID + ":" + "50052"
 			end := start + charsPerNode
 			if i < remainder {
 				// Distribute remainder characters evenly
@@ -231,6 +233,8 @@ func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string
 	return grouped
 }
 
+// IsPresent check if s prefix is present in arr
+// Example: s = "apple", a is present in arr = ["a", "b", "c"] so this return true
 func IsPresent(s string, arr []string) bool {
 	for _, v := range arr {
 		if strings.HasPrefix(s, v) {

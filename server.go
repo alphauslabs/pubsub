@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -96,15 +97,17 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 		return err
 	}
 
-	// Check if client is connected to the correct node, if not we return error and provide correct node address.
-	correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, s.Op.Name())
-	if !correct && node != "" {
-		return fmt.Errorf("wrongnode:%v", node)
-	}
-
 	glog.Infof("[SubscribeHandler] Starting subscription stream loop for topic=%v, sub=%v", in.Topic, in.Subscription)
 outer:
 	for {
+		// Check if client is connected to the correct node, if not we return error and provide correct node address.
+		thisnodeaddr := strings.Split(s.Op.Name(), ":")[0]
+		thisnodeaddr = thisnodeaddr + ":" + "50051"
+		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
+		if !correct && node != "" {
+			return fmt.Errorf("wrongnode:%v", node)
+		}
+
 		select {
 		case <-stream.Context().Done():
 			glog.Infof("[SubscribeHandler] Client disconnected/server restart, closing stream for subscription %s", in.Subscription)
@@ -272,19 +275,43 @@ outer:
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
-	broadcastData := handlers.BroadCastInput{
-		Type: handlers.MsgEvent,
-		Msg:  []byte(fmt.Sprintf("delete:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
+	thisnodeddr := strings.Split(s.Op.Name(), ":")[0]
+	thisnodeddr = thisnodeddr + ":" + "50051"
+	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeddr)
+	if !ok && node != "" {
+		return &emptypb.Empty{}, fmt.Errorf("wrongnode:%v", node)
 	}
 
-	bin, _ := json.Marshal(broadcastData)
-	out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
-	for _, v := range out {
-		if v.Error != nil {
-			glog.Errorf("[AcknowledgeHandler] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
-			return nil, status.Errorf(codes.Internal, "failed to broadcast acknowledgment: %v", v.Error)
-		}
+	m := storage.GetMessage(in.Id, in.Topic)
+	if m == nil {
+		return nil, fmt.Errorf("message not found")
 	}
+
+	// Update the message status in Spanner
+	err := utils.UpdateMessageProcessedStatusForSub(s.Client, in.Id, in.Subscription)
+	if err != nil {
+		glog.Errorf("[broadcast-handledelete] Error updating message status for sub %s: %v", in.Subscription, err)
+		return nil, err
+	}
+
+	// Delete for this subscription
+	m.Mu.RLock()
+	defer m.Mu.RUnlock()
+	m.Subscriptions[in.Subscription].MarkAsDeleted()
+
+	// broadcastData := handlers.BroadCastInput{
+	// 	Type: handlers.MsgEvent,
+	// 	Msg:  []byte(fmt.Sprintf("delete:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
+	// }
+
+	// bin, _ := json.Marshal(broadcastData)
+	// out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
+	// for _, v := range out {
+	// 	if v.Error != nil {
+	// 		glog.Errorf("[AcknowledgeHandler] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
+	// 		return nil, status.Errorf(codes.Internal, "failed to broadcast acknowledgment: %v", v.Error)
+	// 	}
+	// }
 
 	glog.Infof("[AcknowledgeHandler] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
 	return &emptypb.Empty{}, nil
