@@ -98,6 +98,9 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 			return
 		}
 
+		k := strings.Split(k, ":")[0]
+		k = k + ":" + "50051"
+
 		glog.Infof("STRUCT-Broadcasting topic-subscription data to %s: %v", k, string(broadcastData))
 
 		out := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{

@@ -58,10 +58,7 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 
 	topicsub := FetchAllTopicSubscriptions(ctx, app.Client) // trigger topic-subscription fetch
-	glog.Infof("topiccsub: %v", topicsub)
 	me := string(msg)
-	glog.Infof("me: %v", me)
-	glog.Infof("recordmap: %v", storage.RecordMap)
 	members := storage.GetMembersFromRecordMap(storage.RecordMap, me)
 	if members == nil {
 		return nil, status.Errorf(codes.Internal, "no members found in record map")

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -140,6 +141,8 @@ func main() {
 		}
 	}()
 
+	me := op.Name()
+	glog.Infof("ME: %v", strings.Split(me, ":")[0])
 	storage.RecordMap = utils.CreateRecordMapping(ap)
 	glog.Infof("Record map created: %v", storage.RecordMap)
 	err = utils.BroadcastRecord(ap, storage.RecordMap)
