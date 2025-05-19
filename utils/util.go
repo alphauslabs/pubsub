@@ -225,6 +225,9 @@ func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription
 func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string) map[string]map[string]*storage.Subscription {
 	grouped := make(map[string]map[string]*storage.Subscription)
 	for topic, subs := range ts {
+		// Initialize the inner map for this topic
+		grouped[topic] = make(map[string]*storage.Subscription)
+
 		for subName, sub := range subs {
 			if IsPresent(subName, grp) {
 				grouped[topic][subName] = sub
