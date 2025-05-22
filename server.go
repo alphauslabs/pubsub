@@ -105,7 +105,7 @@ outer:
 		thisnodeaddr = thisnodeaddr + ":" + "50051"
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
-			return fmt.Errorf("wrongnode:%v", node)
+			return fmt.Errorf("wrongnode|%v", node)
 		}
 
 		select {
@@ -279,7 +279,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	thisnodeddr = thisnodeddr + ":" + "50051"
 	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeddr)
 	if !ok && node != "" {
-		return &emptypb.Empty{}, fmt.Errorf("wrongnode:%v", node)
+		return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)
 	}
 
 	m := storage.GetMessage(in.Id, in.Topic)
