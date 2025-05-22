@@ -105,6 +105,7 @@ outer:
 		thisnodeaddr = thisnodeaddr + ":" + "50051"
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
+			glog.Infof("[SubscribeHandler] Wrong node for subscription %s, expected %s", in.Subscription, node)
 			return fmt.Errorf("wrongnode|%v", node)
 		}
 
