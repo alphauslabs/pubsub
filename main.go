@@ -117,10 +117,9 @@ func main() {
 		}(&m, time.Now())
 		glog.Info("Waiting for leader to be active...")
 		ok, err := utils.EnsureLeaderActive(op, ctx)
-		switch {
-		case !ok:
+		if err != nil {
 			m = fmt.Sprintf("failed: %v, no leader after ", err)
-		default:
+		} else if ok {
 			m = "leader active after "
 		}
 	}()
