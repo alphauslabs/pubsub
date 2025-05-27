@@ -142,6 +142,7 @@ func main() {
 		}
 	}()
 
+	glog.Infof("isLeader : %v", atomic.LoadInt32(&leader.IsLeader))
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
 		me := op.Name()
 		glog.Infof("ME: %v", strings.Split(me, ":")[0])
@@ -154,6 +155,9 @@ func main() {
 		} else {
 			glog.Infof("Record map broadcasted successfully")
 		}
+	} else {
+		// Wait for record map
+
 	}
 
 	go storage.MonitorActivity(ctx)
