@@ -97,7 +97,7 @@ func main() {
 			ap,
 			handlers.Broadcast,
 		),
-		hedge.WithMemberChangesHandler(
+		hedge.WithMemberChangedHandler(
 			ap,
 			handlers.MemberChanges,
 		),

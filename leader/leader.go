@@ -15,7 +15,6 @@ import (
 var IsLeader int32
 
 func LeaderCallBack(d any, msg []byte) {
-	glog.Infof("LeaderCallBack: Received message: %s", string(msg))
 	o := d.(*app.PubSub)
 	s := strings.Split(string(msg), "")
 	v, err := strconv.Atoi(s[0])
