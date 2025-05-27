@@ -83,7 +83,6 @@ func main() {
 		"pubsub_lock",
 		"pubsublock",
 		"pubsub_log",
-		hedge.WithDuration(5000),
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(
 			ap,
@@ -123,6 +122,7 @@ func main() {
 			m = "leader active after "
 		}
 	}()
+	time.Sleep(3 * time.Second) // wait for leader to be active
 
 	go func() {
 		defer func() {
@@ -154,9 +154,6 @@ func main() {
 		} else {
 			glog.Infof("Record map broadcasted successfully")
 		}
-	} else {
-		// Wait for record map
-
 	}
 
 	go storage.MonitorActivity(ctx)
