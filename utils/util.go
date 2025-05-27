@@ -11,6 +11,7 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
 	"github.com/golang/glog"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -272,4 +273,35 @@ func CheckIfSubscriptionIsCorrect(sub string, nodeId string) (bool, string) {
 	}
 
 	return false, ""
+}
+
+func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*storage.Subscription, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT name, topic, autoextend FROM pubsub_subscriptions WHERE topic = @topic ORDER BY name`,
+		Params: map[string]interface{}{
+			"topic": topic,
+		},
+	}
+
+	iter := client.Single().Query(context.Background(), stmt)
+	defer iter.Stop()
+
+	var subscriptions []*storage.Subscription
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error fetching subscriptions for topic %s: %v", topic, err)
+		}
+
+		var sub storage.Subscription
+		if err := row.Columns(&sub.Subscription.Name, &sub.Subscription.Topic, &sub.Subscription.AutoExtend); err != nil {
+			return nil, fmt.Errorf("error reading subscription row: %v", err)
+		}
+		subscriptions = append(subscriptions, &sub)
+	}
+
+	return subscriptions, nil
 }

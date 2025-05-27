@@ -44,9 +44,9 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 		attr = string(b)
 	}
 
-	subs, err := storage.GetSubscribtionsForTopic(in.Topic)
+	subs, err := utils.GetAllSubscriptionsForTopic(in.Topic, s.Client)
 	if err != nil {
-		glog.Errorf("Failed to get subscriptions for topic=%v", in.Topic)
+		glog.Errorf("Failed to get subscriptions for topic=%v: %v", in.Topic, err)
 		return nil, err
 	}
 
@@ -235,16 +235,17 @@ outer:
 							// Check for nil map or missing subscription
 							if m.Subscriptions == nil {
 								glog.Errorf("[SubscribeHandler] Message %s has nil Subscriptions map", m.Id)
-								m.Mu.Unlock()
+								m.Mu.RUnlock() // Release lock before returning
 								return
 							}
 
 							subInfo, exists := m.Subscriptions[in.Subscription]
 							if !exists {
 								glog.Errorf("[SubscribeHandler] Subscription %s not found in message %s", in.Subscription, m.Id)
-								m.Mu.RUnlock()
+								m.Mu.RUnlock() // Release lock before returning
 								return
 							}
+							// Release lock after all checks are done for this iteration
 							m.Mu.RUnlock()
 
 							switch {
