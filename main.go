@@ -83,6 +83,7 @@ func main() {
 		"pubsub_lock",
 		"pubsublock",
 		"pubsub_log",
+		hedge.WithDuration(2000),
 		hedge.WithGroupSyncInterval(2*time.Second),
 		hedge.WithLeaderCallback(
 			ap,
