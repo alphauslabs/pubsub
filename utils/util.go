@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/spanner"
+	pubsubproto "github.com/alphauslabs/pubsub-proto/v1"
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/flowerinthenight/hedge/v2"
@@ -298,7 +299,9 @@ func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*stora
 			return nil, fmt.Errorf("error fetching subscriptions for topic %s: %v", topic, err)
 		}
 
-		var sub storage.Subscription
+		sub := storage.Subscription{
+			Subscription: &pubsubproto.Subscription{},
+		}
 		if err := row.Columns(&sub.Subscription.Name, &sub.Subscription.Topic, &sub.Subscription.AutoExtend); err != nil {
 			return nil, fmt.Errorf("error reading subscription row: %v", err)
 		}
