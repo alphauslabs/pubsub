@@ -207,7 +207,9 @@ func BroadcastRecord(app *app.PubSub, record map[string][]string) error {
 		return err
 	}
 
-	out := app.Op.Broadcast(context.Background(), broadcastData)
+	out := app.Op.Broadcast(context.Background(), broadcastData, hedge.BroadcastArgs{
+		SkipSelf: true,
+	})
 	for _, r := range out {
 		if r.Error != nil {
 			glog.Errorf("Error broadcasting to %s: %v", r.Id, r.Error)

@@ -68,6 +68,7 @@ func FetchAllTopicSubscriptions(ctx context.Context, client *spanner.Client) map
 }
 
 func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
+	isStartup = false
 	if isStartup {
 		requestTopicSubFetch(ctx, app.Op) // request to the current leader
 		return
