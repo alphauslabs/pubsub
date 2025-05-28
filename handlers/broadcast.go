@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/alphauslabs/pubsub/app"
@@ -38,6 +39,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	LeaderLiveliness: handleLeaderLiveliness,
 	TopicDeleted:     handleTopicDeleted,
 	RecordMap:        handleRecordMap,
+	"getextip":       handleGetExternalIp,
 }
 
 // Root handler for op.Broadcast()
@@ -244,5 +246,21 @@ func handleRecordMap(app *app.PubSub, msg []byte) ([]byte, error) {
 	glog.Infof("[RecordMap] Successfully unmarshalled record map: %v", data)
 	storage.SetRecordMap(data)
 
+	return nil, nil
+}
+
+func handleGetExternalIp(app *app.PubSub, msg []byte) ([]byte, error) {
+	// Get the nodes external IP
+	me := app.Op.Name()
+	me = strings.Split(me, ":")[0] // Get the node ID without port
+
+	r, err := http.Get("http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
+	if err != nil {
+		glog.Errorf("[GetExternalIp] Error fetching external IP: %v", err)
+		return nil, fmt.Errorf("failed to fetch external IP: %w", err)
+	}
+	defer r.Body.Close()
+
+	glog.Infof("[GetExternalIp] %+v", r)
 	return nil, nil
 }

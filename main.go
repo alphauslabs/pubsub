@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -123,6 +124,20 @@ func main() {
 			m = "leader active after "
 		}
 	}()
+
+	inp := handlers.BroadCastInput{
+		Type: "getextip",
+		Msg:  []byte(""),
+	}
+
+	b, _ := json.Marshal(inp)
+	rep := op.Broadcast(ctx, b)
+	for _, r := range rep {
+		if r.Error == nil {
+			glog.Infof("[GetExternalIp] Response: %s", string(r.Reply))
+		}
+	}
+	return
 	time.Sleep(3 * time.Second) // wait for leader to be active
 
 	go func() {
