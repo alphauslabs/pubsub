@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -100,9 +101,11 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		// Check if client is connected to the correct node, if not we return error and provide correct node address.
-		thisnodeaddr := utils.AddrForExternal(nodeId)
+		internal := strings.Split(s.Op.Name(), ":")[0]
+		thisnodeaddr := utils.AddrForExternal(nodeId + ":" + internal)
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
+			node = utils.AddrForExternal(node)
 			glog.Infof("[SubscribeHandler] Wrong node for subscription %s, expected %s", in.Subscription, node)
 			return fmt.Errorf("wrongnode|%v", node)
 		}
@@ -275,10 +278,12 @@ outer:
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
-	thisnodearr := utils.GetMyExternalIp(s.Op)
-	thisnodeaddr := utils.AddrForExternal(thisnodearr)
+	thisnodearr := nodeId // external
+	internal := strings.Split(s.Op.Name(), ":")[0]
+	thisnodeaddr := fmt.Sprintf("%s|%s", thisnodearr, internal)
 	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 	if !ok && node != "" {
+		node = utils.AddrForExternal(node)
 		return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)
 	}
 
