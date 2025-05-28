@@ -345,3 +345,25 @@ func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*stora
 
 	return subscriptions, nil
 }
+
+func GetMyExternalIp(op *hedge.Op) string {
+	addr := op.Name()
+	host := strings.Split(addr, ":")[0] // Get the host part without port
+	payload := struct {
+		Type string `json:"type"`
+		Msg  []byte `json:"msg"`
+	}{
+		Type: "getextip",
+		Msg:  []byte(""),
+	}
+	b, _ := json.Marshal(payload)
+	rep := op.Broadcast(context.Background(), b, hedge.BroadcastArgs{
+		OnlySendTo: []string{host},
+	})
+	for _, r := range rep {
+		if r.Error == nil {
+			return string(r.Reply)
+		}
+	}
+	return ""
+}

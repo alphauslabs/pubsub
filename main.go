@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,8 +33,9 @@ import (
 )
 
 var (
-	port = flag.String("port", ":50051", "Main gRPC server port")
-	env  = flag.String("env", "dev", "Environment: dev, prod")
+	port   = flag.String("port", ":50051", "Main gRPC server port")
+	env    = flag.String("env", "dev", "Environment: dev, prod")
+	nodeId = "" // external
 )
 
 func main() {
@@ -143,10 +143,12 @@ func main() {
 		}
 	}()
 
+	nodeId = utils.GetMyExternalIp(ap.Op)
+	if nodeId == "" {
+		glog.Fatalf("Failed to get external IP address for this node")
+	}
 	glog.Infof("isLeader : %v", atomic.LoadInt32(&leader.IsLeader))
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
-		me := op.Name()
-		glog.Infof("ME: %v", strings.Split(me, ":")[0])
 		storage.RecordMap = utils.CreateRecordMapping(ap)
 		glog.Infof("Record map created: %v", storage.RecordMap)
 		err = utils.BroadcastRecord(ap, storage.RecordMap)

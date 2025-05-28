@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -101,8 +100,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		// Check if client is connected to the correct node, if not we return error and provide correct node address.
-		thisnodeaddr := strings.Split(s.Op.Name(), ":")[0]
-		thisnodeaddr = thisnodeaddr + ":" + "50051"
+		thisnodeaddr := nodeId + ":" + "50051"
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
 			glog.Infof("[SubscribeHandler] Wrong node for subscription %s, expected %s", in.Subscription, node)
@@ -277,9 +275,9 @@ outer:
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
-	thisnodeddr := strings.Split(s.Op.Name(), ":")[0]
-	thisnodeddr = thisnodeddr + ":" + "50051"
-	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeddr)
+	thisnodearr := utils.GetMyExternalIp(s.Op)
+	thisnodeaddr := thisnodearr + ":" + "50051"
+	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 	if !ok && node != "" {
 		return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)
 	}

@@ -143,8 +143,7 @@ func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	// Send a request to leader to fetch the latest topic-subscription structure
-	me := op.Name()
-	me = strings.Split(me, ":")[0]
+	me := utils.GetMyExternalIp(op)
 	me = me + ":" + "50051"
 	broadcastMsg := SendInput{
 		Type: initialTopicSubFetch,
