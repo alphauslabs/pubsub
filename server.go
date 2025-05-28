@@ -195,8 +195,8 @@ outer:
 				m.Mu.RLock()
 				defer m.Mu.RUnlock()
 
-				m.Subscriptions[in.Subscription].Unlock()
-				m.Subscriptions[in.Subscription].ClearAge()
+				m.Subscriptions[in.Subscription].Lock()
+				m.Subscriptions[in.Subscription].RenewAge()
 			}()
 
 			if err := stream.Send(msg.Message); err != nil {

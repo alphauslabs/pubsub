@@ -298,6 +298,7 @@ func (s *MsgSub) IsDeleted() bool {
 
 func (s *MsgSub) MarkAsDeleted() {
 	atomic.StoreInt32(&s.Deleted, 1)
+	s.ClearAge()
 }
 
 func (s *MsgSub) SetAutoExtend(autoExtend bool) {
