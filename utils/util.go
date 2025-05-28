@@ -230,6 +230,20 @@ func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription
 	return samePrefixSubs
 }
 
+func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
+	handlers := make([]string, 0)
+	for _, p := range pre {
+		for nodeID, prefixes := range record {
+			if IsPresent(p, prefixes) {
+				nodeID = strings.Split(nodeID, ":")[0] // Get the node ID without port
+				nodeID = nodeID + ":" + "50052"        // Append the port
+				handlers = append(handlers, nodeID)
+			}
+		}
+	}
+	return handlers
+}
+
 func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string) map[string]map[string]*storage.Subscription {
 	grouped := make(map[string]map[string]*storage.Subscription)
 	for topic, subs := range ts {

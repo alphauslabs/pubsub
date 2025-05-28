@@ -176,6 +176,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 
+		pres := make([]string, 0)
 		subss := make(map[string]*storage.MsgSub)
 		for k, v := range subStatus {
 			var done int32
@@ -186,6 +187,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 				SubscriptionID: k,
 				Deleted:        done,
 			}
+			pres = append(pres, string(k[0]))
 		}
 
 		m := storage.Message{
@@ -218,8 +220,11 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			continue
 		}
 
+		n := utils.GetSubNodeHandlers(pres, storage.RecordMap)
 		// Broadcast
-		responses := app.Op.Broadcast(ctx, broadcastData)
+		responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+			OnlySendTo: n, // only send to these nodes
+		})
 		for _, response := range responses {
 			if response.Error != nil {
 				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
