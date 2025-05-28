@@ -184,8 +184,8 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 			for j, c := range charRange {
 				individualLetters[j] = string(c)
 			}
-
-			record[nodeID+"|"+all[i]] = individualLetters
+			internalIp := strings.Split(all[i], ":")[0]
+			record[nodeID+"|"+internalIp] = individualLetters
 			glog.Infof("Node %s assigned subscription prefixes: %v", nodeID, individualLetters)
 
 			start = end
