@@ -102,7 +102,7 @@ outer:
 	for {
 		// Check if client is connected to the correct node, if not we return error and provide correct node address.
 		internal := strings.Split(s.Op.Name(), ":")[0]
-		thisnodeaddr := utils.AddrForExternal(nodeId + ":" + internal)
+		thisnodeaddr := fmt.Sprintf("%s|%s", nodeId, internal)
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
 			node = utils.AddrForExternal(node)
