@@ -148,6 +148,8 @@ func main() {
 		glog.Error("Failed to get external IP address, exiting")
 		return
 	}
+
+	time.Sleep(3 * time.Second)
 	glog.Infof("isLeader : %v", atomic.LoadInt32(&leader.IsLeader))
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
 		storage.RecordMap = utils.CreateRecordMapping(ap)
