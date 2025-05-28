@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -251,16 +252,26 @@ func handleRecordMap(app *app.PubSub, msg []byte) ([]byte, error) {
 
 func handleGetExternalIp(app *app.PubSub, msg []byte) ([]byte, error) {
 	// Get the nodes external IP
-	me := app.Op.Name()
-	me = strings.Split(me, ":")[0] // Get the node ID without port
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 
-	r, err := http.Get("http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
+	req.Header.Add("Metadata-Flavor", "Google")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		glog.Errorf("[GetExternalIp] Error fetching external IP: %v", err)
 		return nil, fmt.Errorf("failed to fetch external IP: %w", err)
 	}
-	defer r.Body.Close()
+	defer resp.Body.Close()
 
-	glog.Infof("[GetExternalIp] %+v", r)
-	return nil, nil
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	glog.Infof("[GetExternalIp] External IP: %s", string(ip))
+	return ip, nil
 }
