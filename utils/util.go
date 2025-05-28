@@ -140,13 +140,34 @@ func CheckIfTopicSubscriptionIsCorrect(topicID, subscription string) error {
 func CreateRecordMapping(app *app.PubSub) map[string][]string {
 	record := map[string][]string{} // Maps node IDs to subscription prefixes
 	all := app.Op.Members()
-	if len(all) > 0 {
+	f := make([]string, 0, len(all))
+	// Get their external IP
+	for _, nodeID := range all {
+
+		inp := struct {
+			Type string
+			Msg  []byte
+		}{
+			Type: "getextip",
+			Msg:  []byte(""),
+		}
+		broadcastData, _ := json.Marshal(inp)
+		resp := app.Op.Broadcast(context.Background(), broadcastData, hedge.BroadcastArgs{
+			OnlySendTo: []string{nodeID},
+		})
+		for _, r := range resp {
+			if r.Error == nil {
+				f = append(f, string(r.Reply)) // Add the node ID to the list
+			}
+		}
+	}
+	if len(f) > 0 {
 		alphabet := "abcdefghijklmnopqrstuvwxyz"
-		charsPerNode := len(alphabet) / len(all)
-		remainder := len(alphabet) % len(all)
+		charsPerNode := len(alphabet) / len(f)
+		remainder := len(alphabet) % len(f)
 
 		start := 0
-		for i, nodeID := range all {
+		for i, nodeID := range f {
 			nodeID = strings.Split(nodeID, ":")[0]
 			nodeID = nodeID + ":" + "50051"
 			end := start + charsPerNode
