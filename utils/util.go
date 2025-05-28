@@ -370,13 +370,13 @@ func AddrForInternal(record string) string {
 		return strings.Split(record, "|")[1] + ":50052"
 	}
 
-	return fmt.Sprintf("%s:50052", strings.Split(record, "|")[0])
+	return fmt.Sprintf("%s:50052", strings.Split(record, "|")[1])
 }
 
 func AddrForExternal(record string) string {
 	s := strings.Split(record, "|")
 	if len(s) >= 2 {
-		return fmt.Sprintf("%s:50051", s[1])
+		return fmt.Sprintf("%s:50051", s[0])
 	}
 
 	return fmt.Sprintf("%s:50051", s[0])
