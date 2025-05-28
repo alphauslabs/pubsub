@@ -145,7 +145,8 @@ func main() {
 
 	nodeId = utils.GetMyExternalIp(ap.Op)
 	if nodeId == "" {
-		glog.Fatalf("Failed to get external IP address for this node")
+		glog.Error("Failed to get external IP address, exiting")
+		return
 	}
 	glog.Infof("isLeader : %v", atomic.LoadInt32(&leader.IsLeader))
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
