@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -113,6 +114,8 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			continue
 		}
 
+		node = strings.Split(node, "|")[0] // Get the node ID without port
+		node = node + ":" + "50052"        // Append port
 		outs := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
 			OnlySendTo: []string{node}, // only send to this node
 		})
@@ -221,9 +224,15 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		}
 
 		n := utils.GetSubNodeHandlers(pres, storage.RecordMap)
+		nodes := make([]string, 0, len(n))
+		for _, node := range n {
+			node = strings.Split(node, "|")[1] // Get the node ID without port
+			node = node + ":" + "50052"        // Append port
+			nodes = append(nodes, node)
+		}
 		// Broadcast
 		responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
-			OnlySendTo: n, // only send to these nodes
+			OnlySendTo: nodes, // only send to these nodes
 		})
 		for _, response := range responses {
 			if response.Error != nil {

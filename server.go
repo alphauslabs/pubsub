@@ -100,7 +100,7 @@ func (s *server) Subscribe(in *pb.SubscribeRequest, stream pb.PubSubService_Subs
 outer:
 	for {
 		// Check if client is connected to the correct node, if not we return error and provide correct node address.
-		thisnodeaddr := nodeId + ":" + "50051"
+		thisnodeaddr := utils.AddrForExternal(nodeId)
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
 			glog.Infof("[SubscribeHandler] Wrong node for subscription %s, expected %s", in.Subscription, node)
@@ -276,7 +276,7 @@ outer:
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
 	thisnodearr := utils.GetMyExternalIp(s.Op)
-	thisnodeaddr := thisnodearr + ":" + "50051"
+	thisnodeaddr := utils.AddrForExternal(thisnodearr)
 	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 	if !ok && node != "" {
 		return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -99,9 +98,7 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 			return
 		}
 
-		k := strings.Split(k, ":")[0]
-		k = k + ":" + "50052"
-
+		k = utils.AddrForInternal(k)
 		glog.Infof("STRUCT-Broadcasting topic-subscription data to %s: %v", k, string(broadcastData))
 
 		out := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
@@ -144,7 +141,7 @@ func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
 	// Send a request to leader to fetch the latest topic-subscription structure
 	me := utils.GetMyExternalIp(op)
-	me = me + ":" + "50051"
+	me = utils.AddrForInternal(me)
 	broadcastMsg := SendInput{
 		Type: initialTopicSubFetch,
 		Msg:  []byte(me),

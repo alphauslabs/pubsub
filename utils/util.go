@@ -143,7 +143,6 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 	f := make([]string, 0, len(all))
 	// Get their external IP
 	for _, nodeID := range all {
-
 		inp := struct {
 			Type string
 			Msg  []byte
@@ -169,7 +168,6 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 		start := 0
 		for i, nodeID := range f {
 			nodeID = strings.Split(nodeID, ":")[0]
-			nodeID = nodeID + ":" + "50051"
 			end := start + charsPerNode
 			if i < remainder {
 				// Distribute remainder characters evenly
@@ -187,7 +185,7 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 				individualLetters[j] = string(c)
 			}
 
-			record[nodeID] = individualLetters
+			record[nodeID+"|"+all[i]] = individualLetters
 			glog.Infof("Node %s assigned subscription prefixes: %v", nodeID, individualLetters)
 
 			start = end
@@ -256,8 +254,6 @@ func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
 	for _, p := range pre {
 		for nodeID, prefixes := range record {
 			if IsPresent(p, prefixes) {
-				nodeID = strings.Split(nodeID, ":")[0] // Get the node ID without port
-				nodeID = nodeID + ":" + "50052"        // Append the port
 				handlers = append(handlers, nodeID)
 			}
 		}
@@ -365,4 +361,22 @@ func GetMyExternalIp(op *hedge.Op) string {
 		}
 	}
 	return ""
+}
+
+func AddrForInternal(record string) string {
+	s := strings.Split(record, "|")
+	if len(s) >= 2 {
+		return strings.Split(record, "|")[1] + ":50052"
+	}
+
+	return fmt.Sprintf("%s:50052", strings.Split(record, "|")[0])
+}
+
+func AddrForExternal(record string) string {
+	s := strings.Split(record, "|")
+	if len(s) >= 2 {
+		return fmt.Sprintf("%s:50051", s[1])
+	}
+
+	return fmt.Sprintf("%s:50051", s[0])
 }
