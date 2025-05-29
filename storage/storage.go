@@ -151,6 +151,8 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
+
+	glog.Infof("Storing message to memory subinfo=%+v", msg.Subscriptions)
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }

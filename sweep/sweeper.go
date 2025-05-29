@@ -32,9 +32,11 @@ func RunCheckForExpired(ctx context.Context) {
 						}
 						switch {
 						case time.Since(t.Age).Seconds() >= 30 && !t.IsAutoExtend():
+							glog.Infof("[sweep] unlocked message: %v, sub: %v", v1.Id, t.SubscriptionID)
 							t.Unlock()
 							t.ClearAge()
 						case time.Since(t.Age).Seconds() >= 30 && t.IsAutoExtend():
+							glog.Infof("[sweep] auto-extend message: %v, sub: %v", v1.Id, t.SubscriptionID)
 							t.RenewAge()
 						}
 					}

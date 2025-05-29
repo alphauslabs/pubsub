@@ -226,10 +226,10 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 		n := utils.GetSubNodeHandlers(pres, storage.RecordMap)
 		nodes := make([]string, 0, len(n))
 		for _, node := range n {
-			node = strings.Split(node, "|")[1] // Get the node ID without port
-			node = node + ":" + "50052"        // Append port
-			nodes = append(nodes, node)
+			n := utils.AddrForInternal(node)
+			nodes = append(nodes, n)
 		}
+		glog.Infof("[BroadcastMessage] Broadcasting message to these nodes: %v", nodes)
 		// Broadcast
 		responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
 			OnlySendTo: nodes, // only send to these nodes
