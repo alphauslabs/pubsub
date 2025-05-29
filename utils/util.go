@@ -251,14 +251,20 @@ func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription
 
 func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
 	handlers := make([]string, 0)
+	temp := make(map[string]struct{})
 	for _, p := range pre {
 		for nodeID, prefixes := range record {
 			if IsPresent(p, prefixes) {
-				handlers = append(handlers, nodeID)
-				break
+				if _, exists := temp[nodeID]; !exists {
+					temp[nodeID] = struct{}{} // Ensure unique node IDs
+				}
 			}
 		}
 	}
+	for nodeID := range temp {
+		handlers = append(handlers, nodeID)
+	}
+
 	return handlers
 }
 

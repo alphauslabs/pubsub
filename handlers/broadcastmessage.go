@@ -179,16 +179,32 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			}
 		}
 
+		subDetails, err := utils.GetAllSubscriptionsForTopic(msg.Topic, app.Client)
+		if err != nil {
+			glog.Errorf("[BroadcastMessage] Error getting subscriptions for topic %s: %v", msg.Topic, err)
+			continue
+		}
+
 		pres := make([]string, 0)
 		subss := make(map[string]*storage.MsgSub)
 		for k, v := range subStatus {
 			var done int32
+			var autoExtend int32
+			for _, sub := range subDetails {
+				if sub.Subscription.Name == k {
+					if sub.Subscription.AutoExtend {
+						autoExtend = 1
+					}
+					break
+				}
+			}
 			if v {
 				done = 1
 			}
 			subss[k] = &storage.MsgSub{
 				SubscriptionID: k,
 				Deleted:        done,
+				AutoExtend:     autoExtend,
 			}
 			pres = append(pres, string(k[0]))
 		}
