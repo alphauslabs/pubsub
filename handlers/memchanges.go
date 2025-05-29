@@ -1,6 +1,9 @@
 package handlers
 
+import "github.com/golang/glog"
+
 func MemberChanges(data any, msg []byte) ([]byte, error) {
+	glog.Info("MemberChanges called")
 	// ap := data.(*app.PubSub)
 	// storage.RecordMap = utils.CreateRecordMapping(ap)
 	// err := utils.BroadcastRecord(ap, storage.RecordMap)
