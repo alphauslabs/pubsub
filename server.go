@@ -713,7 +713,7 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 			glog.Errorf("[GetMessagesInQueue] Error in getting messages in queue for topic=%v, sub=%v, err=%v", in.Topic, in.Subscription, v.Error)
 			return nil, status.Errorf(codes.Internal, "failed to get messages in queue: %v", v.Error)
 		} else {
-			var s []storage.InQueue
+			var s []pb.InQueue
 			if err := json.Unmarshal(v.Reply, &s); err != nil {
 				glog.Errorf("[GetMessagesInQueue] Error unmarshalling messages in queue for topic=%v, sub=%v, err=%v", in.Topic, in.Subscription, err)
 				return nil, status.Errorf(codes.Internal, "failed to unmarshal messages in queue: %v", err)
@@ -721,7 +721,7 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 			for _, msg := range s {
 				resp = append(resp, &pb.InQueue{
 					Subscription: msg.Subscription,
-					Total:        int32(msg.Available),
+					Total:        msg.Total,
 				})
 			}
 		}

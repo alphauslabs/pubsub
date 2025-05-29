@@ -299,9 +299,9 @@ func handleGetQueue(app *app.PubSub, msg []byte) ([]byte, error) {
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
 	}
-	r := make([]*pb.InQueue, 0)
+	r := make([]pb.InQueue, 0)
 	for _, c := range count {
-		r = append(r, &pb.InQueue{
+		r = append(r, pb.InQueue{
 			Subscription: c.Subscription,
 			Total:        int32(c.Available),
 		})
