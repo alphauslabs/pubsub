@@ -284,6 +284,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 	if !ok && node != "" {
 		node = utils.AddrForExternal(node)
+		glog.Infof("[Acknowledge] wrong node for sub:%v, correct should be: %v", in.Subscription, node)
 		return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)
 	}
 
