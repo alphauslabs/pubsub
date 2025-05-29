@@ -11,6 +11,10 @@ import (
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
 	"github.com/golang/glog"
+	"google.golang.org/grpc/codes"
+
+	pb "github.com/alphauslabs/pubsub-proto/v1"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -34,13 +38,14 @@ type BroadCastInput struct {
 }
 
 var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
-	Message:          handleBroadcastedMsg,
-	Topicsub:         handleBroadcastedTopicsub,
-	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
-	LeaderLiveliness: handleLeaderLiveliness,
-	TopicDeleted:     handleTopicDeleted,
-	RecordMap:        handleRecordMap,
-	"getextip":       handleGetExternalIp,
+	Message:              handleBroadcastedMsg,
+	Topicsub:             handleBroadcastedTopicsub,
+	MsgEvent:             handleMessageEvent, // Handles message locks, unlocks, deletes
+	LeaderLiveliness:     handleLeaderLiveliness,
+	TopicDeleted:         handleTopicDeleted,
+	RecordMap:            handleRecordMap,
+	"getextip":           handleGetExternalIp,
+	"getmessagesinqueue": handleGetQueue,
 }
 
 // Root handler for op.Broadcast()
@@ -274,4 +279,38 @@ func handleGetExternalIp(app *app.PubSub, msg []byte) ([]byte, error) {
 
 	glog.Infof("[GetExternalIp] External IP: %s", string(ip))
 	return ip, nil
+}
+
+func handleGetQueue(app *app.PubSub, msg []byte) ([]byte, error) {
+	var in string
+	in = string(msg)
+	if in == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "topic and subscription must be provided")
+	}
+
+	parts := strings.Split(in, "|")
+	if len(parts) != 2 {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid input format, expected 'topic|subscription'")
+	}
+
+	topic := parts[0]
+	subscription := parts[1]
+	count, err := storage.GetSubscriptionQueueDepths(topic, subscription)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
+	}
+	r := make([]*pb.InQueue, 0)
+	for _, c := range count {
+		r = append(r, &pb.InQueue{
+			Subscription: c.Subscription,
+			Total:        int32(c.Available),
+		})
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		glog.Errorf("[GetQueue] Error marshalling queue data: %v", err)
+		return nil, fmt.Errorf("failed to marshal queue data: %w", err)
+	}
+	return data, nil
+
 }

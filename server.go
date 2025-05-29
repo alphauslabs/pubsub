@@ -699,19 +699,36 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 	if in.Subscription == "triggercrash" {
 		panic("trigger crash")
 	}
-	count, err := storage.GetSubscriptionQueueDepths(in.Topic, in.Subscription)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to count messages: %v", err)
+
+	inp := handlers.BroadCastInput{
+		Type: "getmessagesinqueue",
+		Msg:  []byte(fmt.Sprintf("%s|%s", in.Topic, in.Subscription)),
 	}
-	r := make([]*pb.InQueue, 0)
-	for _, c := range count {
-		r = append(r, &pb.InQueue{
-			Subscription: c.Subscription,
-			Total:        int32(c.Available),
-		})
+
+	resp := make([]*pb.InQueue, 0)
+	bin, _ := json.Marshal(inp)
+	out := s.Op.Broadcast(ctx, bin)
+	for _, v := range out {
+		if v.Error != nil {
+			glog.Errorf("[GetMessagesInQueue] Error in getting messages in queue for topic=%v, sub=%v, err=%v", in.Topic, in.Subscription, v.Error)
+			return nil, status.Errorf(codes.Internal, "failed to get messages in queue: %v", v.Error)
+		} else {
+			var s []storage.InQueue
+			if err := json.Unmarshal(v.Reply, &s); err != nil {
+				glog.Errorf("[GetMessagesInQueue] Error unmarshalling messages in queue for topic=%v, sub=%v, err=%v", in.Topic, in.Subscription, err)
+				return nil, status.Errorf(codes.Internal, "failed to unmarshal messages in queue: %v", err)
+			}
+			for _, msg := range s {
+				resp = append(resp, &pb.InQueue{
+					Subscription: msg.Subscription,
+					Total:        int32(msg.Available),
+				})
+			}
+		}
 	}
+
 	return &pb.GetMessagesInQueueResponse{
-		InQueue: r,
+		InQueue: resp,
 	}, nil
 }
 
