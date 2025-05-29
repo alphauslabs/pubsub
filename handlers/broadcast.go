@@ -24,6 +24,8 @@ const (
 	MsgEvent         = "msgEvent"
 	TopicDeleted     = "topicdeleted"
 	RecordMap        = "recordmap"
+	GetExternalIp    = "getextip"
+	GetQueue         = "getmessagesinqueue"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -38,14 +40,14 @@ type BroadCastInput struct {
 }
 
 var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
-	Message:              handleBroadcastedMsg,
-	Topicsub:             handleBroadcastedTopicsub,
-	MsgEvent:             handleMessageEvent, // Handles message locks, unlocks, deletes
-	LeaderLiveliness:     handleLeaderLiveliness,
-	TopicDeleted:         handleTopicDeleted,
-	RecordMap:            handleRecordMap,
-	"getextip":           handleGetExternalIp,
-	"getmessagesinqueue": handleGetQueue,
+	Message:          handleBroadcastedMsg,
+	Topicsub:         handleBroadcastedTopicsub,
+	MsgEvent:         handleMessageEvent, // Handles message locks, unlocks, deletes
+	LeaderLiveliness: handleLeaderLiveliness,
+	TopicDeleted:     handleTopicDeleted,
+	RecordMap:        handleRecordMap,
+	GetExternalIp:    handleGetExternalIp,
+	GetQueue:         handleGetQueue,
 }
 
 // Root handler for op.Broadcast()

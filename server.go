@@ -701,7 +701,7 @@ func (s *server) GetMessagesInQueue(ctx context.Context, in *pb.GetMessagesInQue
 	}
 
 	inp := handlers.BroadCastInput{
-		Type: "getmessagesinqueue",
+		Type: handlers.GetQueue,
 		Msg:  []byte(fmt.Sprintf("%s|%s", in.Topic, in.Subscription)),
 	}
 
