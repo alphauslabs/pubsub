@@ -255,6 +255,7 @@ func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
 		for nodeID, prefixes := range record {
 			if IsPresent(p, prefixes) {
 				handlers = append(handlers, nodeID)
+				break
 			}
 		}
 	}

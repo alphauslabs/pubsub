@@ -152,7 +152,12 @@ func StoreMessage(msg *Message) error {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
 
-	glog.Infof("Storing message to memory subinfo=%+v", msg.Subscriptions)
+	for subID, subInfo := range msg.Subscriptions {
+		glog.Infof("[STORAGE] Message %s subscription detail - ID: %s, Info: %+v",
+			msg.Id,
+			subID,
+			subInfo)
+	}
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }
