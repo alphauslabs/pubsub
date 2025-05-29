@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -71,16 +70,34 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			}
 		}
 
+		subDetails, err := utils.GetAllSubscriptionsForTopic(msg.Topic, app.Client)
+		if err != nil {
+			glog.Errorf("[BroadcastMessage] Error getting subscriptions for topic %s: %v", msg.Topic, err)
+			continue
+		}
+
+		pres := make([]string, 0)
 		subss := make(map[string]*storage.MsgSub)
 		for k, v := range subStatus {
 			var done int32
+			var autoExtend int32
+			for _, sub := range subDetails {
+				if sub.Subscription.Name == k {
+					if sub.Subscription.AutoExtend {
+						autoExtend = 1
+					}
+					break
+				}
+			}
 			if v {
 				done = 1
 			}
 			subss[k] = &storage.MsgSub{
 				SubscriptionID: k,
 				Deleted:        done,
+				AutoExtend:     autoExtend,
 			}
+			pres = append(pres, string(k[0]))
 		}
 
 		m := storage.Message{
@@ -106,24 +123,47 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			Msg:  data,
 		}
 
-		// Marshal broadcast input
-		node := utils.WhatNode(string(msg.Id[0]), storage.RecordMap)
 		broadcastData, err := json.Marshal(broadcastInput)
 		if err != nil {
 			glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
 			continue
 		}
 
-		node = strings.Split(node, "|")[0] // Get the node ID without port
-		node = node + ":" + "50052"        // Append port
-		outs := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
-			OnlySendTo: []string{node}, // only send to this node
+		n := utils.GetSubNodeHandlers(pres, storage.RecordMap)
+		nodes := make([]string, 0, len(n))
+		for _, node := range n {
+			n := utils.AddrForInternal(node)
+			nodes = append(nodes, n)
+		}
+		glog.Infof("[BroadcastMessage] Broadcasting message to these nodes: %v", nodes)
+		// Broadcast
+		responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+			OnlySendTo: nodes, // only send to these nodes
 		})
-		for _, out := range outs {
-			if out.Error != nil {
-				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", out.Error)
+		for _, response := range responses {
+			if response.Error != nil {
+				glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", response.Error)
 			}
 		}
+
+		// Marshal broadcast input
+		// node := utils.WhatNode(string(msg.Id[0]), storage.RecordMap)
+		// broadcastData, err := json.Marshal(broadcastInput)
+		// if err != nil {
+		// 	glog.Errorf("[BroadcastMessage] Error marshalling broadcast input: %v", err)
+		// 	continue
+		// }
+
+		// node = strings.Split(node, "|")[0] // Get the node ID without port
+		// node = node + ":" + "50052"        // Append port
+		// outs := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+		// 	OnlySendTo: []string{node}, // only send to this node
+		// })
+		// for _, out := range outs {
+		// 	if out.Error != nil {
+		// 		glog.Errorf("[BroadcastMessage] Error broadcasting message: %v", out.Error)
+		// 	}
+		// }
 	}
 
 	glog.Info("[BroadcastMessage] All messages broadcast completed.")
@@ -271,18 +311,18 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer tick.Stop()
 
-	// broadcastMsg := SendInput{
-	// 	Type: initialmsgsfetch,
-	// 	Msg:  []byte{},
-	// }
+	broadcastMsg := SendInput{
+		Type: initialmsgsfetch,
+		Msg:  []byte{},
+	}
 
-	// // Ask the leader to trigger a broadcast of all messages
-	// bin, _ := json.Marshal(broadcastMsg)
-	// _, err := app.Op.Send(ctx, bin)
-	// if err != nil {
-	// 	glog.Errorf("[Broadcast messages] sending request to leader: %v", err)
-	// 	return
-	// }
+	// Ask the leader to trigger a broadcast of all messages
+	bin, _ := json.Marshal(broadcastMsg)
+	_, err := app.Op.Send(ctx, bin)
+	if err != nil {
+		glog.Errorf("[Broadcast messages] sending request to leader: %v", err)
+		return
+	}
 
 	lastQueryTime := time.Now().UTC()
 	for {
