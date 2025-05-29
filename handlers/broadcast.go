@@ -53,7 +53,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 // Root handler for op.Broadcast()
 func Broadcast(data any, msg []byte) ([]byte, error) {
 	var in BroadCastInput
-	appInstance := data.(*app.PubSub) // Ensure we're using an instance, not a type
+	appInstance := data.(*app.PubSub)
 
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
