@@ -117,6 +117,9 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 					Deleted:        done,
 					AutoExtend:     autoExtend,
 				}
+				if msg.Subscriptions == nil {
+					msg.Subscriptions = make(map[string]*storage.MsgSub)
+				}
 				msg.Subscriptions[sub] = s
 			}
 
@@ -349,6 +352,9 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 					SubscriptionID: sub,
 					Deleted:        done,
 					AutoExtend:     autoExtend,
+				}
+				if msg.Subscriptions == nil {
+					msg.Subscriptions = make(map[string]*storage.MsgSub)
 				}
 				msg.Subscriptions[sub] = s
 			}

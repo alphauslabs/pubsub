@@ -340,7 +340,7 @@ func GetSubMembers(record map[string][]string, nodeId string, search []string) [
 		for _, s := range search {
 			if strings.HasPrefix(s, mem) {
 				if _, exists := tmp[mem]; !exists {
-					tmp[mem] = struct{}{} // Ensure unique members
+					tmp[s] = struct{}{} // Ensure unique members
 				}
 			}
 		}
