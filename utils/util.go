@@ -255,6 +255,8 @@ func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription
 	return samePrefixSubs
 }
 
+// Returns a list of node IDs that have subscriptions matching any of the provided prefixes.
+// pre is list of prefixes, record is our record map
 func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
 	storage.RecordMapMu.RLock()
 	defer storage.RecordMapMu.RUnlock()
