@@ -243,6 +243,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 
 		// Group subscriptions by their prefix (node identifier)
 		nodeToSubscriptions := make(map[string]map[string]*storage.MsgSub)
+		glog.Infof("[BroadcastMessage] substatus: %+v", subStatus)
 		for k, v := range subStatus {
 			if len(k) == 0 {
 				glog.Warningf("[BroadcastMessage] Empty subscription ID found")
@@ -296,6 +297,7 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			Attributes: attr,
 		}
 
+		glog.Infof("[BroadcastMessage] nodeHandlersMap: %+v", nodeHandlersMap)
 		// For each node, create and send a message with only relevant subscriptions
 		for nodeHandler := range nodeHandlersMap {
 			// Skip if we don't have subscriptions for this node
