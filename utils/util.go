@@ -303,6 +303,9 @@ func IsPresent(s string, arr []string) bool {
 
 // Verify if subscription is in correct node, if not, it wil return the correct one.
 func CheckIfSubscriptionIsCorrect(sub string, nodeId string) (bool, string) {
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
 	recs := storage.RecordMap[nodeId]
 	if IsPresent(sub, recs) {
 		return true, ""

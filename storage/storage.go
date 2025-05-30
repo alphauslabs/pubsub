@@ -51,6 +51,9 @@ func SetRecordMap(v map[string][]string) {
 }
 
 func GetMembersFromRecordMap(r map[string][]string, node string) []string {
+	RecordMapMu.RLock()
+	defer RecordMapMu.RUnlock()
+
 	mem, ok := r[node]
 	if !ok {
 		return nil

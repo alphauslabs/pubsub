@@ -143,7 +143,7 @@ func main() {
 		}
 	}()
 
-	nodeId = utils.GetMyExternalIp(ap.Op)
+	nodeId = utils.GetMyExternalIp(op)
 	if nodeId == "" {
 		glog.Error("Failed to get external IP address, exiting")
 		return

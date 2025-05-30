@@ -78,6 +78,9 @@ func FetchAndBroadcast(ctx context.Context, app *app.PubSub, isStartup bool) {
 	// 	return
 	// }
 
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
 	for k, v := range storage.RecordMap {
 		grouped := utils.CreateGrouping(latest, v)
 		msgData, err := json.Marshal(grouped)

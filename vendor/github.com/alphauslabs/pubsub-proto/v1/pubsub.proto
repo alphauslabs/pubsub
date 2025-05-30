@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package pubsubproto;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/alphauslabs/pubsubproto";
+
+service PubSubService {
+  rpc CreateTopic(CreateTopicRequest) returns (google.protobuf.Empty) {}
+  
+  rpc GetTopic(GetTopicRequest) returns (GetTopicResponse) {}
+  
+  rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse) {}
+  
+  rpc DeleteTopic(DeleteTopicRequest) returns (google.protobuf.Empty) {}
+  
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
+
+  // Subscription related operations
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (google.protobuf.Empty) {}
+
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse) {}
+
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (UpdateSubscriptionResponse) {}
+
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (google.protobuf.Empty) {}
+
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
+
+  rpc Publish(PublishRequest) returns (PublishResponse) {}
+
+  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+
+  rpc Acknowledge(AcknowledgeRequest) returns (google.protobuf.Empty) {}
+
+  rpc ExtendVisibilityTimeout(ExtendVisibilityTimeoutRequest) returns (google.protobuf.Empty) {}
+
+  rpc GetMessagesInQueue(GetMessagesInQueueRequest) returns (GetMessagesInQueueResponse) {}
+
+  rpc RequeueMessage(RequeueMessageRequest) returns (google.protobuf.Empty) {}
+}
+
+message Topic {
+  string name = 1;  
+
+  string createdAt = 2;
+  
+  string updatedAt = 3;
+}
+
+message CreateTopicRequest {
+  string name = 1;      
+}
+
+message GetTopicRequest {
+  string name = 1;         
+}
+
+message GetTopicResponse {
+  Topic topic = 1;       
+}
+
+message UpdateTopicRequest {
+  string name = 1;    
+
+  string newName = 2;    
+}
+
+message UpdateTopicResponse {
+  Topic topic = 1;     
+}
+
+message DeleteTopicRequest {
+  string name = 1;       
+}
+
+message DeleteTopicResponse {
+  bool success = 1;       
+}
+
+message ListTopicsRequest {}
+
+message ListTopicsResponse {
+  repeated Topic topics = 1;
+}
+
+
+
+
+message Subscription {
+  string name = 1; 
+
+  string topic = 2;   
+
+  bool autoExtend = 3;         
+}
+
+message CreateSubscriptionRequest {
+  string topic = 1;    
+
+  string name = 2; 
+
+  bool noAutoExtend = 3;         
+}
+
+message GetSubscriptionRequest {
+  string name = 1;                       
+}
+
+message GetSubscriptionResponse {
+  Subscription subscription = 1; 
+}
+
+message UpdateSubscriptionRequest {
+  string name = 1;
+
+  bool noAutoExtend = 2;       
+}
+
+message UpdateSubscriptionResponse {
+  Subscription subscription = 1; 
+}
+
+message DeleteSubscriptionRequest {
+  string name = 1;               
+}
+
+message ListSubscriptionsRequest {}
+
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1; 
+}
+
+
+message Message {
+  string id = 1;
+
+  string payload = 2;   
+
+  string topic = 3;
+
+  map<string, string> attributes = 4;
+}
+
+message PublishRequest {
+  string topic = 1;
+
+  string payload = 2;  
+  
+  // Optional attributes for the message
+  map<string, string> attributes = 3;
+
+}
+
+message PublishResponse {
+  string messageId = 1;            
+}
+
+message SubscribeRequest {
+  string subscription = 1; 
+
+  string topic = 2;               
+}
+
+message AcknowledgeRequest {
+  string subscription = 1;   
+
+  string id = 2;   
+  
+  string topic = 3;
+}
+
+
+message ExtendVisibilityTimeoutRequest {
+  string id = 1; 
+
+  string subscription = 2;         
+
+  string topic = 3;
+}
+
+message GetMessagesInQueueRequest {
+  string topic = 1; // Filter by topic
+
+  string subscription = 2; // Filter by subscription
+}
+
+message GetMessagesInQueueResponse {
+  repeated InQueue inQueue = 1;
+}
+
+message InQueue {
+  string subscription = 1; 
+
+  int32 total = 2; 
+}
+
+message RequeueMessageRequest {
+  string id = 1; // Message Id
+
+  string subscription = 2;
+
+  string topic = 3;
+}
