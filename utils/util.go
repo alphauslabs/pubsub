@@ -196,6 +196,9 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 
 // Find the correct nodeId for this subscription prefix
 func WhatNode(pre string, record map[string][]string) string {
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
 	for nodeID, prefixes := range record {
 		for _, prefix := range prefixes {
 			if pre == prefix {
@@ -207,6 +210,9 @@ func WhatNode(pre string, record map[string][]string) string {
 }
 
 func BroadcastRecord(app *app.PubSub, record map[string][]string) error {
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
 	data, err := json.Marshal(record)
 	if err != nil {
 		glog.Errorf("Error marshalling record: %v", err)
@@ -250,6 +256,9 @@ func GetSamePrefixSubscriptions(subs map[string]map[string]*storage.Subscription
 }
 
 func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
 	handlers := make([]string, 0)
 	temp := make(map[string]struct{})
 	for _, p := range pre {
@@ -271,20 +280,13 @@ func GetSubNodeHandlers(pre []string, record map[string][]string) []string {
 func CreateGrouping(ts map[string]map[string]*storage.Subscription, grp []string) map[string]map[string]*storage.Subscription {
 	grouped := make(map[string]map[string]*storage.Subscription)
 	for topic, subs := range ts {
-		// Initialize the inner map for this topic
 		grouped[topic] = make(map[string]*storage.Subscription)
-
 		for subName, sub := range subs {
-			// glog.Infof("comparing subName: %v with group: %v", subName, grp)
 			if IsPresent(subName, grp) {
-				// glog.Infof("found subname:%v in group: %v", subName, grp)
 				grouped[topic][subName] = sub
 			}
 		}
 	}
-	// glog.Info("ts: ", ts)
-	// glog.Info("grp: ", grp)
-	// glog.Infof("Grouped subscriptions: %v", grouped)
 	return grouped
 }
 

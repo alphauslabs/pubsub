@@ -9,7 +9,7 @@ import (
 	"github.com/golang/glog"
 )
 
-func MonitorActivity(ctx context.Context) {
+func MonitorMessages(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
@@ -53,6 +53,34 @@ func MonitorActivity(ctx context.Context) {
 		if len(topicsubMsgCounts) != 0 {
 			b, _ := json.Marshal(topicsubMsgCounts)
 			glog.Infof("[Storage Monitor] Topic_sub-Messages data: %s", string(b))
+		}
+	}
+
+	do() // trigger first do
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			do()
+		}
+	}
+}
+
+func MonitorRecordMap(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	do := func() {
+		RecordMapMu.RLock()
+		defer RecordMapMu.RUnlock()
+
+		if len(RecordMap) == 0 {
+			glog.Info("[Storage Monitor] RecordMap is empty")
+		} else {
+			for k, v := range RecordMap {
+				glog.Infof("[Storage Monitor] RecordMap entry: %s -> %s", k, v)
+			}
 		}
 	}
 

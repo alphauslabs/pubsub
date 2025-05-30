@@ -39,10 +39,14 @@ var (
 	TopicMsgMu    sync.RWMutex
 
 	// Record Map for node subscriptions
-	RecordMap = make(map[string][]string)
+	RecordMapMu sync.RWMutex
+	RecordMap   = make(map[string][]string)
 )
 
+// Replaces current record map
 func SetRecordMap(v map[string][]string) {
+	RecordMapMu.Lock()
+	defer RecordMapMu.Unlock()
 	RecordMap = v
 }
 
