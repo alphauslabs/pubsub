@@ -76,110 +76,178 @@ func BroadcastAllMessages(ctx context.Context, app *app.PubSub) {
 			continue
 		}
 
-		// Group subscriptions by their prefix (node identifier)
-		nodeToSubscriptions := make(map[string]map[string]*storage.MsgSub)
-		for k, v := range subStatus {
-			if len(k) == 0 {
-				glog.Warningf("[BroadcastMessage] Empty subscription ID found")
-				continue
+		prefixes := make([]string, 0, len(subStatus))
+		subFullName := make([]string, 0, len(subStatus))
+		autoextend := make(map[string]bool)
+		glog.Infof("[BroadcastMessage] substatus: %+v", subStatus)
+		for _, v := range subDetails {
+			if v.AutoExtend {
+				autoextend[v.Subscription.Name] = true
 			}
-
-			prefix := string(k[0])
-			if _, exists := nodeToSubscriptions[prefix]; !exists {
-				nodeToSubscriptions[prefix] = make(map[string]*storage.MsgSub)
-			}
-
-			var done int32
-			var autoExtend int32
-			for _, sub := range subDetails {
-				if sub.Subscription.Name == k {
-					if sub.Subscription.AutoExtend {
-						autoExtend = 1
-					}
-					break
-				}
-			}
-			if v {
-				done = 1
-			}
-
-			nodeToSubscriptions[prefix][k] = &storage.MsgSub{
-				SubscriptionID: k,
-				Deleted:        done,
-				AutoExtend:     autoExtend,
-			}
-		}
-
-		// Get all node handlers for the subscriptions
-		prefixes := make([]string, 0, len(nodeToSubscriptions))
-		for prefix := range nodeToSubscriptions {
+			prefix := string(v.Name[0])
 			prefixes = append(prefixes, prefix)
+			subFullName = append(subFullName, v.Name)
 		}
 
-		nodeHandlers := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
-		nodeHandlersMap := make((map[string]struct{}))
+		allNodesTopic := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
+		for _, n := range allNodesTopic {
+			finaln := utils.AddrForInternal(n)
+			msg := storage.Message{
+				Message: &pb.Message{
+					Id:         msg.Id,
+					Topic:      msg.Topic,
+					Payload:    msg.Payload,
+					Attributes: attr,
+				},
+				FinalDeleted: 0,
+			}
+			currentsubs := utils.GetSubMembers(storage.RecordMap, n, subFullName)
 
-		for _, nodeHandler := range nodeHandlers {
-			nodeHandlersMap[nodeHandler] = struct{}{}
-		}
-
-		// Create a base message without subscriptions
-		baseMessage := &pb.Message{
-			Id:         msg.Id,
-			Topic:      msg.Topic,
-			Payload:    msg.Payload,
-			Attributes: attr,
-		}
-
-		// For each node, create and send a message with only relevant subscriptions
-		for nodeHandler := range nodeHandlersMap {
-			// Skip if we don't have subscriptions for this node
-			subMap, exists := nodeToSubscriptions[nodeHandler]
-			if !exists || len(subMap) == 0 {
-				continue
+			for _, sub := range currentsubs {
+				var done int32
+				var autoExtend int32
+				if subStatus[sub] {
+					done = 1
+				}
+				if autoextend[sub] {
+					autoExtend = 1
+				}
+				s := &storage.MsgSub{
+					SubscriptionID: sub,
+					Deleted:        done,
+					AutoExtend:     autoExtend,
+				}
+				msg.Subscriptions[sub] = s
 			}
 
-			// Create node-specific message with filtered subscriptions
-			m := storage.Message{
-				Message:       baseMessage,
-				Subscriptions: subMap,
-			}
-
-			// Marshal message info
-			data, err := json.Marshal(&m)
-			if err != nil {
-				glog.Errorf("[BroadcastMessage] Error marshalling message for node %s: %v", nodeHandler, err)
-				continue
-			}
-
-			// Create broadcast input
+			b, _ := json.Marshal(&msg)
 			broadcastInput := BroadCastInput{
 				Type: Message,
-				Msg:  data,
+				Msg:  b,
 			}
-
-			broadcastData, err := json.Marshal(broadcastInput)
-			if err != nil {
-				glog.Errorf("[BroadcastMessage] Error marshalling broadcast input for node %s: %v", nodeHandler, err)
-				continue
-			}
-
-			// Get node address
-			nodeAddr := utils.AddrForInternal(nodeHandler)
-
-			glog.Infof("[BroadcastMessage] Broadcasting message to node %s with %d subscriptions", nodeAddr, len(subMap))
-
-			// Broadcast to this specific node
-			responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
-				OnlySendTo: []string{nodeAddr},
+			bdata, _ := json.Marshal(broadcastInput)
+			out := app.Op.Broadcast(ctx, bdata, hedge.BroadcastArgs{
+				OnlySendTo: []string{finaln},
 			})
 
-			for _, response := range responses {
-				if response.Error != nil {
-					glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", nodeAddr, response.Error)
+			glog.Infof("[BroadcastMessage] Broadcasting message to node %s with %d subscriptions", finaln, len(msg.Subscriptions))
+			for _, o := range out {
+				if o.Error != nil {
+					glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", finaln, o.Error)
+				} else {
+					glog.Infof("[BroadcastMessage] Successfully broadcasted message to node %s", finaln)
 				}
 			}
 		}
+
+		// // Group subscriptions by their prefix (node identifier)
+		// nodeToSubscriptions := make(map[string]map[string]*storage.MsgSub)
+		// for k, v := range subStatus {
+		// 	if len(k) == 0 {
+		// 		glog.Warningf("[BroadcastMessage] Empty subscription ID found")
+		// 		continue
+		// 	}
+
+		// 	prefix := string(k[0])
+		// 	if _, exists := nodeToSubscriptions[prefix]; !exists {
+		// 		nodeToSubscriptions[prefix] = make(map[string]*storage.MsgSub)
+		// 	}
+
+		// 	var done int32
+		// 	var autoExtend int32
+		// 	for _, sub := range subDetails {
+		// 		if sub.Subscription.Name == k {
+		// 			if sub.Subscription.AutoExtend {
+		// 				autoExtend = 1
+		// 			}
+		// 			break
+		// 		}
+		// 	}
+		// 	if v {
+		// 		done = 1
+		// 	}
+
+		// 	nodeToSubscriptions[prefix][k] = &storage.MsgSub{
+		// 		SubscriptionID: k,
+		// 		Deleted:        done,
+		// 		AutoExtend:     autoExtend,
+		// 	}
+		// }
+
+		// // Get all node handlers for the subscriptions
+		// prefixes := make([]string, 0, len(nodeToSubscriptions))
+		// for prefix := range nodeToSubscriptions {
+		// 	prefixes = append(prefixes, prefix)
+		// }
+
+		// nodeHandlers := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
+
+		// // Create a base message without subscriptions
+		// baseMessage := &pb.Message{
+		// 	Id:         msg.Id,
+		// 	Topic:      msg.Topic,
+		// 	Payload:    msg.Payload,
+		// 	Attributes: attr,
+		// }
+
+		// glog.Infof("[BroadcastMessage] nodeHandlers: %+v", nodeHandlers)
+		// glog.Infof("[BroadcastMessage] prefixes: %+v", prefixes)
+
+		// // For each node handler, find the corresponding prefix and send subscriptions
+		// for i, nodeHandler := range nodeHandlers {
+		// 	if i >= len(prefixes) {
+		// 		continue
+		// 	}
+
+		// 	prefix := prefixes[i]
+
+		// 	// Get subscriptions for this prefix
+		// 	subMap, exists := nodeToSubscriptions[prefix]
+		// 	if !exists || len(subMap) == 0 {
+		// 		continue
+		// 	}
+
+		// 	// Create node-specific message with filtered subscriptions
+		// 	m := storage.Message{
+		// 		Message:       baseMessage,
+		// 		Subscriptions: subMap,
+		// 	}
+
+		// 	// Marshal message info
+		// 	data, err := json.Marshal(&m)
+		// 	if err != nil {
+		// 		glog.Errorf("[BroadcastMessage] Error marshalling message for node %s: %v", nodeHandler, err)
+		// 		continue
+		// 	}
+
+		// 	// Create broadcast input
+		// 	broadcastInput := BroadCastInput{
+		// 		Type: Message,
+		// 		Msg:  data,
+		// 	}
+
+		// 	broadcastData, err := json.Marshal(broadcastInput)
+		// 	if err != nil {
+		// 		glog.Errorf("[BroadcastMessage] Error marshalling broadcast input for node %s: %v", nodeHandler, err)
+		// 		continue
+		// 	}
+
+		// 	// Get node address
+		// 	nodeAddr := utils.AddrForInternal(nodeHandler)
+
+		// 	glog.Infof("[BroadcastMessage] Broadcasting message to node %s (prefix: %s) with %d subscriptions", nodeAddr, prefix, len(subMap))
+
+		// 	// Broadcast to this specific node
+		// 	responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+		// 		OnlySendTo: []string{nodeAddr},
+		// 	})
+
+		// 	for _, response := range responses {
+		// 		if response.Error != nil {
+		// 			glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", nodeAddr, response.Error)
+		// 		}
+		// 	}
+		// }
 	}
 
 	glog.Info("[BroadcastMessage] All messages broadcast completed.")
@@ -241,112 +309,136 @@ func LatestMessages(ctx context.Context, app *app.PubSub, t *time.Time) {
 			continue
 		}
 
-		// Group subscriptions by their prefix (node identifier)
-		nodeToSubscriptions := make(map[string]map[string]*storage.MsgSub)
+		prefixes := make([]string, 0, len(subStatus))
+		subFullName := make([]string, 0, len(subStatus))
+		autoextend := make(map[string]bool)
 		glog.Infof("[BroadcastMessage] substatus: %+v", subStatus)
-		for k, v := range subStatus {
-			if len(k) == 0 {
-				glog.Warningf("[BroadcastMessage] Empty subscription ID found")
-				continue
+		for _, v := range subDetails {
+			if v.AutoExtend {
+				autoextend[v.Subscription.Name] = true
 			}
-
-			prefix := string(k[0])
-			if _, exists := nodeToSubscriptions[prefix]; !exists {
-				nodeToSubscriptions[prefix] = make(map[string]*storage.MsgSub)
-			}
-
-			var done int32
-			var autoExtend int32
-			for _, sub := range subDetails {
-				if sub.Subscription.Name == k {
-					if sub.Subscription.AutoExtend {
-						autoExtend = 1
-					}
-					break
-				}
-			}
-			if v {
-				done = 1
-			}
-
-			nodeToSubscriptions[prefix][k] = &storage.MsgSub{
-				SubscriptionID: k,
-				Deleted:        done,
-				AutoExtend:     autoExtend,
-			}
-		}
-
-		// Get all node handlers for the subscriptions
-		prefixes := make([]string, 0, len(nodeToSubscriptions))
-		for prefix := range nodeToSubscriptions {
+			prefix := string(v.Name[0])
 			prefixes = append(prefixes, prefix)
+			subFullName = append(subFullName, v.Name)
 		}
 
-		nodeHandlers := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
-		nodeHandlersMap := make((map[string]struct{}))
+		allNodesTopic := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
+		for _, n := range allNodesTopic {
+			finaln := utils.AddrForInternal(n)
+			msg := storage.Message{
+				Message: &pb.Message{
+					Id:         msg.Id,
+					Topic:      msg.Topic,
+					Payload:    msg.Payload,
+					Attributes: attr,
+				},
+				FinalDeleted: 0,
+			}
+			currentsubs := utils.GetSubMembers(storage.RecordMap, n, subFullName)
 
-		for _, nodeHandler := range nodeHandlers {
-			nodeHandlersMap[nodeHandler] = struct{}{}
-		}
-
-		// Create a base message without subscriptions
-		baseMessage := &pb.Message{
-			Id:         msg.Id,
-			Topic:      msg.Topic,
-			Payload:    msg.Payload,
-			Attributes: attr,
-		}
-
-		glog.Infof("[BroadcastMessage] nodeHandlersMap: %+v", nodeHandlersMap)
-		// For each node, create and send a message with only relevant subscriptions
-		for nodeHandler := range nodeHandlersMap {
-			// Skip if we don't have subscriptions for this node
-			subMap, exists := nodeToSubscriptions[nodeHandler]
-			if !exists || len(subMap) == 0 {
-				continue
+			for _, sub := range currentsubs {
+				var done int32
+				var autoExtend int32
+				if subStatus[sub] {
+					done = 1
+				}
+				if autoextend[sub] {
+					autoExtend = 1
+				}
+				s := &storage.MsgSub{
+					SubscriptionID: sub,
+					Deleted:        done,
+					AutoExtend:     autoExtend,
+				}
+				msg.Subscriptions[sub] = s
 			}
 
-			// Create node-specific message with filtered subscriptions
-			m := storage.Message{
-				Message:       baseMessage,
-				Subscriptions: subMap,
-			}
-
-			// Marshal message info
-			data, err := json.Marshal(&m)
-			if err != nil {
-				glog.Errorf("[BroadcastMessage] Error marshalling message for node %s: %v", nodeHandler, err)
-				continue
-			}
-
-			// Create broadcast input
+			b, _ := json.Marshal(&msg)
 			broadcastInput := BroadCastInput{
 				Type: Message,
-				Msg:  data,
+				Msg:  b,
 			}
-
-			broadcastData, err := json.Marshal(broadcastInput)
-			if err != nil {
-				glog.Errorf("[BroadcastMessage] Error marshalling broadcast input for node %s: %v", nodeHandler, err)
-				continue
-			}
-
-			// Get node address
-			nodeAddr := utils.AddrForInternal(nodeHandler)
-
-			glog.Infof("[BroadcastMessage] Broadcasting message to node %s with %d subscriptions", nodeAddr, len(subMap))
-
-			// Broadcast to this specific node
-			responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
-				OnlySendTo: []string{nodeAddr},
+			bdata, _ := json.Marshal(broadcastInput)
+			out := app.Op.Broadcast(ctx, bdata, hedge.BroadcastArgs{
+				OnlySendTo: []string{finaln},
 			})
 
-			for _, response := range responses {
-				if response.Error != nil {
-					glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", nodeAddr, response.Error)
+			glog.Infof("[BroadcastMessage] Broadcasting message to node %s with %d subscriptions", finaln, len(msg.Subscriptions))
+			for _, o := range out {
+				if o.Error != nil {
+					glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", finaln, o.Error)
+				} else {
+					glog.Infof("[BroadcastMessage] Successfully broadcasted message to node %s", finaln)
 				}
 			}
 		}
+
+		// // Get all node handlers for the subscriptions
+		// prefixes := make([]string, 0, len(nodeToSubscriptions))
+		// for prefix := range nodeToSubscriptions {
+		// 	prefixes = append(prefixes, prefix)
+		// }
+
+		// nodeHandlers := utils.GetSubNodeHandlers(prefixes, storage.RecordMap)
+
+		// // Create a base message without subscriptions
+		// baseMessage := &pb.Message{
+		// 	Id:         msg.Id,
+		// 	Topic:      msg.Topic,
+		// 	Payload:    msg.Payload,
+		// 	Attributes: attr,
+		// }
+
+		// glog.Infof("[BroadcastMessage] nodeHandlersMap: %+v", nodeHandlersMap)
+		// // For each node, create and send a message with only relevant subscriptions
+		// for nodeHandler := range nodeHandlersMap {
+		// 	// Skip if we don't have subscriptions for this node
+		// 	subMap, exists := nodeToSubscriptions[nodeHandler]
+		// 	if !exists || len(subMap) == 0 {
+		// 		continue
+		// 	}
+
+		// 	// Create node-specific message with filtered subscriptions
+		// 	m := storage.Message{
+		// 		Message:       baseMessage,
+		// 		Subscriptions: subMap,
+		// 	}
+
+		// 	// Marshal message info
+		// 	data, err := json.Marshal(&m)
+		// 	if err != nil {
+		// 		glog.Errorf("[BroadcastMessage] Error marshalling message for node %s: %v", nodeHandler, err)
+		// 		continue
+		// 	}
+
+		// 	// Create broadcast input
+		// 	broadcastInput := BroadCastInput{
+		// 		Type: Message,
+		// 		Msg:  data,
+		// 	}
+
+		// 	broadcastData, err := json.Marshal(broadcastInput)
+		// 	if err != nil {
+		// 		glog.Errorf("[BroadcastMessage] Error marshalling broadcast input for node %s: %v", nodeHandler, err)
+		// 		continue
+		// 	}
+
+		// 	// Get node address
+		// 	nodeAddr := utils.AddrForInternal(nodeHandler)
+
+		// 	glog.Infof("[BroadcastMessage] Broadcasting message to node %s with %d subscriptions", nodeAddr, len(subMap))
+
+		// 	// Broadcast to this specific node
+		// 	responses := app.Op.Broadcast(ctx, broadcastData, hedge.BroadcastArgs{
+		// 		OnlySendTo: []string{nodeAddr},
+		// 	})
+
+		// 	for _, response := range responses {
+		// 		if response.Error != nil {
+		// 			glog.Errorf("[BroadcastMessage] Error broadcasting message to node %s: %v", nodeAddr, response.Error)
+		// 		}
+		// 	}
+		// }
 	}
 
 	// Always update the timestamp regardless of whether messages were found

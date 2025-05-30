@@ -324,6 +324,36 @@ func CheckIfSubscriptionIsCorrect(sub string, nodeId string) (bool, string) {
 	return false, ""
 }
 
+func GetSubMembers(record map[string][]string, nodeId string, search []string) []string {
+	storage.RecordMapMu.RLock()
+	defer storage.RecordMapMu.RUnlock()
+
+	members := make([]string, 0)
+	mem, ok := storage.RecordMap[nodeId]
+	if ok {
+		members = append(members, mem...)
+	}
+
+	tmp := make(map[string]struct{})
+	res := make([]string, 0)
+	for _, mem := range members {
+		for _, s := range search {
+			if strings.HasPrefix(s, mem) {
+				if _, exists := tmp[mem]; !exists {
+					tmp[mem] = struct{}{} // Ensure unique members
+				}
+			}
+		}
+	}
+
+	for m := range tmp {
+		res = append(res, m)
+	}
+
+	glog.Infof("GetSubMembers: %v", res)
+	return res
+}
+
 func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*storage.Subscription, error) {
 	stmt := spanner.Statement{
 		SQL: `SELECT name, topic, autoextend FROM pubsub_subscriptions WHERE topic = @topic ORDER BY name`,
