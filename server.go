@@ -132,19 +132,7 @@ outer:
 				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
 				continue outer
 			} else {
-				disconnect := make(chan struct{})
 				ch := make(chan struct{})
-				go func() {
-					select {
-					case <-stream.Context().Done():
-						glog.Infof("[SubscribeHandler] Client disconnected/server restart while monitoring message %s", msg.Id)
-						defer close(disconnect)
-						// unlock()
-						return
-					case <-ch:
-						return
-					}
-				}()
 				// Wait for acknowledgement before doing another send.
 				go func() {
 					defer close(ch)
@@ -187,16 +175,16 @@ outer:
 								glog.Errorf("[SubscribeHandler] Message %s has been unlocked for subscription %s", m.Id, in.Subscription)
 								return
 							}
-						case <-disconnect:
+						case <-stream.Context().Done():
 							return
 						}
 					}
 				}()
 				select {
-				case <-disconnect:
+				case <-stream.Context().Done():
 					return nil
 				case <-ch:
-					continue outer
+					continue outer // Continue to the next iteration after acknowledgment
 				}
 			}
 		}
