@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
 	"github.com/alphauslabs/pubsub/utils"
@@ -14,6 +16,8 @@ func MemberChanges(data any, msg []byte) ([]byte, error) {
 	err := utils.BroadcastRecord(ap, storage.RecordMap)
 	if err != nil {
 		glog.Errorf("BroadcastRecord error: %v", err)
+		return nil, err
 	}
+	utils.NotifyLeaderForTopicSubBroadcast(context.Background(), ap.Op)
 	return nil, nil
 }

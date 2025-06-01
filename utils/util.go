@@ -425,3 +425,24 @@ func AddrForExternal(record string) string {
 
 	return fmt.Sprintf("%s:50051", s[0])
 }
+
+func NotifyLeaderForTopicSubBroadcast(ctx context.Context, op *hedge.Op) {
+	input := struct {
+		Type string
+		Msg  []byte
+	}{
+		Type: "topicsubupdates",
+		Msg:  []byte{},
+	}
+
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		glog.Errorf("Error marshaling send input: %v", err)
+		return
+	}
+
+	_, err = op.Send(ctx, inputData)
+	if err != nil {
+		glog.Errorf("Failed to send to leader: %v", err)
+	}
+}

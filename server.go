@@ -272,7 +272,7 @@ func (s *server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 		return nil, status.Errorf(codes.Internal, "failed to create topic: %v", err)
 	}
 
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 
 	return &emptypb.Empty{}, nil
 }
@@ -414,7 +414,7 @@ func (s *server) UpdateTopic(ctx context.Context, req *pb.UpdateTopicRequest) (*
 	}
 
 	// Notify the leader
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 
 	return &pb.UpdateTopicResponse{
 		Topic: updatedTopic,
@@ -486,7 +486,7 @@ func (s *server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*
 		}
 	}
 
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 
 	return &emptypb.Empty{}, nil
 }
@@ -547,7 +547,7 @@ func (s *server) CreateSubscription(ctx context.Context, req *pb.CreateSubscript
 
 	glog.Infof("[CreateSubscription] Subscription %s created with AutoExtend: %v", req.Name, autoExtend)
 
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 	return &emptypb.Empty{}, nil
 }
 
@@ -617,7 +617,7 @@ func (s *server) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscript
 		return nil, status.Errorf(codes.Internal, "failed to update subscription: %v", err)
 	}
 
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 	return &pb.UpdateSubscriptionResponse{
 		Subscription: &pb.Subscription{
 			Name:       req.Name,
@@ -639,7 +639,7 @@ func (s *server) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscript
 		return nil, status.Errorf(codes.Internal, "failed to delete subscription: %v", err)
 	}
 
-	s.notifyLeader(ctx)
+	utils.NotifyLeaderForTopicSubBroadcast(ctx, s.Op)
 	return &emptypb.Empty{}, nil
 }
 
@@ -740,22 +740,4 @@ func (s *server) RequeueMessage(ctx context.Context, in *pb.RequeueMessageReques
 
 	glog.Infof("[Requeue] Message %s requeued for subscription %s", in.Id, in.Subscription)
 	return &emptypb.Empty{}, nil
-}
-
-func (s *server) notifyLeader(ctx context.Context) {
-	input := handlers.SendInput{
-		Type: "topicsubupdates",
-		Msg:  []byte{},
-	}
-
-	inputData, err := json.Marshal(input)
-	if err != nil {
-		glog.Errorf("Error marshaling send input: %v", err)
-		return
-	}
-
-	_, err = s.Op.Send(ctx, inputData)
-	if err != nil {
-		glog.Errorf("Failed to send to leader: %v", err)
-	}
 }
