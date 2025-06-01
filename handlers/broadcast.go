@@ -3,8 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
 	"github.com/alphauslabs/pubsub/app"
@@ -24,7 +22,6 @@ const (
 	MsgEvent         = "msgEvent"
 	TopicDeleted     = "topicdeleted"
 	RecordMap        = "recordmap"
-	GetExternalIp    = "getextip"
 	GetQueue         = "getmessagesinqueue"
 
 	// Message event types
@@ -46,7 +43,6 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	LeaderLiveliness: handleLeaderLiveliness,
 	TopicDeleted:     handleTopicDeleted,
 	RecordMap:        handleRecordMap,
-	GetExternalIp:    handleGetExternalIp,
 	GetQueue:         handleGetQueue,
 }
 
@@ -255,32 +251,6 @@ func handleRecordMap(app *app.PubSub, msg []byte) ([]byte, error) {
 	storage.SetRecordMap(data)
 
 	return nil, nil
-}
-
-func handleGetExternalIp(app *app.PubSub, msg []byte) ([]byte, error) {
-	// Get the nodes external IP
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Add("Metadata-Flavor", "Google")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		glog.Errorf("[GetExternalIp] Error fetching external IP: %v", err)
-		return nil, fmt.Errorf("failed to fetch external IP: %w", err)
-	}
-	defer resp.Body.Close()
-
-	ip, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	glog.Infof("[GetExternalIp] External IP: %s", string(ip))
-	return ip, nil
 }
 
 func handleGetQueue(app *app.PubSub, msg []byte) ([]byte, error) {

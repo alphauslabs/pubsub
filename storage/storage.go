@@ -40,7 +40,8 @@ var (
 
 	// Record Map for node subscriptions
 	RecordMapMu sync.RWMutex
-	RecordMap   = make(map[string][]string)
+	// Key format: externalIp|internalIp, value is the list of members (initials of the subscriptions the node is currently serving)
+	RecordMap = make(map[string][]string)
 )
 
 // Replaces current record map

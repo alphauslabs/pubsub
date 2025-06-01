@@ -139,8 +139,11 @@ func StartBroadcastTopicSub(ctx context.Context, app *app.PubSub) {
 }
 
 func requestTopicSubFetch(ctx context.Context, op *hedge.Op) {
-	// Send a request to leader to fetch the latest topic-subscription structure
-	me := utils.GetMyExternalIp(op)
+	me, err := utils.GetMyExternalIp(op)
+	if err != nil {
+		glog.Errorf("STRUCT-Error getting external IP: %v", err)
+		return
+	}
 	me = utils.AddrForInternal(me)
 	broadcastMsg := SendInput{
 		Type: initialTopicSubFetch,

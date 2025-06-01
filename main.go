@@ -143,21 +143,19 @@ func main() {
 		}
 	}()
 
-	nodeId = utils.GetMyExternalIp(op)
-	if nodeId == "" {
+	extId, err := utils.GetMyExternalIp(op)
+	if err != nil {
 		glog.Error("Failed to get external IP address, exiting")
 		return
 	}
+	nodeId = extId
 
 	time.Sleep(3 * time.Second)
-	glog.Infof("isLeader : %v", atomic.LoadInt32(&leader.IsLeader))
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
-		storage.RecordMap = utils.CreateRecordMapping(ap)
-		storage.SetRecordMap(storage.RecordMap)
-		glog.Infof("Record map created: %v", storage.RecordMap)
+		res := utils.CreateRecordMapping(ap)
+		storage.SetRecordMap(res)
 		err = utils.BroadcastRecord(ap, storage.RecordMap)
 		if err != nil {
-			// Fatal log if we can't broadcast the record map
 			glog.Fatalf("Error broadcasting record map: %v", err)
 		} else {
 			glog.Infof("Record map broadcasted successfully")

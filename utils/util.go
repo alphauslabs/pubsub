@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"cloud.google.com/go/spanner"
@@ -387,42 +389,44 @@ func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*stora
 	return subscriptions, nil
 }
 
-func GetMyExternalIp(op *hedge.Op) string {
-	addr := op.Name()
-	payload := struct {
-		Type string
-		Msg  []byte
-	}{
-		Type: "getextip",
-		Msg:  []byte(""),
+// GetMyExternalIp retrieves the external IP address of the current node.
+func GetMyExternalIp(op *hedge.Op) (string, error) {
+	// Get the nodes external IP
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	b, _ := json.Marshal(payload)
-	rep := op.Broadcast(context.Background(), b, hedge.BroadcastArgs{
-		OnlySendTo: []string{addr},
-	})
-	for _, r := range rep {
-		if r.Error == nil {
-			return string(r.Reply)
-		}
+
+	req.Header.Add("Metadata-Flavor", "Google")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		glog.Errorf("[GetExternalIp] Error fetching external IP: %v", err)
+		return "", fmt.Errorf("failed to fetch external IP: %w", err)
 	}
-	return ""
+	defer resp.Body.Close()
+
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+	return string(ip), nil
 }
 
+// Generates Ip:port format for internal comms (communication between nodes)
 func AddrForInternal(record string) string {
 	s := strings.Split(record, "|")
 	if len(s) >= 2 {
-		return strings.Split(record, "|")[1] + ":50052"
+		return fmt.Sprintf("%s:50052", s[1])
 	}
 
-	return fmt.Sprintf("%s:50052", strings.Split(record, "|")[1])
+	return fmt.Sprintf("%s:50052", s[0])
 }
 
+// Generates Ip:port format for external comms (for pubsub clients)
 func AddrForExternal(record string) string {
 	s := strings.Split(record, "|")
-	if len(s) >= 2 {
-		return fmt.Sprintf("%s:50051", s[0])
-	}
-
 	return fmt.Sprintf("%s:50051", s[0])
 }
 
