@@ -473,14 +473,7 @@ func UpdateProcessedStatusForCompletedMessages(spannerClient *spanner.Client) er
 	stmt := spanner.Statement{
 		SQL: `UPDATE pubsub_messages 
               SET processed = true, updatedAt = PENDING_COMMIT_TIMESTAMP()
-              WHERE processed = false 
-                AND NOT EXISTS (
-                  SELECT 1 
-                  FROM UNNEST(JSON_QUERY_ARRAY(subStatus, '$.*')) AS status
-                  WHERE status = "false"
-                )
-                AND subStatus IS NOT NULL
-                AND JSON_TYPE(subStatus) = "object"`,
+              WHERE processed = false and subStatus not like "%:false,%"`,
 	}
 
 	_, err := spannerClient.PartitionedUpdate(context.Background(), stmt)
