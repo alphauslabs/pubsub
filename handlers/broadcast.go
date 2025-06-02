@@ -56,17 +56,6 @@ func Broadcast(data any, msg []byte) ([]byte, error) {
 	if err := json.Unmarshal(msg, &in); err != nil {
 		return nil, err
 	}
-	if appInstance == nil {
-		glog.Error("[Broadcast] App instance is nil")
-	}
-
-	if in.Type == "" {
-		glog.Error("[Broadcast] Type is empty in input")
-	}
-
-	if _, ok := ctrlbroadcast[in.Type]; !ok {
-		glog.Errorf("[Broadcast] Unknown broadcast type: %s", in.Type)
-	}
 
 	return ctrlbroadcast[in.Type](appInstance, in.Msg)
 }
