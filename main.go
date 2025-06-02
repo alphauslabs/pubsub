@@ -146,7 +146,6 @@ func main() {
 	extId, err := utils.GetMyExternalIp(op)
 	if err != nil {
 		glog.Error("Failed to get external IP address, exiting")
-		return
 	}
 	nodeId = extId
 
