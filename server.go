@@ -205,7 +205,14 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 
 	m := storage.GetMessage(in.Id, in.Topic)
 	if m == nil {
-		return nil, fmt.Errorf("message not found")
+		ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
+		if !ok && node != "" {
+			node = utils.AddrForExternal(node)
+			glog.Infof("[Acknowledge] wrong node for sub:%v, correct should be: %v", in.Subscription, node)
+			return &emptypb.Empty{}, fmt.Errorf("wrongnode|%v", node)
+		} else {
+			return nil, fmt.Errorf("message %s not found in topic %s", in.Id, in.Topic)
+		}
 	}
 
 	// Update the message status in Spanner
