@@ -473,7 +473,7 @@ func UpdateProcessedStatusForCompletedMessages(spannerClient *spanner.Client) er
 	stmt := spanner.Statement{
 		SQL: `UPDATE pubsub_messages 
               SET processed = true, updatedAt = PENDING_COMMIT_TIMESTAMP()
-              WHERE processed = false and subStatus not like "%:false,%"`,
+              WHERE processed = false and subStatus not like "%:false%"`,
 	}
 
 	_, err := spannerClient.PartitionedUpdate(context.Background(), stmt)
