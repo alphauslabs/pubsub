@@ -468,3 +468,27 @@ func NotifyLeaderForAllMessageBroadcast(ctx context.Context, op *hedge.Op) {
 		glog.Errorf("Failed to send to leader: %v", err)
 	}
 }
+
+func UpdateProcessedStatusForCompletedMessages(spannerClient *spanner.Client) error {
+	stmt := spanner.Statement{
+		SQL: `UPDATE pubsub_messages 
+              SET processed = true, updatedAt = PENDING_COMMIT_TIMESTAMP()
+              WHERE processed = false 
+                AND NOT EXISTS (
+                  SELECT 1 
+                  FROM UNNEST(JSON_QUERY_ARRAY(subStatus, '$.*')) AS status
+                  WHERE status = false
+                )
+                AND subStatus IS NOT NULL
+                AND JSON_TYPE(subStatus) = "object"`,
+	}
+
+	_, err := spannerClient.PartitionedUpdate(context.Background(), stmt)
+	if err != nil {
+		glog.Errorf("Failed to update processed status for completed messages: %v", err)
+		return err
+	}
+
+	glog.Info("Successfully updated processed status for all completed messages")
+	return nil
+}

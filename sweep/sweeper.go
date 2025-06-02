@@ -66,6 +66,10 @@ func RunCheckForExpired(ctx context.Context) {
 func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 	glog.Info("[sweep] check for deleted messages started")
 	sweep := func() {
+		err := utils.UpdateProcessedStatusForCompletedMessages(app.Client)
+		if err != nil {
+			glog.Errorf("[sweep] error updating processed status for completed messages: %v", err)
+		}
 		storage.TopicMsgMu.RLock()
 		defer storage.TopicMsgMu.RUnlock()
 		for _, v := range storage.TopicMessages {
@@ -78,12 +82,8 @@ func RunCheckForDeleted(ctx context.Context, app *app.PubSub) {
 			}
 
 			for k := range tobedeleted {
-				if err := utils.UpdateMessageProcessedStatus(app.Client, k); err != nil {
-					glog.Errorf("[sweep] error updating message %s processed status: %v", k, err)
-				} else {
-					delete(v.Messages, k)
-					glog.Infof("[sweep] removed from memory message: %v", k)
-				}
+				delete(v.Messages, k)
+				glog.Infof("[sweep] removed from memory message: %v", k)
 			}
 			v.Mu.Unlock()
 		}
