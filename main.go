@@ -145,14 +145,13 @@ func main() {
 
 	extId, err := utils.GetMyExternalIp(op)
 	if err != nil {
-		glog.Error("Failed to get external IP address, exiting")
+		glog.Fatalf("Error getting external IP: %v", err)
 	}
 	nodeId = extId
 
 	time.Sleep(3 * time.Second)
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
 		res := utils.CreateRecordMapping(ap)
-		glog.Infof("recordmap: %+v", res)
 		storage.SetRecordMap(res)
 		err = utils.BroadcastRecord(ap, storage.RecordMap)
 		if err != nil {
