@@ -149,7 +149,7 @@ func CreateRecordMapping(app *app.PubSub) map[string][]string {
 			Type string
 			Msg  []byte
 		}{
-			Type: "getextip",
+			Type: "getexternalip",
 			Msg:  []byte(""),
 		}
 		broadcastData, _ := json.Marshal(inp)

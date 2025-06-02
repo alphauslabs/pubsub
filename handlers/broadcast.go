@@ -23,6 +23,7 @@ const (
 	TopicDeleted     = "topicdeleted"
 	RecordMap        = "recordmap"
 	GetQueue         = "getmessagesinqueue"
+	GetExternalIp    = "getexternalip"
 
 	// Message event types
 	LockMsg   = "lock"
@@ -44,6 +45,7 @@ var ctrlbroadcast = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	TopicDeleted:     handleTopicDeleted,
 	RecordMap:        handleRecordMap,
 	GetQueue:         handleGetQueue,
+	GetExternalIp:    handleGetExternalIp,
 }
 
 // Root handler for op.Broadcast()
@@ -296,4 +298,14 @@ func handleGetQueue(app *app.PubSub, msg []byte) ([]byte, error) {
 	}
 	return data, nil
 
+}
+
+func handleGetExternalIp(app *app.PubSub, msg []byte) ([]byte, error) {
+	ip, err := utils.GetMyExternalIp(app.Op)
+	if err != nil {
+		glog.Errorf("[GetExternalIp] Error getting external IP: %v", err)
+		return nil, fmt.Errorf("failed to get external IP: %w", err)
+	}
+
+	return []byte(string(ip)), nil
 }
