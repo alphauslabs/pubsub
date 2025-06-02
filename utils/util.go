@@ -477,7 +477,7 @@ func UpdateProcessedStatusForCompletedMessages(spannerClient *spanner.Client) er
                 AND NOT EXISTS (
                   SELECT 1 
                   FROM UNNEST(JSON_QUERY_ARRAY(subStatus, '$.*')) AS status
-                  WHERE status = false
+                  WHERE status = "false"
                 )
                 AND subStatus IS NOT NULL
                 AND JSON_TYPE(subStatus) = "object"`,
