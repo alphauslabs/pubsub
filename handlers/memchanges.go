@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"time"
 
 	"github.com/alphauslabs/pubsub/app"
 	"github.com/alphauslabs/pubsub/storage"
@@ -19,5 +20,7 @@ func MemberChanges(data any, msg []byte) ([]byte, error) {
 		return nil, err
 	}
 	utils.NotifyLeaderForTopicSubBroadcast(context.Background(), ap.Op)
+	time.Sleep(2 * time.Second)
+	utils.NotifyLeaderForAllMessageBroadcast(context.Background(), ap.Op)
 	return nil, nil
 }

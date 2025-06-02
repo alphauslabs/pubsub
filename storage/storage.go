@@ -122,7 +122,8 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	if !exists {
 		mm.Messages[id] = msg
 	} else {
-		glog.Infof("[STORAGE] Message %s already exists, no op", id)
+		mm.Messages[id] = msg
+		glog.Infof("[Storage] Message %s already exists, updating it", id)
 	}
 }
 
@@ -159,19 +160,11 @@ func StoreMessage(msg *Message) error {
 	if _, exists := TopicMessages[msg.Topic]; !exists {
 		TopicMessages[msg.Topic] = NewMessageMap()
 	}
-
-	for subID, subInfo := range msg.Subscriptions {
-		glog.Infof("[STORAGE] Message %s subscription detail - ID: %s, Info: %+v",
-			msg.Id,
-			subID,
-			subInfo)
-	}
 	TopicMessages[msg.Topic].Put(msg.Id, msg)
 	return nil
 }
 
 func StoreTopicSubscriptions(d map[string]map[string]*Subscription) error {
-	// Lock internal subscription data
 	topicSubsMu.Lock()
 	defer topicSubsMu.Unlock()
 

@@ -391,15 +391,12 @@ func GetAllSubscriptionsForTopic(topic string, client *spanner.Client) ([]*stora
 
 // GetMyExternalIp retrieves the external IP address of the current node.
 func GetMyExternalIp(op *hedge.Op) (string, error) {
-	// Get the nodes external IP
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-
 	req.Header.Add("Metadata-Flavor", "Google")
-
 	resp, err := client.Do(req)
 	if err != nil {
 		glog.Errorf("[GetExternalIp] Error fetching external IP: %v", err)
@@ -436,6 +433,27 @@ func NotifyLeaderForTopicSubBroadcast(ctx context.Context, op *hedge.Op) {
 		Msg  []byte
 	}{
 		Type: "topicsubupdates",
+		Msg:  []byte{},
+	}
+
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		glog.Errorf("Error marshaling send input: %v", err)
+		return
+	}
+
+	_, err = op.Send(ctx, inputData)
+	if err != nil {
+		glog.Errorf("Failed to send to leader: %v", err)
+	}
+}
+
+func NotifyLeaderForAllMessageBroadcast(ctx context.Context, op *hedge.Op) {
+	input := struct {
+		Type string
+		Msg  []byte
+	}{
+		Type: "allmessages",
 		Msg:  []byte{},
 	}
 

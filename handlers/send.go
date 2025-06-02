@@ -16,9 +16,7 @@ const (
 	topicsubupdates      = "topicsubupdates"
 	checkleader          = "checkleader"
 	initialTopicSubFetch = "initialtopicsubfetch"
-	initialmsgsfetch     = "initialmsgsfetch"
-
-	LockmsgEvent = "lockmsg"
+	allmessages          = "allmessages"
 )
 
 type SendInput struct {
@@ -30,8 +28,7 @@ var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	topicsubupdates:      handleTopicSubUpdates,
 	checkleader:          handleCheckLeader,
 	initialTopicSubFetch: handleInitializeTopicSub,
-	initialmsgsfetch:     handleInitialMsgsFetch,
-	// LockmsgEvent:         handleLockMessage,
+	allmessages:          handleAllMessages,
 }
 
 // Root handler for op.Send()
@@ -75,7 +72,7 @@ func handleInitializeTopicSub(app *app.PubSub, msg []byte) ([]byte, error) {
 	return msgData, nil
 }
 
-func handleInitialMsgsFetch(app *app.PubSub, msg []byte) ([]byte, error) {
+func handleAllMessages(app *app.PubSub, msg []byte) ([]byte, error) {
 	ctx := context.Background()
 
 	// Fetch all messages

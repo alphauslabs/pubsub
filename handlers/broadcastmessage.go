@@ -461,18 +461,7 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 	tick := time.NewTicker(2 * time.Second) // check every 2 seconds
 	defer tick.Stop()
 
-	broadcastMsg := SendInput{
-		Type: initialmsgsfetch,
-		Msg:  []byte{},
-	}
-
-	// Ask the leader to trigger a broadcast of all messages
-	bin, _ := json.Marshal(broadcastMsg)
-	_, err := app.Op.Send(ctx, bin)
-	if err != nil {
-		glog.Errorf("[Broadcast messages] sending request to leader: %v", err)
-		return
-	}
+	utils.NotifyLeaderForAllMessageBroadcast(ctx, app.Op)
 
 	lastQueryTime := time.Now().UTC()
 	for {
@@ -486,12 +475,3 @@ func StartBroadcastMessages(ctx context.Context, app *app.PubSub) {
 		}
 	}
 }
-
-// func placeholder() {
-// 	for _, msg := range storage.TopicMessages {
-// 		all := msg.GetAll()
-// 		for _, m := range all {
-// 			// send m to all the requesting node
-// 		}
-// 	}
-// }
