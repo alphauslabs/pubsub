@@ -153,6 +153,7 @@ func main() {
 	time.Sleep(3 * time.Second)
 	if atomic.LoadInt32(&leader.IsLeader) == 1 {
 		res := utils.CreateRecordMapping(ap)
+		glog.Infof("recordmap: %+v", res)
 		storage.SetRecordMap(res)
 		err = utils.BroadcastRecord(ap, storage.RecordMap)
 		if err != nil {
