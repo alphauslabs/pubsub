@@ -17,6 +17,7 @@ const (
 	checkleader          = "checkleader"
 	initialTopicSubFetch = "initialtopicsubfetch"
 	allmessages          = "allmessages"
+	requestRecordMap     = "requestrecordmap"
 )
 
 type SendInput struct {
@@ -29,6 +30,7 @@ var ctrlsend = map[string]func(*app.PubSub, []byte) ([]byte, error){
 	checkleader:          handleCheckLeader,
 	initialTopicSubFetch: handleInitializeTopicSub,
 	allmessages:          handleAllMessages,
+	requestRecordMap:     handleRequestRecordMap,
 }
 
 // Root handler for op.Send()
@@ -136,4 +138,14 @@ func handleCheckLeader(app *app.PubSub, msg []byte) ([]byte, error) {
 	}
 
 	return nil, nil
+}
+
+func handleRequestRecordMap(app *app.PubSub, msg []byte) ([]byte, error) {
+	b, err := json.Marshal(storage.RecordMap)
+	if err != nil {
+		glog.Errorf("Error marshalling record map: %v", err)
+		return nil, err
+	}
+
+	return b, nil
 }

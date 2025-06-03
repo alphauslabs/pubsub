@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -160,6 +161,28 @@ func main() {
 			glog.Infof("Record map broadcasted successfully")
 		}
 	}
+
+	if atomic.LoadInt32(&leader.IsLeader) == 0 && len(storage.RecordMap) == 0 {
+		input := handlers.SendInput{
+			Type: "requestrecordmap",
+			Msg:  []byte(""),
+		}
+		bin, _ := json.Marshal(input)
+		out, err := ap.Op.Send(ctx, bin)
+		if err != nil {
+			glog.Errorf("Error sending request to leader: %v", err)
+		} else {
+			var d map[string][]string
+			err = json.Unmarshal(out, &d)
+			if err != nil {
+				glog.Errorf("Error unmarshalling record map: %v", err)
+			} else {
+				glog.Infof("Record map received from leader: %v", d)
+				storage.SetRecordMap(d)
+			}
+		}
+	}
+
 	go handlers.StartBroadcastTopicSub(ctx, ap)
 	go storage.MonitorRecordMap(ctx)
 	go storage.MonitorMessages(ctx)
