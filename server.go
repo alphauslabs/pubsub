@@ -227,20 +227,6 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	defer m.Mu.RUnlock()
 	m.Subscriptions[in.Subscription].MarkAsDeleted()
 
-	// broadcastData := handlers.BroadCastInput{
-	// 	Type: handlers.MsgEvent,
-	// 	Msg:  []byte(fmt.Sprintf("delete:%s:%s:%s", in.Id, in.Subscription, in.Topic)),
-	// }
-
-	// bin, _ := json.Marshal(broadcastData)
-	// out := s.Op.Broadcast(ctx, bin) // broadcast to set deleted
-	// for _, v := range out {
-	// 	if v.Error != nil {
-	// 		glog.Errorf("[AcknowledgeHandler] Error broadcasting acknowledgment for msg=%v, sub=%v, err=%v", in.Id, in.Subscription, v.Error)
-	// 		return nil, status.Errorf(codes.Internal, "failed to broadcast acknowledgment: %v", v.Error)
-	// 	}
-	// }
-
 	glog.Infof("[AcknowledgeHandler] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
 	return &emptypb.Empty{}, nil
 }

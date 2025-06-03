@@ -11,6 +11,7 @@ import (
 )
 
 func MemberChanges(data any, msg []byte) ([]byte, error) {
+	glog.Info("member changed")
 	ap := data.(*app.PubSub)
 	res := utils.CreateRecordMapping(ap)
 	storage.SetRecordMap(res)
