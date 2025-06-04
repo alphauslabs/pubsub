@@ -111,7 +111,7 @@ outer:
 		default:
 			msg, err := storage.GetMessagesByTopicSub(in.Topic, in.Subscription)
 			if err != nil {
-				time.Sleep(2 * time.Second) // Back off on error
+				time.Sleep(2 * time.Second) // Back off on error, no message available
 				continue
 			}
 
@@ -133,7 +133,7 @@ outer:
 				continue outer
 			} else {
 				ch := make(chan struct{})
-				// if stream.Send is success we wait for acknowledgement before doing another send.
+				// If stream.Send is success we wait for acknowledgement before doing another send.
 				go func() {
 					defer close(ch)
 					ticker := time.NewTicker(1000 * time.Millisecond)
