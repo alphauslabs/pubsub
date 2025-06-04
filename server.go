@@ -96,7 +96,7 @@ outer:
 	for {
 		// Check if client is connected to the correct node, if not we return error and provide correct node address.
 		internal := strings.Split(s.Op.Name(), ":")[0]
-		thisnodeaddr := fmt.Sprintf("%s|%s", nodeId, internal)
+		thisnodeaddr := fmt.Sprintf("%s|%s", nodeId, internal) // external|internal
 		correct, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 		if !correct && node != "" {
 			node = utils.AddrForExternal(node)
@@ -133,7 +133,7 @@ outer:
 				continue outer
 			} else {
 				ch := make(chan struct{})
-				// Wait for acknowledgement before doing another send.
+				// if stream.Send is success we wait for acknowledgement before doing another send.
 				go func() {
 					defer close(ch)
 					ticker := time.NewTicker(1000 * time.Millisecond)
@@ -180,6 +180,7 @@ outer:
 						}
 					}
 				}()
+				// Wait for either context done or acknowledgment from the channel
 				select {
 				case <-stream.Context().Done():
 					return nil
@@ -193,9 +194,8 @@ outer:
 
 func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*emptypb.Empty, error) {
 	glog.Infof("[AcknowledgeHandler] Acknowledge request received for message:%v, sub:%v", in.Id, in.Subscription)
-	thisnodearr := nodeId // external
-	internal := strings.Split(s.Op.Name(), ":")[0]
-	thisnodeaddr := fmt.Sprintf("%s|%s", thisnodearr, internal)
+	internal := strings.Split(s.Op.Name(), ":")[0]         // internal
+	thisnodeaddr := fmt.Sprintf("%s|%s", nodeId, internal) // external|internal
 	ok, node := utils.CheckIfSubscriptionIsCorrect(in.Subscription, thisnodeaddr)
 	if !ok && node != "" {
 		node = utils.AddrForExternal(node)
@@ -215,7 +215,7 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 		}
 	}
 
-	// Update the message status in Spanner
+	// Update the message subStatus column in Spanner
 	err := utils.UpdateMessageProcessedStatusForSub(s.Client, in.Id, in.Subscription)
 	if err != nil {
 		glog.Errorf("[broadcast-handledelete] Error updating message status for sub %s: %v", in.Subscription, err)

@@ -36,7 +36,7 @@ import (
 var (
 	port   = flag.String("port", ":50051", "Main gRPC server port")
 	env    = flag.String("env", "dev", "Environment: dev, prod")
-	nodeId = "" // external
+	nodeId = "" // externalIp
 )
 
 func main() {
