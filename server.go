@@ -68,7 +68,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 			string(b),
 			spanner.CommitTimestamp,
 			spanner.CommitTimestamp,
-			false, // Default to unprocessed
+			false,
 		},
 	)
 
