@@ -231,6 +231,15 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 		if err != nil {
 			continue
 		}
+
+		func() {
+			msg.Mu.RLock()
+			defer msg.Mu.RUnlock()
+
+			msg.Subscriptions[sub].Lock()
+			msg.Subscriptions[sub].RenewAge()
+		}()
+
 		return msg, nil
 	}
 

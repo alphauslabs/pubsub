@@ -115,19 +115,6 @@ outer:
 				continue
 			}
 
-			// Lock the message, local lock only
-			func() {
-				m := storage.GetMessage(msg.Id, in.Topic)
-				if m == nil {
-					return
-				}
-				m.Mu.RLock()
-				defer m.Mu.RUnlock()
-
-				m.Subscriptions[in.Subscription].Lock()
-				m.Subscriptions[in.Subscription].RenewAge()
-			}()
-
 			if err := stream.Send(msg.Message); err != nil {
 				glog.Errorf("[SubscribeHandler] Failed to send message %s to subscription %s, err: %v", msg.Id, in.Subscription, err)
 				continue outer
