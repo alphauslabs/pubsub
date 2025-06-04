@@ -232,13 +232,25 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 			continue
 		}
 
-		func() {
+		err = func() error {
 			msg.Mu.RLock()
 			defer msg.Mu.RUnlock()
 
+			if msg.Subscriptions[sub].IsDeleted() {
+				return fmt.Errorf("deleted")
+			}
+
+			if msg.Subscriptions[sub].IsLocked() {
+				return fmt.Errorf("locked")
+			}
+
 			msg.Subscriptions[sub].Lock()
 			msg.Subscriptions[sub].RenewAge()
+			return nil
 		}()
+		if err != nil {
+			continue
+		}
 
 		return msg, nil
 	}
