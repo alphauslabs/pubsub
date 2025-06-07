@@ -448,6 +448,7 @@ func NotifyLeaderForTopicSubBroadcast(ctx context.Context, op *hedge.Op) {
 	}
 }
 
+// Tell leader to broadcast all unprocessed messages
 func NotifyLeaderForAllMessageBroadcast(ctx context.Context, op *hedge.Op) {
 	input := struct {
 		Type string

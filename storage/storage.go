@@ -122,7 +122,6 @@ func (mm *MessageMap) Put(id string, msg *Message) {
 	if !exists {
 		mm.Messages[id] = msg
 	} else {
-		mm.Messages[id] = msg
 		glog.Infof("[Storage] Message %s already exists, updating it", id)
 	}
 }
