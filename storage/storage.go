@@ -213,44 +213,25 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 		}
 
 		// Check status
-		err := func() error {
+		msg := func() *Message {
 			msg.Mu.RLock()
 			defer msg.Mu.RUnlock()
 
 			if msg.Subscriptions[sub].IsDeleted() {
-				return fmt.Errorf("deleted")
+				return nil
 			}
 
 			if msg.Subscriptions[sub].IsLocked() {
-				return fmt.Errorf("locked")
-			}
-			return nil
-		}()
-
-		if err != nil {
-			continue
-		}
-
-		err = func() error {
-			msg.Mu.RLock()
-			defer msg.Mu.RUnlock()
-
-			if msg.Subscriptions[sub].IsDeleted() {
-				return fmt.Errorf("deleted")
-			}
-
-			if msg.Subscriptions[sub].IsLocked() {
-				return fmt.Errorf("locked")
+				return nil
 			}
 
 			msg.Subscriptions[sub].Lock()
 			msg.Subscriptions[sub].RenewAge()
-			return nil
+			return msg
 		}()
-		if err != nil {
+		if msg == nil {
 			continue
 		}
-
 		return msg, nil
 	}
 
