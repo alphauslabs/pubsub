@@ -208,23 +208,18 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 
 	allMsgs := topicMsgs.GetAll()
 	for _, msg := range allMsgs {
-		if msg.IsFinalDeleted() {
-			continue
-		}
-
-		// Check status
 		msg := func() *Message {
 			msg.Mu.RLock()
 			defer msg.Mu.RUnlock()
-
+			if msg.IsFinalDeleted() {
+				return nil
+			}
 			if msg.Subscriptions[sub].IsDeleted() {
 				return nil
 			}
-
 			if msg.Subscriptions[sub].IsLocked() {
 				return nil
 			}
-
 			msg.Subscriptions[sub].Lock()
 			msg.Subscriptions[sub].RenewAge()
 			return msg
