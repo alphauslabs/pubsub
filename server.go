@@ -210,8 +210,8 @@ func (s *server) Acknowledge(ctx context.Context, in *pb.AcknowledgeRequest) (*e
 	}
 
 	// Delete for this subscription
-	m.Mu.RLock()
-	defer m.Mu.RUnlock()
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
 	m.Subscriptions[in.Subscription].MarkAsDeleted()
 
 	glog.Infof("[AcknowledgeHandler] Successfully processed acknowledgment for message=%v, sub=%v", in.Id, in.Subscription)
