@@ -209,8 +209,8 @@ func GetMessagesByTopicSub(topicName, sub string) (*Message, error) {
 	allMsgs := topicMsgs.GetAll()
 	for _, msg := range allMsgs {
 		msg := func() *Message {
-			msg.Mu.RLock()
-			defer msg.Mu.RUnlock()
+			msg.Mu.Lock()
+			defer msg.Mu.Unlock()
 			if msg.IsFinalDeleted() {
 				return nil
 			}
